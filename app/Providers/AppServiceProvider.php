@@ -25,23 +25,15 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Auth::viaRequest('participant', function (Request $request) {
-            $token = $request->header('X-Participant-Token') ?? $request->input('participant_token');
-
-            if (is_string($token) && $token !== '') {
-                return new GenericUser([
-                    'id' => hash('sha256', $token),
-                    'token' => $token,
-                    'is_spectator' => false,
-                ]);
-            }
-
-            // Spectators without participant token get an anonymous spectator identity
-            $spectatorId = $request->header('X-Spectator-Id') ?? ('spectator_'.bin2hex(random_bytes(8)));
+            $clientId = $request->header('X-Client-Id')
+                ?? $request->input('client_id')
+                ?? $request->header('X-Participant-Token')
+                ?? $request->input('participant_token')
+                ?? ('client_'.bin2hex(random_bytes(6)));
 
             return new GenericUser([
-                'id' => $spectatorId,
-                'token' => null,
-                'is_spectator' => true,
+                'id' => (string) $clientId,
+                'name' => (string) $clientId,
             ]);
         });
     }

@@ -38,21 +38,21 @@ document.addEventListener('DOMContentLoaded', () => {
     let isLocked = false;
     let isSpectating = false;
     let currentMembers = [];
+    let activeLobbyMembers = [];
+    let rematchRequestedBy = null;
 
-    // Online state
+    // Online state (pure in-browser)
     let onlineGameId = root.dataset.gameId || null;
-    let participantToken = null;
-    let participantRole = null;
-    let participantSymbol = null;
+    let myRole = null; // 'host' | 'guest' | 'spectator'
+    let mySymbol = null; // 'X' | 'O' | null
 
-    // Check URL parameters for watch mode or stored tokens
+    // Check URL parameters for watch mode
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('watch') === '1' && onlineGameId) {
         mode = 'watch';
         isSpectating = true;
     } else if (onlineGameId) {
         mode = 'online';
-        participantToken = sessionStorage.getItem(`ttt_token_${onlineGameId}`);
     }
 
     // Initialize radio difficulty
@@ -79,25 +79,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const onlineClient = new OnlineGameClient({
         reverbConfig,
-        onStateUpdated: (serverState) => {
-            handleServerState(serverState);
-        },
         onConnectionChange: (status) => {
             updateConnectionBadge(status);
-        },
-        onPresenceChange: (members) => {
-            currentMembers = members || [];
-            updatePresenceUI();
-        },
-        onMemberJoin: (member) => {
-            if (!currentMembers.some((m) => m.id === member.id)) {
-                currentMembers.push(member);
-            }
-            updatePresenceUI();
-        },
-        onMemberLeave: (member) => {
-            currentMembers = currentMembers.filter((m) => m.id !== member.id);
-            updatePresenceUI();
         },
     });
 
@@ -112,10 +95,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function updatePresenceUI() {
         if (!opponentStatus || !spectatorStatus) return;
 
-        if (mode === 'online') {
-            // Opponent presence badge
-            if (participantRole) {
-                const opponentRole = participantRole === 'host' ? 'guest' : 'host';
+        if (mode === 'online' && !isSpectating) {
+            if (myRole) {
+                const opponentRole = myRole === 'host' ? 'guest' : 'host';
                 const opponentOnline = currentMembers.some((m) => m.role === opponentRole);
 
                 opponentStatus.style.display = 'inline-flex';
@@ -130,7 +112,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 opponentStatus.style.display = 'none';
             }
 
-            // Spectators badge
             const spectatorCount = currentMembers.filter((m) => m.role === 'spectator').length;
             if (spectatorCount > 0) {
                 spectatorStatus.style.display = 'inline-flex';
@@ -142,7 +123,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (isSpectating) {
-            // Player statuses for spectators
             const hostOnline = currentMembers.some((m) => m.role === 'host');
             const guestOnline = currentMembers.some((m) => m.role === 'guest');
 
@@ -150,14 +130,12 @@ document.addEventListener('DOMContentLoaded', () => {
             opponentStatus.className = 'presence-badge';
             opponentStatus.textContent = `X: ${hostOnline ? '🟢' : '🔴'} | O: ${guestOnline ? '🟢' : '🔴'}`;
 
-            // Spectator count badge
             const spectatorCount = currentMembers.filter((m) => m.role === 'spectator').length;
             spectatorStatus.style.display = 'inline-flex';
             spectatorStatus.textContent = `👁️ ${spectatorCount} Watching`;
             return;
         }
 
-        // Other modes or directory view
         opponentStatus.style.display = 'none';
         spectatorStatus.style.display = 'none';
     }
@@ -165,7 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderCurrentState() {
         boardView.render(gameState, {
             locked: isLocked || isSpectating,
-            yourSymbol: mode === 'online' ? participantSymbol : null,
+            yourSymbol: mode === 'online' ? mySymbol : null,
             mode: isSpectating ? 'watch' : mode,
             opponentName: mode === 'online' ? 'Opponent' : 'Computer',
         });
@@ -177,10 +155,10 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (mode === 'online') {
                 const isFinished = gameState.status === 'won' || gameState.status === 'draw';
                 restartBtn.style.display = isFinished ? 'inline-flex' : 'none';
-                if (gameState.rematch_requested_by && gameState.rematch_requested_by === participantRole) {
+                if (rematchRequestedBy && rematchRequestedBy === mySymbol) {
                     restartBtn.textContent = 'Rematch requested...';
                     restartBtn.disabled = true;
-                } else if (gameState.rematch_requested_by) {
+                } else if (rematchRequestedBy) {
                     restartBtn.textContent = 'Accept Rematch 🤝';
                     restartBtn.disabled = false;
                 } else {
@@ -193,6 +171,79 @@ document.addEventListener('DOMContentLoaded', () => {
                 restartBtn.disabled = false;
             }
         }
+    }
+
+    function handleRemoteGameEvent(type, data) {
+        if (type === 'init' || type === 'sync') {
+            if (data && data.gameState) {
+                gameState = data.gameState;
+                if (data.guestId && data.guestId === onlineClient.clientId && myRole !== 'host') {
+                    myRole = 'guest';
+                    mySymbol = 'O';
+                }
+                renderCurrentState();
+                updatePresenceUI();
+            }
+            return;
+        }
+
+        if (type === 'move') {
+            const { index, symbol } = data;
+            try {
+                gameState = makeMove(gameState, index, symbol);
+            } catch {
+                // Ignore illegal move attempts
+            }
+            renderCurrentState();
+            return;
+        }
+
+        if (type === 'rematch-request') {
+            rematchRequestedBy = data.symbol;
+            renderCurrentState();
+            return;
+        }
+
+        if (type === 'rematch-accept') {
+            gameState = createInitialGameState();
+            rematchRequestedBy = null;
+            renderCurrentState();
+            boardView.announce('Rematch started. Player X plays first.');
+        }
+    }
+
+    function handleGamePresenceChange(members) {
+        currentMembers = members || [];
+        updatePresenceUI();
+
+        // If Host: sync state to any newcomers
+        if (myRole === 'host' && currentMembers.length > 1) {
+            onlineClient.broadcastGameEvent(onlineGameId, 'sync', { gameState });
+        }
+    }
+
+    function handleGameMemberJoin(member) {
+        if (!currentMembers.some((m) => m.id === member.id)) {
+            currentMembers.push(member);
+        }
+        updatePresenceUI();
+
+        // If Host: send current state to newly joined member
+        if (myRole === 'host') {
+            onlineClient.broadcastGameEvent(onlineGameId, 'sync', {
+                gameState,
+                guestId: member.role === 'guest' ? member.id : null,
+            });
+
+            // Update lobby status
+            const movesCount = gameState.board.filter((c) => c !== null).length;
+            onlineClient.broadcastLobbyUpdate(onlineGameId, 'in_progress', movesCount);
+        }
+    }
+
+    function handleGameMemberLeave(member) {
+        currentMembers = currentMembers.filter((m) => m.id !== member.id);
+        updatePresenceUI();
     }
 
     async function handleCellClick(index) {
@@ -219,7 +270,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     isLocked = true;
                     renderCurrentState();
 
-                    // Natural short delay for computer move
                     setTimeout(() => {
                         try {
                             const aiMove = selectAiMove(gameState.board, 'O', difficulty);
@@ -239,52 +289,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (mode === 'online') {
-            if (!participantSymbol || gameState.currentTurn !== participantSymbol) return;
-
-            isLocked = true;
-            renderCurrentState();
+            if (!mySymbol || gameState.currentTurn !== mySymbol) return;
 
             try {
-                const nextState = await onlineClient.sendMove(
-                    onlineGameId,
-                    participantToken,
-                    index,
-                    gameState.version
-                );
-                handleServerState(nextState);
-            } catch (err) {
-                boardView.announce(err.message || 'Move failed.');
-                try {
-                    const fresh = await onlineClient.fetchGameState(onlineGameId, participantToken);
-                    handleServerState(fresh);
-                } catch {
-                    // Ignore
-                }
-            } finally {
-                isLocked = false;
+                gameState = makeMove(gameState, index, mySymbol);
                 renderCurrentState();
+
+                // Broadcast move peer-to-peer over WebSocket
+                onlineClient.broadcastGameEvent(onlineGameId, 'move', {
+                    index,
+                    symbol: mySymbol,
+                });
+
+                // Update lobby moves count
+                if (myRole === 'host') {
+                    const movesCount = gameState.board.filter((c) => c !== null).length;
+                    const status = gameState.status === 'in_progress' ? 'in_progress' : 'finished';
+                    onlineClient.broadcastLobbyUpdate(onlineGameId, status, movesCount);
+                }
+            } catch (err) {
+                boardView.announce(err.message || 'Invalid move.');
             }
         }
-    }
-
-    function handleServerState(serverState) {
-        gameState = {
-            board: serverState.board,
-            currentTurn: serverState.current_turn,
-            status: serverState.status,
-            winner: serverState.winner,
-            winningIndices: serverState.winning_indices,
-            version: serverState.version,
-            rematch_requested_by: serverState.rematch_requested_by,
-        };
-
-        if (serverState.your_role) {
-            participantRole = serverState.your_role;
-            participantSymbol = serverState.your_symbol;
-        }
-
-        renderCurrentState();
-        updatePresenceUI();
     }
 
     function updateConnectionBadge(status) {
@@ -308,72 +334,55 @@ document.addEventListener('DOMContentLoaded', () => {
         connectionBadge.className = `connection-badge connection-badge--${status}`;
     }
 
-    function formatTimeAgo(isoString) {
-        if (!isoString) return '';
-        const diffMs = Date.now() - new Date(isoString).getTime();
-        const mins = Math.floor(diffMs / 60000);
-        if (mins < 1) return 'just now';
-        if (mins === 1) return '1 min ago';
-        return `${mins} mins ago`;
-    }
-
-    async function loadLiveGames() {
+    function renderLobbyList(members) {
         if (!liveGamesList) return;
-        liveGamesList.innerHTML = '<p class="live-game-card__meta">Loading live games...</p>';
 
-        try {
-            const data = await onlineClient.fetchLiveGames();
-            const games = Array.isArray(data) ? data : (data.games || []);
-            if (!Array.isArray(games) || games.length === 0) {
-                liveGamesList.innerHTML = `
-                    <div style="text-align: center; padding: 1.5rem 0;">
-                        <p class="live-game-card__meta">No live matches right now.</p>
-                        <p style="margin-top: 0.5rem; font-size: 0.8125rem; color: var(--color-text-muted);">
-                            Start an Online game or click Refresh to check again.
-                        </p>
-                    </div>
-                `;
-                return;
-            }
+        const liveGames = (members || []).filter((m) => m.game_id && m.status !== 'finished');
 
-            liveGamesList.innerHTML = games.map((game) => {
-                const shortId = game.id.slice(0, 8);
-                const statusLabel = game.status === 'waiting' ? '⏳ Waiting for Player 2' : '⚔️ In Progress';
-                const timeAgo = formatTimeAgo(game.created_at);
-                const movesCount = game.move_count ?? game.moves_count ?? 0;
-
-                return `
-                    <div class="live-game-card">
-                        <div class="live-game-card__info">
-                            <span class="live-game-card__title">Game #${shortId}</span>
-                            <span class="live-game-card__meta">${statusLabel} &bull; ${movesCount} move${movesCount === 1 ? '' : 's'} &bull; ${timeAgo}</span>
-                        </div>
-                        <button type="button" class="live-game-card__action-btn" data-watch-id="${game.id}">
-                            Watch Live 👁️
-                        </button>
-                    </div>
-                `;
-            }).join('');
-
-            liveGamesList.querySelectorAll('[data-watch-id]').forEach((btn) => {
-                btn.addEventListener('click', () => {
-                    const targetId = btn.dataset.watchId;
-                    spectateGame(targetId);
-                });
-            });
-        } catch (err) {
-            liveGamesList.innerHTML = `<p class="live-game-card__meta" style="color: #f87171;">Failed to load live games: ${err.message}</p>`;
+        if (liveGames.length === 0) {
+            liveGamesList.innerHTML = `
+                <div style="text-align: center; padding: 1.5rem 0;">
+                    <p class="live-game-card__meta">No live matches right now.</p>
+                    <p style="margin-top: 0.5rem; font-size: 0.8125rem; color: var(--color-text-muted);">
+                        When players open an Online game, it will appear here in real time.
+                    </p>
+                </div>
+            `;
+            return;
         }
+
+        liveGamesList.innerHTML = liveGames.map((game) => {
+            const shortId = game.game_id.slice(0, 8);
+            const statusLabel = game.status === 'waiting' ? '⏳ Waiting for Player 2' : '⚔️ In Progress';
+            const movesCount = parseInt(game.moves_count || 0, 10);
+
+            return `
+                <div class="live-game-card">
+                    <div class="live-game-card__info">
+                        <span class="live-game-card__title">Game #${shortId}</span>
+                        <span class="live-game-card__meta">${statusLabel} &bull; ${movesCount} move${movesCount === 1 ? '' : 's'}</span>
+                    </div>
+                    <button type="button" class="live-game-card__action-btn" data-watch-id="${game.game_id}">
+                        Watch Live 👁️
+                    </button>
+                </div>
+            `;
+        }).join('');
+
+        liveGamesList.querySelectorAll('[data-watch-id]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                spectateGame(btn.dataset.watchId);
+            });
+        });
     }
 
-    async function spectateGame(gameId) {
+    function spectateGame(gameId) {
         mode = 'watch';
         isSpectating = true;
         isLocked = true;
         onlineGameId = gameId;
-        participantToken = null;
-        participantRole = null;
-        participantSymbol = null;
+        myRole = 'spectator';
+        mySymbol = null;
         currentMembers = [];
 
         modeButtons.forEach((btn) => {
@@ -392,20 +401,21 @@ document.addEventListener('DOMContentLoaded', () => {
         window.history.pushState({}, '', `/games/${gameId}?watch=1`);
         boardView.announce('Connecting to live game...');
 
-        try {
-            const freshState = await onlineClient.fetchGameState(gameId);
-            handleServerState(freshState);
-            onlineClient.subscribe(gameId, null);
-        } catch (err) {
-            boardView.announce(err.message || 'Failed to watch game.');
-        } finally {
-            renderCurrentState();
-            updatePresenceUI();
-        }
+        onlineClient.joinGameChannel(gameId, {
+            role: 'spectator',
+            symbol: null,
+            onEvent: handleRemoteGameEvent,
+            onPresenceChange: handleGamePresenceChange,
+            onMemberJoin: handleGameMemberJoin,
+            onMemberLeave: handleGameMemberLeave,
+        });
+
+        renderCurrentState();
+        updatePresenceUI();
     }
 
     function exitSpectating() {
-        onlineClient.disconnect();
+        onlineClient.leaveGameChannel();
         onlineGameId = null;
         isSpectating = false;
         currentMembers = [];
@@ -416,7 +426,39 @@ document.addEventListener('DOMContentLoaded', () => {
         if (watchDirectory) watchDirectory.style.display = 'block';
 
         window.history.pushState({}, '', '/');
-        loadLiveGames();
+        openWatchDirectory();
+    }
+
+    function openWatchDirectory() {
+        if (gamePanel) gamePanel.style.display = 'none';
+        if (watchDirectory) watchDirectory.style.display = 'block';
+        if (spectatorBar) spectatorBar.style.display = 'none';
+        if (restartBtn) restartBtn.style.display = 'none';
+
+        onlineClient.joinLobby({
+            onLobbyPresenceChange: (members) => {
+                activeLobbyMembers = members || [];
+                renderLobbyList(activeLobbyMembers);
+            },
+            onLobbyMemberJoin: (member) => {
+                if (!activeLobbyMembers.some((m) => m.id === member.id)) {
+                    activeLobbyMembers.push(member);
+                }
+                renderLobbyList(activeLobbyMembers);
+            },
+            onLobbyMemberLeave: (member) => {
+                activeLobbyMembers = activeLobbyMembers.filter((m) => m.id !== member.id);
+                renderLobbyList(activeLobbyMembers);
+            },
+            onLobbyUpdate: (update) => {
+                const member = activeLobbyMembers.find((m) => m.game_id === update.game_id);
+                if (member) {
+                    member.status = update.status;
+                    member.moves_count = update.moves_count;
+                    renderLobbyList(activeLobbyMembers);
+                }
+            },
+        });
     }
 
     async function switchMode(newMode) {
@@ -444,20 +486,14 @@ document.addEventListener('DOMContentLoaded', () => {
             currentMembers = [];
             updatePresenceUI();
 
-            if (gamePanel) gamePanel.style.display = 'none';
-            if (watchDirectory) watchDirectory.style.display = 'block';
-            if (spectatorBar) spectatorBar.style.display = 'none';
-            if (restartBtn) restartBtn.style.display = 'none';
-
             if (window.location.pathname.startsWith('/games/')) {
                 window.history.pushState({}, '', '/');
             }
 
-            await loadLiveGames();
+            openWatchDirectory();
             return;
         }
 
-        // Return to standard game panel
         if (gamePanel) gamePanel.style.display = 'flex';
         if (watchDirectory) watchDirectory.style.display = 'none';
         if (spectatorBar) spectatorBar.style.display = 'none';
@@ -465,9 +501,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (mode === 'online') {
             if (!onlineGameId) {
-                await startNewOnlineGame();
+                startNewOnlineGame();
             } else {
-                await resumeOnlineGame();
+                resumeOnlineGame();
             }
         } else {
             onlineClient.disconnect();
@@ -481,71 +517,93 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function startNewOnlineGame() {
-        isLocked = true;
-        boardView.announce('Creating online game...');
+    function startNewOnlineGame() {
+        isLocked = false;
+        onlineGameId = Math.random().toString(36).substring(2, 10);
+        myRole = 'host';
+        mySymbol = 'X';
+        gameState = createInitialGameState();
+        rematchRequestedBy = null;
 
-        try {
-            const data = await onlineClient.createGame();
-            onlineGameId = data.game_id;
-            participantToken = data.participant_token;
-            participantRole = data.role;
-            participantSymbol = data.symbol;
+        sessionStorage.setItem(`ttt_role_${onlineGameId}`, 'host');
+        sessionStorage.setItem(`ttt_symbol_${onlineGameId}`, 'X');
 
-            sessionStorage.setItem(`ttt_token_${onlineGameId}`, participantToken);
-            window.history.pushState({}, '', `/games/${onlineGameId}`);
+        const inviteUrl = `${window.location.origin}/games/${onlineGameId}`;
+        window.history.pushState({}, '', `/games/${onlineGameId}`);
 
-            if (inviteUrlInput) {
-                inviteUrlInput.value = data.invite_url;
-            }
-
-            handleServerState(data.state);
-            onlineClient.subscribe(onlineGameId, participantToken);
-        } catch (err) {
-            boardView.announce(err.message || 'Error creating game.');
-        } finally {
-            isLocked = false;
-            renderCurrentState();
+        if (inviteUrlInput) {
+            inviteUrlInput.value = inviteUrl;
         }
+
+        boardView.announce('Online game created. Share the invite link with your opponent.');
+
+        onlineClient.joinGameChannel(onlineGameId, {
+            role: 'host',
+            symbol: 'X',
+            onEvent: handleRemoteGameEvent,
+            onPresenceChange: handleGamePresenceChange,
+            onMemberJoin: handleGameMemberJoin,
+            onMemberLeave: handleGameMemberLeave,
+        });
+
+        // Also announce in lobby so spectators can watch
+        onlineClient.joinLobby({
+            gameId: onlineGameId,
+            status: 'waiting',
+            movesCount: 0,
+        });
+
+        renderCurrentState();
+        updatePresenceUI();
     }
 
-    async function resumeOnlineGame() {
-        isLocked = true;
-        boardView.announce('Joining online game...');
+    function resumeOnlineGame() {
+        const storedRole = sessionStorage.getItem(`ttt_role_${onlineGameId}`);
+        const storedSymbol = sessionStorage.getItem(`ttt_symbol_${onlineGameId}`);
 
-        try {
-            const data = await onlineClient.joinGame(onlineGameId, participantToken);
-            participantToken = data.participant_token;
-            participantRole = data.role;
-            participantSymbol = data.symbol;
-
-            sessionStorage.setItem(`ttt_token_${onlineGameId}`, participantToken);
-
-            if (inviteUrlInput) {
-                inviteUrlInput.value = window.location.href;
-            }
-
-            handleServerState(data.state);
-            onlineClient.subscribe(onlineGameId, participantToken);
-        } catch (err) {
-            boardView.announce(err.message || 'Failed to connect to game.');
-        } finally {
-            isLocked = false;
-            renderCurrentState();
+        if (storedRole) {
+            myRole = storedRole;
+            mySymbol = storedSymbol;
+        } else {
+            // Join as Guest (Player O)
+            myRole = 'guest';
+            mySymbol = 'O';
+            sessionStorage.setItem(`ttt_role_${onlineGameId}`, 'guest');
+            sessionStorage.setItem(`ttt_symbol_${onlineGameId}`, 'O');
         }
+
+        if (inviteUrlInput) {
+            inviteUrlInput.value = `${window.location.origin}/games/${onlineGameId}`;
+        }
+
+        onlineClient.joinGameChannel(onlineGameId, {
+            role: myRole,
+            symbol: mySymbol,
+            onEvent: handleRemoteGameEvent,
+            onPresenceChange: handleGamePresenceChange,
+            onMemberJoin: handleGameMemberJoin,
+            onMemberLeave: handleGameMemberLeave,
+        });
+
+        renderCurrentState();
+        updatePresenceUI();
     }
 
     function restartGame() {
         if (mode === 'online') {
-            if (participantToken && onlineGameId) {
-                isLocked = true;
-                onlineClient.requestRematch(onlineGameId, participantToken)
-                    .then((state) => handleServerState(state))
-                    .catch((err) => boardView.announce(err.message))
-                    .finally(() => {
-                        isLocked = false;
-                        renderCurrentState();
-                    });
+            if (rematchRequestedBy && rematchRequestedBy !== mySymbol) {
+                // Accept rematch
+                gameState = createInitialGameState();
+                rematchRequestedBy = null;
+                onlineClient.broadcastGameEvent(onlineGameId, 'rematch-accept', {});
+                renderCurrentState();
+                boardView.announce('Rematch accepted. Player X plays first.');
+            } else {
+                // Request rematch
+                rematchRequestedBy = mySymbol;
+                onlineClient.broadcastGameEvent(onlineGameId, 'rematch-request', { symbol: mySymbol });
+                renderCurrentState();
+                boardView.announce('Rematch requested. Waiting for opponent...');
             }
             return;
         }
@@ -562,7 +620,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (refreshLiveGamesBtn) {
-        refreshLiveGamesBtn.addEventListener('click', () => loadLiveGames());
+        refreshLiveGamesBtn.addEventListener('click', () => openWatchDirectory());
     }
 
     if (exitWatchBtn) {
@@ -620,7 +678,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (mode === 'online' && onlineGameId) {
         resumeOnlineGame();
     } else if (mode === 'watch') {
-        switchMode('watch');
+        openWatchDirectory();
     } else {
         renderCurrentState();
     }
