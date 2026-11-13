@@ -79,13 +79,17 @@ function replaceBrowserUrl(path) {
     window.history.replaceState({}, '', path);
 }
 
+const DEFAULT_PUBLIC_APP_URL = 'https://sudoku.fraha.dev';
+
 function buildInviteUrl(gameId) {
     if (!gameId || typeof window === 'undefined') return '';
-    if (window.location.protocol.startsWith('http') && !window.Capacitor?.isNativePlatform?.()) {
+    const isNative = Boolean(window.Capacitor?.isNativePlatform?.());
+    if (window.location.protocol.startsWith('http') && !isNative) {
         return `${window.location.origin}/games/${gameId}`;
     }
-    const base = window.__APP_CONFIG__?.publicAppUrl || window.location.origin;
-    return `${base}/games/${gameId}`;
+    const envPublicUrl = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_PUBLIC_APP_URL : '';
+    const base = window.__APP_CONFIG__?.publicAppUrl || envPublicUrl || (isNative ? DEFAULT_PUBLIC_APP_URL : window.location.origin);
+    return `${base.replace(/\/$/, '')}/games/${gameId}`;
 }
 
 export function App() {

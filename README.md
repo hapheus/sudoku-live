@@ -16,16 +16,16 @@ A fast, accessible, zero-backend Sudoku app built with **React 19**, **Vite**, *
   2. **Online Co-op**: Real-time collaborative solving over Centrifugo with invite links, presence announcements, shared cell updates/notes, 300s history recovery on mobile/Capacitor reconnect, and co-op new-puzzle negotiation. Additional visitors beyond two players automatically join as spectators.
   3. **Watch Live (Spectator Mode)**: Browse active Solo and Co-op rooms in real time via `sudoku:lobby`, watch live progress (`filled_count/81`), suggest cell hints (`1–9` or nudge) that players can apply with one click, and send floating emoji reactions.
 - **100% Serverless & Zero-DB Architecture**:
-  - Runs completely in the client (Browser SPA + iOS/Android via Capacitor) with `sessionStorage` snapshot recovery and direct WebSocket communication with Centrifugo v6.
+  - Runs completely in the client (Browser SPA + iOS via Capacitor) with `localStorage` Solo persistence, `sessionStorage` co-op snapshot recovery, and direct WebSocket communication with Centrifugo v6.
 - **Multi-App WebSocket Ready**:
-  - Centrifugo runs in its own container (`centrifugo/centrifugo:v6`, Apache-2.0) with isolated channel namespaces (`sudoku` and extensible `app` in [docker/centrifugo/config.json](docker/centrifugo/config.json)), ready to serve web browsers, React Native, or Capacitor apps across multiple projects.
+  - Centrifugo runs in its own container (`centrifugo/centrifugo:v6`, Apache-2.0) with isolated channel namespaces (`sudoku` and extensible `app` in [docker/centrifugo/config.json](docker/centrifugo/config.json)), ready to serve web browsers or Capacitor iOS apps across multiple projects.
 
 ---
 
 ## Technology Stack
 
-- **App / UI**: React 19, Vite, Native CSS (with `env(safe-area-inset-*)` mobile support)
-- **Mobile Wrapper**: Capacitor (`@capacitor/core`, `@capacitor/cli`, [capacitor.config.json](capacitor.config.json))
+- **App / UI**: React 19, Vite, Native CSS (with `env(safe-area-inset-*)` iOS safe-area support)
+- **Mobile Wrapper (iOS only)**: Capacitor 8 (`@capacitor/core`, `@capacitor/cli`, `@capacitor/ios`, [capacitor.config.json](capacitor.config.json), [iOS Specification](docs/ios-spec.md))
 - **Real-Time WebSockets**: Centrifugo v6 (`centrifugo/centrifugo:v6`) + `centrifuge` JS SDK
 - **Web Hosting Container**: Lightweight `nginx:1.27-alpine` static SPA server with runtime `/env-config.js`
 - **Testing**: Vitest + React Testing Library + jsdom
@@ -50,19 +50,20 @@ Open `http://localhost:8000` (or Vite dev URL) in your browser. Centrifugo liste
 
 ---
 
-## Native Mobile Build (Capacitor iOS / Android)
+## Native iOS Build (Capacitor 8 + Xcode)
+
+Android is intentionally not targeted. See [docs/ios-spec.md](docs/ios-spec.md) for the full iOS & `fraha.dev` specification (`dev.fraha.sudokulive`).
 
 ```bash
-# 1. Point native builds at your deployed Centrifugo endpoint
-VITE_WS_URL=wss://sudoku-ws.example.com/connection/websocket npm run build
+# 1. Build web assets (defaults to wss://sudoku-ws.fraha.dev/connection/websocket in native iOS)
+npm run build
 
-# 2. Add platform once (iOS requires macOS + Xcode; Android requires Android Studio)
-npx cap add ios
-npx cap add android
+# Or override endpoint explicitly before syncing:
+VITE_WS_URL=wss://sudoku-ws.fraha.dev/connection/websocket VITE_PUBLIC_APP_URL=https://sudoku.fraha.dev npm run build
 
-# 3. Sync built dist/ assets into native projects and open IDE
-npx cap sync
-npx cap open ios      # or: npx cap open android
+# 2. Sync built dist/ assets into the native ios/ Xcode project and open Xcode
+npm run cap:sync
+npm run cap:open:ios
 ```
 
 ---
@@ -70,29 +71,29 @@ npx cap open ios      # or: npx cap open android
 ## Multiplayer & Spectator Architecture
 
 ```
-[Player A (Web/Capacitor)] <-- (WS: sudoku:game.{id} / sudoku:lobby) --> [Centrifugo v6]
-                                                                                 ^
-[Player B (Partner)]       <-- (Presence, Sync, Recovery & Dedup) ---------------+
-[Spectator Clients]        <-- (Live Board, Cell Hints & Reactions) -------------+
+[Player A (Web / iOS)] <-- (WS: sudoku:game.{id} / sudoku:lobby) --> [Centrifugo v6]
+                                                                            ^
+[Player B (Partner)]   <-- (Presence, Sync, Recovery & Dedup) --------------+
+[Spectator Clients]    <-- (Live Board, Cell Hints & Reactions) ------------+
 ```
 
-- **Zero Backend**: Clients connect directly to Centrifugo (`sudoku` namespace with `presence`, `join_leave`, `history_size: 25`, `history_ttl: "300s"`, `force_recovery: true`).
+- **Zero Backend**: Clients connect directly to Centrifugo (`sudoku` namespace with `presence`, `join_leave`, `history_size: 25`, `history_ttl: "300s"`, `force_recovery: true`, and anonymous client permissions).
 - **Room Presence & State**: Participants announce `{ role, game_mode }` via `presence-announce` on subscribe/join, hosts publish room progress to `sudoku:lobby`, and all moves carry unique `eventId` tokens for deduplication.
 
 ---
 
-## Production Deployment (`cf-docker-tunnel-sync`)
+## Production Deployment (`fraha.dev` + `cf-docker-tunnel-sync`)
 
 The repository includes [compose.prod.yml](compose.prod.yml) for running **Nginx Static SPA (`app`)** and **Centrifugo v6 (`centrifugo`)** behind [cf-docker-tunnel-sync](https://github.com/hapheus/cf-docker-tunnel-sync):
 
 ```bash
 cp .env.prod.example .env
-# Set DOMAIN_NAME=your-domain.tld
+# Defaults to DOMAIN_NAME=fraha.dev
 docker compose -f compose.prod.yml up -d --build
 ```
 
-- Web SPA is labeled for `sudoku.${DOMAIN_NAME}` (port `8000`) and injects runtime `WS_HOST`, `WS_PORT`, `WS_SCHEME`, and `PUBLIC_APP_URL` via `/env-config.js`.
-- Centrifugo WebSockets are labeled for `sudoku-ws.${DOMAIN_NAME}` (port `8080`, served publicly over `wss://` on `443`) and allow both `https://sudoku.${DOMAIN_NAME}` and Capacitor origins (`capacitor://localhost`, `https://localhost`, `http://localhost`).
+- Web SPA is labeled for `sudoku.${DOMAIN_NAME:-fraha.dev}` (`https://sudoku.fraha.dev`, port `8000`) and injects runtime `WS_HOST`, `WS_PORT`, `WS_SCHEME`, and `PUBLIC_APP_URL` via `/env-config.js`.
+- Centrifugo WebSockets are labeled for `sudoku-ws.${DOMAIN_NAME:-fraha.dev}` (`wss://sudoku-ws.fraha.dev`, port `8080` behind TLS) and allow both `https://sudoku.fraha.dev` and Capacitor iOS origins (`capacitor://localhost`, `https://localhost`, `http://localhost`).
 
 ---
 

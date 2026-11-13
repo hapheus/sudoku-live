@@ -101,6 +101,11 @@ export class OnlineGameClient {
 
         const browserProtocol = typeof window !== 'undefined' && window.location ? window.location.protocol : 'http:';
         const browserHostname = typeof window !== 'undefined' && window.location ? window.location.hostname : 'localhost';
+        const isNativeCapacitor = typeof window !== 'undefined' && Boolean(window.Capacitor?.isNativePlatform?.());
+
+        if (isNativeCapacitor && !this.wsConfig.host && !this.wsConfig.scheme && !this.wsConfig.port) {
+            return 'wss://sudoku-ws.fraha.dev/connection/websocket';
+        }
 
         const isLocalOrigin = browserHostname === 'localhost' || browserHostname === '127.0.0.1';
         const isHttps = this.wsConfig.scheme

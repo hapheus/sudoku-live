@@ -1,8 +1,21 @@
 {
-  "appId": "com.hapheus.sudokulive",
+  "appId": "dev.fraha.sudokulive",
   "appName": "Sudoku Live",
   "webDir": "dist",
+  "backgroundColor": "#0f172a",
+  "ios": {
+    "scheme": "App",
+    "contentInset": "never",
+    "preferredContentMode": "mobile",
+    "scrollEnabled": true,
+    "allowsLinkPreview": false
+  },
   "server": {
-    "androidScheme": "https"
+    "hostname": "localhost",
+    "iosScheme": "capacitor",
+    "allowNavigation": [
+      "sudoku.fraha.dev",
+      "sudoku-ws.fraha.dev"
+    ]
   }
 }

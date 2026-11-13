@@ -12,7 +12,7 @@
 /dist
 /node_modules
 /ios/App/App/public
-/android/app/src/main/assets/public
+/ios/App/Pods
 Thumbs.db
 .devenv
 .devenv*

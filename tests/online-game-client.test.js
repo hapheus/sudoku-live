@@ -10,6 +10,7 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
     beforeEach(() => {
         sessionStorage.clear();
         delete window.__APP_CONFIG__;
+        delete window.Capacitor;
     });
 
     it('validates game IDs strictly', () => {
@@ -31,24 +32,29 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
         expect(e1).not.toBe(e2);
     });
 
-    it('builds WebSocket URLs from explicit config, runtime window.__APP_CONFIG__, or host', () => {
+    it('builds WebSocket URLs from explicit config, runtime window.__APP_CONFIG__, or Capacitor iOS default', () => {
         const localClient = new OnlineGameClient({
             wsConfig: { host: 'localhost', port: 8081, scheme: 'http' },
         });
         expect(localClient.buildWsUrl()).toBe('ws://localhost:8081/connection/websocket');
 
         window.__APP_CONFIG__ = {
-            wsHost: 'sudoku-ws.example.com',
+            wsHost: 'sudoku-ws.fraha.dev',
             wsPort: '443',
             wsScheme: 'https',
         };
         const runtimeClient = new OnlineGameClient();
-        expect(runtimeClient.buildWsUrl()).toBe('wss://sudoku-ws.example.com/connection/websocket');
+        expect(runtimeClient.buildWsUrl()).toBe('wss://sudoku-ws.fraha.dev/connection/websocket');
+
+        delete window.__APP_CONFIG__;
+        window.Capacitor = { isNativePlatform: () => true };
+        const iosNativeClient = new OnlineGameClient();
+        expect(iosNativeClient.buildWsUrl()).toBe('wss://sudoku-ws.fraha.dev/connection/websocket');
 
         const overrideClient = new OnlineGameClient({
-            wsConfig: { wsUrl: 'wss://custom.example.com/connection/websocket' },
+            wsConfig: { wsUrl: 'wss://custom.fraha.dev/connection/websocket' },
         });
-        expect(overrideClient.buildWsUrl()).toBe('wss://custom.example.com/connection/websocket');
+        expect(overrideClient.buildWsUrl()).toBe('wss://custom.fraha.dev/connection/websocket');
     });
 
     it('deduplicates seen event IDs up to bounded window', () => {
