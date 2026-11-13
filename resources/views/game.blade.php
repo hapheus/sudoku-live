@@ -148,6 +148,7 @@
 
         <!-- Main Game Board -->
         <main id="game-panel" class="board-wrapper" role="tabpanel">
+            <div id="reaction-stage" class="reaction-stage" aria-live="polite" aria-atomic="false"></div>
             <div id="board" class="board" role="grid" aria-label="Tic Tac Toe board">
                 <!-- Row 1 -->
                 <div class="board-row" role="row">
@@ -169,6 +170,21 @@
                 </div>
             </div>
         </main>
+
+        <!-- Watcher Interactions (Voting & Emoji Reactions) -->
+        <section id="watcher-interactions" class="watcher-interactions" style="display: none;" aria-label="Spectator Interactions">
+            <p class="watcher-interactions__hint">
+                👍 Tap an empty cell on the board to vote for the next move, or send a reaction:
+            </p>
+            <div class="emoji-bar" role="group" aria-label="Send emoji reaction">
+                <button type="button" class="emoji-btn" data-emoji="👏" aria-label="Send applause reaction">👏</button>
+                <button type="button" class="emoji-btn" data-emoji="🔥" aria-label="Send fire reaction">🔥</button>
+                <button type="button" class="emoji-btn" data-emoji="😮" aria-label="Send surprised reaction">😮</button>
+                <button type="button" class="emoji-btn" data-emoji="😂" aria-label="Send laugh reaction">😂</button>
+                <button type="button" class="emoji-btn" data-emoji="🎉" aria-label="Send celebration reaction">🎉</button>
+                <button type="button" class="emoji-btn" data-emoji="🤔" aria-label="Send thinking reaction">🤔</button>
+            </div>
+        </section>
 
         <!-- Action Controls -->
         <div class="action-controls">
