@@ -117,13 +117,16 @@ export class OnlineGameClient {
             this.disconnect();
         }
 
-        const isHttps = this.reverbConfig.scheme === 'https';
+        const isHttps = this.reverbConfig.scheme === 'https' || window.location.protocol === 'https:';
         const port = parseInt(this.reverbConfig.port || (isHttps ? 443 : 80), 10);
+        const host = (this.reverbConfig.host && this.reverbConfig.host !== 'localhost' && this.reverbConfig.host !== '127.0.0.1')
+            ? this.reverbConfig.host
+            : (window.location.hostname || 'localhost');
 
         this.echo = new Echo({
             broadcaster: 'reverb',
             key: this.reverbConfig.key,
-            wsHost: this.reverbConfig.host || window.location.hostname,
+            wsHost: host,
             wsPort: port,
             wssPort: port,
             forceTLS: isHttps,
