@@ -180,6 +180,10 @@ export function App() {
         document.documentElement.dataset.theme = theme;
         document.documentElement.style.colorScheme = theme;
         localStorage.setItem('sudoku_theme', theme);
+        const themeMeta = document.querySelector('meta[name="theme-color"]');
+        if (themeMeta) {
+            themeMeta.setAttribute('content', theme === 'light' ? '#f6f2ea' : '#13161b');
+        }
     }, [theme]);
 
     useEffect(() => {
