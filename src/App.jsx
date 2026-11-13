@@ -1584,355 +1584,357 @@ export function App() {
     }
 
     return (
-        <div id="sudoku-app" className="app-container app-container--with-nav">
-            <div id="game-announcements" className="sr-only" aria-live="polite" aria-atomic="true">
-                {announcement}
-            </div>
+        <>
+            <div id="sudoku-app" className="app-container app-container--with-nav">
+                <div id="game-announcements" className="sr-only" aria-live="polite" aria-atomic="true">
+                    {announcement}
+                </div>
 
-            {pendingConfirm && (
-                <section
-                    id="confirm-dialog"
-                    className="confirm-banner"
-                    role="alertdialog"
-                    aria-modal="false"
-                    aria-labelledby="confirm-title"
-                >
-                    <div className="confirm-banner__copy">
-                        <h2 id="confirm-title" className="confirm-banner__title">{pendingConfirm.title}</h2>
-                        <p className="confirm-banner__message">{pendingConfirm.message}</p>
-                    </div>
-                    <div className="confirm-banner__actions">
-                        <button
-                            ref={confirmCancelRef}
-                            type="button"
-                            className="confirm-banner__btn confirm-banner__btn--cancel"
-                            onClick={() => setPendingConfirm(null)}
-                        >
-                            {pendingConfirm.cancelLabel}
-                        </button>
-                        <button
-                            type="button"
-                            className="confirm-banner__btn confirm-banner__btn--confirm"
-                            onClick={() => {
-                                const action = pendingConfirm.onConfirm;
-                                setPendingConfirm(null);
-                                action?.();
-                            }}
-                        >
-                            {pendingConfirm.confirmLabel}
-                        </button>
-                    </div>
-                </section>
-            )}
-
-            {navTab === 'play' && !isPlayingGame && (
-                <section id="play-setup" className="play-setup" aria-label={messages.setupTitle}>
-                    <header className="play-setup__header">
-                        <h1 className="play-setup__title">{messages.gameTitle}</h1>
-                        <p className="play-setup__subtitle">{messages.setupSubtitle}</p>
-                    </header>
-
-                    <div className="setup-controls">
-                        <VariantSelector
-                            variant={variant}
-                            onChange={handleVariantChange}
-                            messages={messages}
-                        />
-                        <DifficultySelector
-                            difficulty={difficulty}
-                            onChange={handleDifficultyChange}
-                            messages={messages}
-                        />
-                    </div>
-
-                    <div className="play-setup__actions">
-                        <button
-                            type="button"
-                            id="start-game-btn"
-                            className="btn-primary play-setup__cta"
-                            onClick={handlePlayFromSetup}
-                        >
-                            {messages.startPuzzle}
-                        </button>
-                        {canResumeGame && (
-                            <button
-                                type="button"
-                                id="resume-game-btn"
-                                className="btn-secondary play-setup__resume"
-                                onClick={handleResumeFromSetup}
-                            >
-                                {messages.resumePuzzle}
-                            </button>
-                        )}
-                    </div>
-                </section>
-            )}
-
-            {navTab === 'play' && isPlayingGame && (
-                <main className="game-screen" aria-label={messages.gameTitle}>
-                    <div className="game-top-bar">
-                        {myRole !== 'guest' ? (
-                            <button
-                                type="button"
-                                id="back-to-setup-btn"
-                                className="game-top-bar__back-btn"
-                                onClick={() => setIsPlayingGame(false)}
-                            >
-                                <span aria-hidden="true">←</span>
-                                <span>{messages.backToSetup}</span>
-                            </button>
-                        ) : <span />}
-
-                        {gameState.status !== 'solved' && (
-                            <div className="game-top-bar__actions">
-                                <button
-                                    type="button"
-                                    id="restart-btn"
-                                    className="btn-primary game-top-bar__new-btn"
-                                    disabled={restartDisabled}
-                                    onClick={handleNewPuzzleAction}
-                                >
-                                    {restartLabel}
-                                </button>
-                                {isWaitingForRematch && (
-                                    <button
-                                        type="button"
-                                        id="cancel-restart-btn"
-                                        className="btn-secondary"
-                                        onClick={handleCancelRematch}
-                                    >
-                                        {messages.cancelRequest}
-                                    </button>
-                                )}
-                            </div>
-                        )}
-                    </div>
-
-                    <StatusBanner
-                        connectionStatus={connectionStatus}
-                        mode={mode}
-                        isSpectating={false}
-                        myRole={myRole}
-                        currentMembers={currentMembers}
-                        spectatedGameMode={spectatedGameMode}
-                        gameState={gameState}
-                        onReconnect={handleReconnect}
-                        messages={messages}
-                    />
-
-                    <SudokuBoard
-                        gameState={gameState}
-                        selectedIndex={selectedIndex}
-                        activeDigit={activeDigit}
-                        hintsByCell={hintsByCell}
-                        floatingReactions={floatingReactions}
-                        cellRefs={cellRefs}
-                        onCellSelect={handleCellSelect}
-                        myRole={myRole}
-                        partnerCursorIndex={partnerCursorIndex}
-                    />
-
-                    {actionFeedback && (
-                        <div id="action-feedback" className="action-feedback" role="status">
-                            {actionFeedback}
+                {pendingConfirm && (
+                    <section
+                        id="confirm-dialog"
+                        className="confirm-banner"
+                        role="alertdialog"
+                        aria-modal="false"
+                        aria-labelledby="confirm-title"
+                    >
+                        <div className="confirm-banner__copy">
+                            <h2 id="confirm-title" className="confirm-banner__title">{pendingConfirm.title}</h2>
+                            <p className="confirm-banner__message">{pendingConfirm.message}</p>
                         </div>
-                    )}
+                        <div className="confirm-banner__actions">
+                            <button
+                                ref={confirmCancelRef}
+                                type="button"
+                                className="confirm-banner__btn confirm-banner__btn--cancel"
+                                onClick={() => setPendingConfirm(null)}
+                            >
+                                {pendingConfirm.cancelLabel}
+                            </button>
+                            <button
+                                type="button"
+                                className="confirm-banner__btn confirm-banner__btn--confirm"
+                                onClick={() => {
+                                    const action = pendingConfirm.onConfirm;
+                                    setPendingConfirm(null);
+                                    action?.();
+                                }}
+                            >
+                                {pendingConfirm.confirmLabel}
+                            </button>
+                        </div>
+                    </section>
+                )}
 
-                    {gameState.status === 'solved' && (
-                        <SolveSummary
-                            difficulty={gameState.difficulty}
-                            elapsedSeconds={gameState.elapsedSeconds}
-                            mode={isCoopSession ? 'online' : 'solo'}
-                            isSpectating={false}
-                            restartLabel={restartLabel}
-                            restartDisabled={restartDisabled}
-                            onPlayAgain={handleNewPuzzleAction}
-                            messages={messages}
-                        />
-                    )}
+                {navTab === 'play' && !isPlayingGame && (
+                    <section id="play-setup" className="play-setup" aria-label={messages.setupTitle}>
+                        <header className="play-setup__header">
+                            <h1 className="play-setup__title">{messages.gameTitle}</h1>
+                            <p className="play-setup__subtitle">{messages.setupSubtitle}</p>
+                        </header>
 
-                    <SpectatorHintsFeed
-                        hintsByCell={hintsByCell}
-                        variant={activeBoardVariant}
-                        canApply={gameState.status !== 'solved'}
-                        onSelectHint={(idx) => {
-                            focusCell(idx);
-                            cellRefs.current[idx]?.focus();
-                        }}
-                        onApplyHint={(idx, digit) => {
-                            const cur = stateRef.current;
-                            if (cur.isSpectating || cur.mode === 'watch' || cur.gameState.status === 'solved') return;
-                            const owner = (cur.myRole === 'host' || cur.myRole === 'guest') ? cur.myRole : null;
-                            setSelectedIndex(idx);
-                            const nextState = setCellValue(cur.gameState, idx, digit, { owner });
-                            setGameState(nextState);
-                            stateRef.current.gameState = nextState;
-                            clearHintsForCell(idx);
-                            const isBroadcaster = (cur.mode === 'solo' || cur.mode === 'online') && Boolean(cur.onlineGameId) && !cur.isSpectating;
-                            if (isBroadcaster) {
-                                onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'cell-update', {
-                                    index: idx,
-                                    value: digit,
-                                    notes: nextState.notes[idx],
-                                    owner,
-                                });
-                                syncLobbyProgress(nextState);
-                            }
-                            persistSnapshotIfNeeded(nextState);
-                        }}
-                        messages={messages}
-                    />
+                        <div className="setup-controls">
+                            <VariantSelector
+                                variant={variant}
+                                onChange={handleVariantChange}
+                                messages={messages}
+                            />
+                            <DifficultySelector
+                                difficulty={difficulty}
+                                onChange={handleDifficultyChange}
+                                messages={messages}
+                            />
+                        </div>
 
-                    <PlayerControls
-                        board={gameState.board}
-                        variant={activeBoardVariant}
-                        notesMode={notesMode}
-                        canUndo={Boolean(gameState.history?.length) && gameState.status !== 'solved'}
-                        activeDigit={activeDigit}
-                        highlightedDigit={highlightedDigit}
-                        isSolved={gameState.status === 'solved'}
-                        onUndo={handleUndo}
-                        onErase={() => applyPlayerDigit(0)}
-                        onToggleNotes={() => setNotesMode((prev) => !prev)}
-                        onFillCandidates={handleFillCandidates}
-                        onClearNotes={handleClearNotes}
-                        onLocalHint={handleLocalHint}
-                        onDigit={applyPlayerDigit}
-                        messages={messages}
-                    />
-                </main>
-            )}
-
-            {navTab === 'watch' && !isSpectating && (
-                <WatchDirectory
-                    rooms={activeLobbyRooms}
-                    connectionStatus={connectionStatus}
-                    onReconnect={handleReconnect}
-                    onRefresh={openWatchDirectory}
-                    onWatchGame={spectateGame}
-                    onJoinGame={joinWatchGame}
-                    messages={messages}
-                />
-            )}
-
-            {navTab === 'watch' && isSpectating && (
-                <main className="watch-screen" aria-label={messages.navWatch}>
-                    <div id="spectator-bar" className="spectator-bar">
-                        <span>
-                            <strong>{messages.spectatingBar}</strong> — {messages.spectatingReadOnly}
-                        </span>
-                        <div className="spectator-bar__actions">
-                            {canJoinSpectated && (
+                        <div className="play-setup__actions">
+                            <button
+                                type="button"
+                                id="start-game-btn"
+                                className="btn-primary play-setup__cta"
+                                onClick={handlePlayFromSetup}
+                            >
+                                {messages.startPuzzle}
+                            </button>
+                            {canResumeGame && (
                                 <button
                                     type="button"
-                                    id="join-from-watch-btn"
-                                    className="spectator-bar__join-btn"
-                                    onClick={() => joinWatchGame(onlineGameId)}
+                                    id="resume-game-btn"
+                                    className="btn-secondary play-setup__resume"
+                                    onClick={handleResumeFromSetup}
                                 >
-                                    {messages.joinGame}
+                                    {messages.resumePuzzle}
                                 </button>
                             )}
-                            <button
-                                type="button"
-                                id="exit-watch-btn"
-                                className="spectator-bar__back-btn"
-                                onClick={exitSpectating}
-                            >
-                                {messages.backToLobby}
-                            </button>
                         </div>
-                    </div>
+                    </section>
+                )}
 
-                    <StatusBanner
-                        connectionStatus={connectionStatus}
-                        mode={mode}
-                        isSpectating
-                        myRole={myRole}
-                        currentMembers={currentMembers}
-                        spectatedGameMode={spectatedGameMode}
-                        gameState={gameState}
-                        onReconnect={handleReconnect}
-                        messages={messages}
-                    />
+                {navTab === 'play' && isPlayingGame && (
+                    <main className="game-screen" aria-label={messages.gameTitle}>
+                        <div className="game-top-bar">
+                            {myRole !== 'guest' ? (
+                                <button
+                                    type="button"
+                                    id="back-to-setup-btn"
+                                    className="game-top-bar__back-btn"
+                                    onClick={() => setIsPlayingGame(false)}
+                                >
+                                    <span aria-hidden="true">←</span>
+                                    <span>{messages.backToSetup}</span>
+                                </button>
+                            ) : <span />}
 
-                    <SudokuBoard
-                        gameState={gameState}
-                        selectedIndex={selectedIndex}
-                        activeDigit={activeDigit}
-                        hintsByCell={hintsByCell}
-                        floatingReactions={floatingReactions}
-                        cellRefs={cellRefs}
-                        onCellSelect={handleCellSelect}
-                        myRole={myRole}
-                        partnerCursorIndex={partnerCursorIndex}
-                    />
-
-                    {actionFeedback && (
-                        <div id="action-feedback" className="action-feedback" role="status">
-                            {actionFeedback}
+                            {gameState.status !== 'solved' && (
+                                <div className="game-top-bar__actions">
+                                    <button
+                                        type="button"
+                                        id="restart-btn"
+                                        className="btn-primary game-top-bar__new-btn"
+                                        disabled={restartDisabled}
+                                        onClick={handleNewPuzzleAction}
+                                    >
+                                        {restartLabel}
+                                    </button>
+                                    {isWaitingForRematch && (
+                                        <button
+                                            type="button"
+                                            id="cancel-restart-btn"
+                                            className="btn-secondary"
+                                            onClick={handleCancelRematch}
+                                        >
+                                            {messages.cancelRequest}
+                                        </button>
+                                    )}
+                                </div>
+                            )}
                         </div>
-                    )}
 
-                    {gameState.status === 'solved' && (
-                        <SolveSummary
-                            difficulty={gameState.difficulty}
-                            elapsedSeconds={gameState.elapsedSeconds}
-                            mode={isCoopSession ? 'online' : 'solo'}
-                            isSpectating
-                            restartLabel={restartLabel}
-                            restartDisabled={restartDisabled}
-                            onPlayAgain={handleNewPuzzleAction}
+                        <StatusBanner
+                            connectionStatus={connectionStatus}
+                            mode={mode}
+                            isSpectating={false}
+                            myRole={myRole}
+                            currentMembers={currentMembers}
+                            spectatedGameMode={spectatedGameMode}
+                            gameState={gameState}
+                            onReconnect={handleReconnect}
                             messages={messages}
                         />
-                    )}
 
-                    <SpectatorHintsFeed
-                        hintsByCell={hintsByCell}
-                        variant={activeBoardVariant}
-                        canApply={false}
-                        onSelectHint={(idx) => {
-                            focusCell(idx);
-                            cellRefs.current[idx]?.focus();
-                        }}
-                        onApplyHint={() => {}}
+                        <SudokuBoard
+                            gameState={gameState}
+                            selectedIndex={selectedIndex}
+                            activeDigit={activeDigit}
+                            hintsByCell={hintsByCell}
+                            floatingReactions={floatingReactions}
+                            cellRefs={cellRefs}
+                            onCellSelect={handleCellSelect}
+                            myRole={myRole}
+                            partnerCursorIndex={partnerCursorIndex}
+                        />
+
+                        {actionFeedback && (
+                            <div id="action-feedback" className="action-feedback" role="status">
+                                {actionFeedback}
+                            </div>
+                        )}
+
+                        {gameState.status === 'solved' && (
+                            <SolveSummary
+                                difficulty={gameState.difficulty}
+                                elapsedSeconds={gameState.elapsedSeconds}
+                                mode={isCoopSession ? 'online' : 'solo'}
+                                isSpectating={false}
+                                restartLabel={restartLabel}
+                                restartDisabled={restartDisabled}
+                                onPlayAgain={handleNewPuzzleAction}
+                                messages={messages}
+                            />
+                        )}
+
+                        <SpectatorHintsFeed
+                            hintsByCell={hintsByCell}
+                            variant={activeBoardVariant}
+                            canApply={gameState.status !== 'solved'}
+                            onSelectHint={(idx) => {
+                                focusCell(idx);
+                                cellRefs.current[idx]?.focus();
+                            }}
+                            onApplyHint={(idx, digit) => {
+                                const cur = stateRef.current;
+                                if (cur.isSpectating || cur.mode === 'watch' || cur.gameState.status === 'solved') return;
+                                const owner = (cur.myRole === 'host' || cur.myRole === 'guest') ? cur.myRole : null;
+                                setSelectedIndex(idx);
+                                const nextState = setCellValue(cur.gameState, idx, digit, { owner });
+                                setGameState(nextState);
+                                stateRef.current.gameState = nextState;
+                                clearHintsForCell(idx);
+                                const isBroadcaster = (cur.mode === 'solo' || cur.mode === 'online') && Boolean(cur.onlineGameId) && !cur.isSpectating;
+                                if (isBroadcaster) {
+                                    onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'cell-update', {
+                                        index: idx,
+                                        value: digit,
+                                        notes: nextState.notes[idx],
+                                        owner,
+                                    });
+                                    syncLobbyProgress(nextState);
+                                }
+                                persistSnapshotIfNeeded(nextState);
+                            }}
+                            messages={messages}
+                        />
+
+                        <PlayerControls
+                            board={gameState.board}
+                            variant={activeBoardVariant}
+                            notesMode={notesMode}
+                            canUndo={Boolean(gameState.history?.length) && gameState.status !== 'solved'}
+                            activeDigit={activeDigit}
+                            highlightedDigit={highlightedDigit}
+                            isSolved={gameState.status === 'solved'}
+                            onUndo={handleUndo}
+                            onErase={() => applyPlayerDigit(0)}
+                            onToggleNotes={() => setNotesMode((prev) => !prev)}
+                            onFillCandidates={handleFillCandidates}
+                            onClearNotes={handleClearNotes}
+                            onLocalHint={handleLocalHint}
+                            onDigit={applyPlayerDigit}
+                            messages={messages}
+                        />
+                    </main>
+                )}
+
+                {navTab === 'watch' && !isSpectating && (
+                    <WatchDirectory
+                        rooms={activeLobbyRooms}
+                        connectionStatus={connectionStatus}
+                        onReconnect={handleReconnect}
+                        onRefresh={openWatchDirectory}
+                        onWatchGame={spectateGame}
+                        onJoinGame={joinWatchGame}
                         messages={messages}
                     />
+                )}
 
-                    <WatcherInteractions
-                        selectedIndex={selectedIndex}
-                        board={gameState.board}
-                        variant={activeBoardVariant}
-                        onSendHint={sendSpectatorHint}
-                        onSendReaction={(emoji) => {
-                            if (!onlineGameId) return;
-                            triggerFloatingReaction(emoji);
-                            onlineClientRef.current?.sendWhisperEvent('reaction', {
-                                emoji,
-                                senderId: onlineClientRef.current?.clientId,
-                            });
-                            announce(`Sent ${emoji} reaction.`);
-                        }}
+                {navTab === 'watch' && isSpectating && (
+                    <main className="watch-screen" aria-label={messages.navWatch}>
+                        <div id="spectator-bar" className="spectator-bar">
+                            <span>
+                                <strong>{messages.spectatingBar}</strong> — {messages.spectatingReadOnly}
+                            </span>
+                            <div className="spectator-bar__actions">
+                                {canJoinSpectated && (
+                                    <button
+                                        type="button"
+                                        id="join-from-watch-btn"
+                                        className="spectator-bar__join-btn"
+                                        onClick={() => joinWatchGame(onlineGameId)}
+                                    >
+                                        {messages.joinGame}
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    id="exit-watch-btn"
+                                    className="spectator-bar__back-btn"
+                                    onClick={exitSpectating}
+                                >
+                                    {messages.backToLobby}
+                                </button>
+                            </div>
+                        </div>
+
+                        <StatusBanner
+                            connectionStatus={connectionStatus}
+                            mode={mode}
+                            isSpectating
+                            myRole={myRole}
+                            currentMembers={currentMembers}
+                            spectatedGameMode={spectatedGameMode}
+                            gameState={gameState}
+                            onReconnect={handleReconnect}
+                            messages={messages}
+                        />
+
+                        <SudokuBoard
+                            gameState={gameState}
+                            selectedIndex={selectedIndex}
+                            activeDigit={activeDigit}
+                            hintsByCell={hintsByCell}
+                            floatingReactions={floatingReactions}
+                            cellRefs={cellRefs}
+                            onCellSelect={handleCellSelect}
+                            myRole={myRole}
+                            partnerCursorIndex={partnerCursorIndex}
+                        />
+
+                        {actionFeedback && (
+                            <div id="action-feedback" className="action-feedback" role="status">
+                                {actionFeedback}
+                            </div>
+                        )}
+
+                        {gameState.status === 'solved' && (
+                            <SolveSummary
+                                difficulty={gameState.difficulty}
+                                elapsedSeconds={gameState.elapsedSeconds}
+                                mode={isCoopSession ? 'online' : 'solo'}
+                                isSpectating
+                                restartLabel={restartLabel}
+                                restartDisabled={restartDisabled}
+                                onPlayAgain={handleNewPuzzleAction}
+                                messages={messages}
+                            />
+                        )}
+
+                        <SpectatorHintsFeed
+                            hintsByCell={hintsByCell}
+                            variant={activeBoardVariant}
+                            canApply={false}
+                            onSelectHint={(idx) => {
+                                focusCell(idx);
+                                cellRefs.current[idx]?.focus();
+                            }}
+                            onApplyHint={() => {}}
+                            messages={messages}
+                        />
+
+                        <WatcherInteractions
+                            selectedIndex={selectedIndex}
+                            board={gameState.board}
+                            variant={activeBoardVariant}
+                            onSendHint={sendSpectatorHint}
+                            onSendReaction={(emoji) => {
+                                if (!onlineGameId) return;
+                                triggerFloatingReaction(emoji);
+                                onlineClientRef.current?.sendWhisperEvent('reaction', {
+                                    emoji,
+                                    senderId: onlineClientRef.current?.clientId,
+                                });
+                                announce(`Sent ${emoji} reaction.`);
+                            }}
+                            messages={messages}
+                        />
+                    </main>
+                )}
+
+                {navTab === 'settings' && (
+                    <SettingsPanel
+                        theme={theme}
+                        language={language}
+                        onChangeTheme={setTheme}
+                        onChangeLanguage={setLanguage}
+                        onOpenGuide={() => setIsHelpOpen(true)}
                         messages={messages}
                     />
-                </main>
-            )}
+                )}
 
-            {navTab === 'settings' && (
-                <SettingsPanel
-                    theme={theme}
-                    language={language}
-                    onChangeTheme={setTheme}
-                    onChangeLanguage={setLanguage}
-                    onOpenGuide={() => setIsHelpOpen(true)}
+                <HelpDialog
+                    isOpen={isHelpOpen}
+                    onClose={() => setIsHelpOpen(false)}
                     messages={messages}
                 />
-            )}
-
-            <HelpDialog
-                isOpen={isHelpOpen}
-                onClose={() => setIsHelpOpen(false)}
-                messages={messages}
-            />
+            </div>
 
             <BottomNav
                 activeTab={navTab}
@@ -1940,6 +1942,6 @@ export function App() {
                 onSelectTab={handleSelectNavTab}
                 messages={messages}
             />
-        </div>
+        </>
     );
 }
