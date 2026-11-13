@@ -1,16 +1,38 @@
-import { createInitialGameState, makeMove } from './domain/game-engine.js';
-import { selectAiMove } from './domain/ai.js';
-import { BoardView } from './ui/board-view.js';
-import { OnlineGameClient } from './services/online-game-client.js';
+import { getCellCoords } from './domain/sudoku-generator.js';
+import {
+    applyRemoteCellPatch,
+    createSudokuGame,
+    hydrateGameState,
+    serializeGameState,
+    setCellValue,
+    toggleCellNote,
+    undoLastMove,
+} from './domain/sudoku-engine.js';
+import { SudokuBoardView } from './ui/sudoku-board-view.js';
+import { LobbyView } from './ui/lobby-view.js';
+import {
+    aggregateHintsByCell,
+    renderSpectatorHintsList,
+    spawnFloatingEmoji,
+} from './ui/watcher-interactions.js';
+import { generateGameId, isValidGameId, OnlineGameClient } from './services/online-game-client.js';
+import {
+    loadOnlineGameSnapshot,
+    loadParticipantSession,
+    saveOnlineGameSnapshot,
+    saveParticipantSession,
+} from './services/online-state-storage.js';
 
 document.addEventListener('DOMContentLoaded', () => {
-    const root = document.getElementById('tic-tac-toe-app');
+    const root = document.getElementById('sudoku-app');
     if (!root) return;
 
     // Elements
-    const boardElement = document.getElementById('board');
+    const boardElement = document.getElementById('sudoku-board');
     const announcementElement = document.getElementById('game-announcements');
     const statusElement = document.getElementById('game-status-text');
+    const progressElement = document.getElementById('sudoku-progress');
+    const timerElement = document.getElementById('sudoku-timer');
     const restartBtn = document.getElementById('restart-btn');
     const copyLinkBtn = document.getElementById('copy-link-btn');
     const copyFeedback = document.getElementById('copy-feedback');
@@ -19,9 +41,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const inviteUrlInput = document.getElementById('invite-url-input');
     const difficultyGroup = document.getElementById('difficulty-group');
     const modeButtons = document.querySelectorAll('[data-mode-btn]');
-    const difficultyRadios = document.querySelectorAll('input[name="ai-difficulty"]');
+    const difficultyRadios = document.querySelectorAll('input[name="sudoku-difficulty"]');
 
-    // Watch Mode & Presence Elements
+    // Player tool elements
+    const playerControls = document.getElementById('player-controls');
+    const undoBtn = document.getElementById('undo-btn');
+    const eraseBtn = document.getElementById('erase-btn');
+    const notesBtn = document.getElementById('notes-btn');
+    const hintBtn = document.getElementById('hint-btn');
+    const padButtons = document.querySelectorAll('.numpad-btn');
+
+    // Watch & Spectator Elements
     const watchDirectory = document.getElementById('watch-directory');
     const liveGamesList = document.getElementById('live-games-list');
     const refreshLiveGamesBtn = document.getElementById('refresh-live-games-btn');
@@ -30,29 +60,35 @@ document.addEventListener('DOMContentLoaded', () => {
     const gamePanel = document.getElementById('game-panel');
     const opponentStatus = document.getElementById('opponent-status');
     const spectatorStatus = document.getElementById('spectator-status');
+    const hintsFeed = document.getElementById('spectator-hints-feed');
     const watcherInteractions = document.getElementById('watcher-interactions');
+    const watcherHintStatus = document.getElementById('watcher-hint-status');
+    const spectatorPadButtons = document.querySelectorAll('.spectator-pad__btn');
+    const spectatorNudgeBtn = document.getElementById('spectator-nudge-btn');
+    const spectatorClearHintBtn = document.getElementById('spectator-clear-hint-btn');
     const reactionStage = document.getElementById('reaction-stage');
     const emojiButtons = document.querySelectorAll('.emoji-btn');
 
     // State
-    let mode = root.dataset.initialMode || 'local'; // 'local' | 'computer' | 'online' | 'watch'
-    let difficulty = localStorage.getItem('ttt_difficulty') || 'hard';
-    let gameState = createInitialGameState();
-    let isLocked = false;
+    let mode = root.dataset.initialMode || 'solo'; // 'solo' | 'online' | 'watch'
+    let difficulty = localStorage.getItem('sudoku_difficulty') || 'medium';
+    let gameState = createSudokuGame({ difficulty });
+    let selectedIndex = null;
+    let notesMode = false;
     let isSpectating = false;
+    let spectatedGameMode = null;
     let currentMembers = [];
     let activeLobbyMembers = [];
     let rematchRequestedBy = null;
-    const votesByVoter = new Map();
+    const hintsBySender = new Map();
 
-    // Online state (pure in-browser)
+    // Online & Timer state
     const GAME_PING_INTERVAL_MS = 5000;
     let gamePingTimer = null;
-    let onlineGameId = root.dataset.gameId || null;
+    let clockTimer = null;
+    let onlineGameId = isValidGameId(root.dataset.gameId) ? root.dataset.gameId : null;
     let myRole = null; // 'host' | 'guest' | 'spectator'
-    let mySymbol = null; // 'X' | 'O' | null
 
-    // Check URL parameters for watch mode
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('watch') === '1' && onlineGameId) {
         mode = 'watch';
@@ -61,21 +97,20 @@ document.addEventListener('DOMContentLoaded', () => {
         mode = 'online';
     }
 
-    // Initialize radio difficulty
+    // Difficulty radio init
     difficultyRadios.forEach((radio) => {
         if (radio.value === difficulty) {
             radio.checked = true;
         }
         radio.addEventListener('change', (e) => {
             difficulty = e.target.value;
-            localStorage.setItem('ttt_difficulty', difficulty);
-            if (mode === 'computer') {
-                restartGame();
+            localStorage.setItem('sudoku_difficulty', difficulty);
+            if (mode === 'solo') {
+                startNewSoloGame();
             }
         });
     });
 
-    // Reverb Config from meta or window
     const reverbConfig = window.REVERB_CONFIG || {
         key: root.dataset.reverbKey,
         host: root.dataset.reverbHost,
@@ -90,30 +125,88 @@ document.addEventListener('DOMContentLoaded', () => {
         },
     });
 
-    // Board View
-    const boardView = new BoardView({
+    const boardView = new SudokuBoardView({
         boardElement,
         announcementElement,
         statusElement,
-        onCellClick: (index) => handleCellClick(index),
+        progressElement,
+        padButtons,
+        onCellSelect: (index) => handleCellSelect(index),
     });
+
+    const lobbyView = new LobbyView({
+        containerElement: liveGamesList,
+        onWatchGame: (gameId) => spectateGame(gameId),
+    });
+
+    function formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+
+    function updateTimerUI() {
+        if (timerElement) {
+            timerElement.textContent = formatTime(gameState.elapsedSeconds || 0);
+        }
+    }
+
+    function stopClock() {
+        if (clockTimer !== null) {
+            clearInterval(clockTimer);
+            clockTimer = null;
+        }
+    }
+
+    function startClock() {
+        stopClock();
+        updateTimerUI();
+        clockTimer = setInterval(() => {
+            if (isSpectating || mode === 'watch' || gameState.status === 'solved') {
+                return;
+            }
+            gameState.elapsedSeconds = (gameState.elapsedSeconds || 0) + 1;
+            updateTimerUI();
+        }, 1000);
+    }
+
+    function persistOnlineSnapshot() {
+        if (onlineGameId && (mode === 'online' || isSpectating)) {
+            saveOnlineGameSnapshot(onlineGameId, gameState, rematchRequestedBy);
+        }
+    }
+
+    function setActiveModeTab(activeMode) {
+        modeButtons.forEach((btn) => {
+            const isActive = btn.dataset.modeBtn === activeMode;
+            btn.classList.toggle('mode-tab--active', isActive);
+            btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+    }
+
+    function clearHintsForCell(index) {
+        for (const [senderId, hint] of hintsBySender.entries()) {
+            if (hint.index === index) {
+                hintsBySender.delete(senderId);
+            }
+        }
+    }
+
+    function isBroadcastHostOrPlayer() {
+        return (mode === 'solo' || mode === 'online') && Boolean(onlineGameId) && !isSpectating;
+    }
 
     function updatePresenceUI() {
         if (!opponentStatus || !spectatorStatus) return;
 
-        if (mode === 'online' && !isSpectating) {
-            if (myRole) {
-                const opponentRole = myRole === 'host' ? 'guest' : 'host';
-                const opponentOnline = currentMembers.some((m) => m.role === opponentRole);
+        if ((mode === 'online' || mode === 'solo') && !isSpectating) {
+            if (mode === 'online' && (myRole === 'host' || myRole === 'guest')) {
+                const partnerRole = myRole === 'host' ? 'guest' : 'host';
+                const partnerOnline = currentMembers.some((m) => m.role === partnerRole);
 
                 opponentStatus.style.display = 'inline-flex';
-                if (opponentOnline) {
-                    opponentStatus.className = 'presence-badge presence-badge--online';
-                    opponentStatus.textContent = '🟢 Opponent online';
-                } else {
-                    opponentStatus.className = 'presence-badge presence-badge--offline';
-                    opponentStatus.textContent = '🔴 Opponent offline';
-                }
+                opponentStatus.className = `presence-badge ${partnerOnline ? 'presence-badge--online' : 'presence-badge--offline'}`;
+                opponentStatus.textContent = partnerOnline ? 'Partner online' : 'Waiting for partner';
             } else {
                 opponentStatus.style.display = 'none';
             }
@@ -121,7 +214,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const spectatorCount = currentMembers.filter((m) => m.role === 'spectator').length;
             if (spectatorCount > 0) {
                 spectatorStatus.style.display = 'inline-flex';
-                spectatorStatus.textContent = `👁️ ${spectatorCount} Spectator${spectatorCount === 1 ? '' : 's'}`;
+                spectatorStatus.textContent = `${spectatorCount} Spectator${spectatorCount === 1 ? '' : 's'}`;
             } else {
                 spectatorStatus.style.display = 'none';
             }
@@ -129,16 +222,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (isSpectating) {
-            const hostOnline = currentMembers.some((m) => m.role === 'host');
+            const hostMember = currentMembers.find((m) => m.role === 'host');
+            const hostOnline = Boolean(hostMember);
             const guestOnline = currentMembers.some((m) => m.role === 'guest');
+            if (hostMember?.game_mode) {
+                spectatedGameMode = hostMember.game_mode;
+            }
 
             opponentStatus.style.display = 'inline-flex';
             opponentStatus.className = 'presence-badge';
-            opponentStatus.textContent = `X: ${hostOnline ? '🟢' : '🔴'} | O: ${guestOnline ? '🟢' : '🔴'}`;
+            if ((hostMember?.game_mode || spectatedGameMode) === 'solo') {
+                opponentStatus.textContent = `Solo Player: ${hostOnline ? 'Online' : 'Offline'}`;
+            } else {
+                opponentStatus.textContent = `Host: ${hostOnline ? 'Online' : 'Offline'} | Partner: ${guestOnline ? 'Online' : 'Offline'}`;
+            }
 
             const spectatorCount = currentMembers.filter((m) => m.role === 'spectator').length;
             spectatorStatus.style.display = 'inline-flex';
-            spectatorStatus.textContent = `👁️ ${spectatorCount} Watching`;
+            spectatorStatus.textContent = `${spectatorCount} Watching`;
             return;
         }
 
@@ -146,108 +247,294 @@ document.addEventListener('DOMContentLoaded', () => {
         spectatorStatus.style.display = 'none';
     }
 
-    function computeVoteCounts() {
-        const counts = {};
-        for (const cellIndex of votesByVoter.values()) {
-            if (cellIndex !== null && cellIndex !== undefined) {
-                counts[cellIndex] = (counts[cellIndex] || 0) + 1;
-            }
+    function updateWatcherHintStatus() {
+        if (!watcherHintStatus) return;
+        if (selectedIndex === null) {
+            watcherHintStatus.textContent = 'Select an empty cell on the board, then suggest a digit or nudge the players:';
+            return;
         }
-        return counts;
-    }
-
-    function spawnFloatingEmoji(emoji) {
-        if (!reactionStage || !emoji) return;
-
-        const el = document.createElement('span');
-        el.className = 'floating-emoji';
-        el.setAttribute('aria-hidden', 'true');
-        el.textContent = emoji;
-        el.style.left = `${15 + Math.floor(Math.random() * 68)}%`;
-
-        reactionStage.appendChild(el);
-        setTimeout(() => {
-            el.remove();
-        }, 1850);
+        const { row, col } = getCellCoords(selectedIndex);
+        if (gameState.board[selectedIndex] !== 0) {
+            watcherHintStatus.textContent = `Row ${row + 1}, Column ${col + 1} is already filled. Select an empty cell to suggest a hint.`;
+        } else {
+            watcherHintStatus.textContent = `Selected Row ${row + 1}, Column ${col + 1} — choose 1-9 or Nudge to send a hint:`;
+        }
     }
 
     function renderCurrentState() {
-        const showVotes = mode === 'online' || isSpectating;
-        const allowVote = isSpectating && gameState.status === 'in_progress';
+        const showHints = mode === 'solo' || mode === 'online' || isSpectating;
+        const hintsByCell = showHints ? aggregateHintsByCell(hintsBySender) : new Map();
 
         boardView.render(gameState, {
-            locked: isLocked || isSpectating,
-            yourSymbol: mode === 'online' ? mySymbol : null,
+            selectedIndex,
+            isSpectating,
             mode: isSpectating ? 'watch' : mode,
-            opponentName: mode === 'online' ? 'Opponent' : 'Computer',
-            votes: showVotes ? computeVoteCounts() : {},
-            myVote: isSpectating ? (votesByVoter.get(onlineClient.clientId) ?? null) : null,
-            allowVote,
+            hintsByCell,
         });
 
-        // Restart / Rematch button
+        updateTimerUI();
+
+        if (showHints) {
+            renderSpectatorHintsList(hintsFeed, hintsByCell, {
+                canApply: (mode === 'solo' || mode === 'online') && !isSpectating && gameState.status !== 'solved',
+                onSelectHint: (idx) => {
+                    selectedIndex = idx;
+                    renderCurrentState();
+                    boardView.focusCell(idx);
+                },
+                onApplyHint: (idx, digit) => {
+                    selectedIndex = idx;
+                    applyPlayerDigit(digit);
+                },
+            });
+        } else if (hintsFeed) {
+            hintsFeed.style.display = 'none';
+        }
+
+        if (notesBtn) {
+            notesBtn.classList.toggle('tool-btn--active', notesMode);
+            notesBtn.setAttribute('aria-pressed', notesMode ? 'true' : 'false');
+            const labelSpan = notesBtn.querySelector('span');
+            if (labelSpan) {
+                labelSpan.textContent = notesMode ? 'Notes: On' : 'Notes: Off';
+            }
+        }
+
+        if (undoBtn) {
+            undoBtn.disabled = isSpectating || !gameState.history || gameState.history.length === 0 || gameState.status === 'solved';
+        }
+
         if (restartBtn) {
             if (isSpectating || mode === 'watch') {
                 restartBtn.style.display = 'none';
             } else if (mode === 'online') {
-                const isFinished = gameState.status === 'won' || gameState.status === 'draw';
-                restartBtn.style.display = isFinished ? 'inline-flex' : 'none';
-                if (rematchRequestedBy && rematchRequestedBy === mySymbol) {
-                    restartBtn.textContent = 'Rematch requested...';
+                restartBtn.style.display = 'inline-flex';
+                const partnerOnline = currentMembers.some((m) => m.role !== myRole && (m.role === 'host' || m.role === 'guest'));
+                if (!partnerOnline && gameState.status !== 'solved') {
+                    restartBtn.textContent = 'New Puzzle';
+                    restartBtn.disabled = false;
+                } else if (rematchRequestedBy && rematchRequestedBy === myRole) {
+                    restartBtn.textContent = 'Waiting for partner...';
                     restartBtn.disabled = true;
                 } else if (rematchRequestedBy) {
-                    restartBtn.textContent = 'Accept Rematch 🤝';
+                    restartBtn.textContent = 'Accept New Puzzle';
                     restartBtn.disabled = false;
                 } else {
-                    restartBtn.textContent = 'Request Rematch 🔄';
+                    restartBtn.textContent = 'New Puzzle';
                     restartBtn.disabled = false;
                 }
             } else {
                 restartBtn.style.display = 'inline-flex';
-                restartBtn.textContent = 'New Game 🔄';
+                restartBtn.textContent = 'New Puzzle';
                 restartBtn.disabled = false;
             }
         }
+
+        if (isSpectating) {
+            updateWatcherHintStatus();
+        }
+    }
+
+    function handleCellSelect(index) {
+        selectedIndex = index;
+        renderCurrentState();
+    }
+
+    function syncLobbyProgress() {
+        if (myRole !== 'host' || !onlineGameId || (mode !== 'solo' && mode !== 'online')) return;
+        const guestOnline = currentMembers.some((m) => m.role === 'guest');
+        let status = mode === 'solo' ? 'in_progress' : 'waiting';
+        if (gameState.status === 'solved') {
+            status = 'solved';
+        } else if (mode === 'solo' || guestOnline || gameState.filledCount > 0) {
+            status = 'in_progress';
+        }
+        onlineClient.broadcastLobbyUpdate(onlineGameId, status, gameState.filledCount, gameState.difficulty, mode);
+    }
+
+    function applyPlayerDigit(digit) {
+        if (isSpectating || mode === 'watch' || selectedIndex === null || gameState.status === 'solved') {
+            return;
+        }
+        if (gameState.givens[selectedIndex]) {
+            boardView.announce('Given clue cells cannot be changed.');
+            return;
+        }
+
+        try {
+            if (notesMode && digit !== 0) {
+                gameState = toggleCellNote(gameState, selectedIndex, digit);
+                if (isBroadcastHostOrPlayer()) {
+                    onlineClient.broadcastGameEvent(onlineGameId, 'cell-update', {
+                        index: selectedIndex,
+                        value: null,
+                        notes: gameState.notes[selectedIndex],
+                    });
+                }
+            } else {
+                gameState = setCellValue(gameState, selectedIndex, digit);
+                if (digit !== 0) {
+                    clearHintsForCell(selectedIndex);
+                }
+                if (isBroadcastHostOrPlayer()) {
+                    onlineClient.broadcastGameEvent(onlineGameId, 'cell-update', {
+                        index: selectedIndex,
+                        value: digit,
+                        notes: gameState.notes[selectedIndex],
+                    });
+                    syncLobbyProgress();
+                }
+            }
+            persistOnlineSnapshot();
+            renderCurrentState();
+        } catch (err) {
+            boardView.announce(err.message);
+        }
+    }
+
+    function handleUndo() {
+        if (isSpectating || mode === 'watch' || !gameState.history || gameState.history.length === 0) return;
+
+        const prevBoard = [...gameState.board];
+        const prevNotes = gameState.notes.map((n) => [...n]);
+        gameState = undoLastMove(gameState);
+
+        if (isBroadcastHostOrPlayer()) {
+            for (let i = 0; i < 81; i++) {
+                const boardChanged = prevBoard[i] !== gameState.board[i];
+                const notesChanged = prevNotes[i].join(',') !== gameState.notes[i].join(',');
+                if (boardChanged || notesChanged) {
+                    onlineClient.broadcastGameEvent(onlineGameId, 'cell-update', {
+                        index: i,
+                        value: gameState.board[i],
+                        notes: gameState.notes[i],
+                    });
+                }
+            }
+            syncLobbyProgress();
+        }
+
+        persistOnlineSnapshot();
+        renderCurrentState();
+    }
+
+    function handleLocalHint() {
+        if (isSpectating || mode === 'watch' || gameState.status === 'solved') return;
+
+        let targetIdx = selectedIndex;
+        if (
+            targetIdx === null
+            || gameState.givens[targetIdx]
+            || (gameState.board[targetIdx] !== 0 && gameState.board[targetIdx] === gameState.solution[targetIdx])
+        ) {
+            const candidateIndices = [];
+            for (let i = 0; i < 81; i++) {
+                if (!gameState.givens[i] && gameState.board[i] !== gameState.solution[i]) {
+                    candidateIndices.push(i);
+                }
+            }
+            if (candidateIndices.length === 0) return;
+            targetIdx = candidateIndices[Math.floor(Math.random() * candidateIndices.length)];
+        }
+
+        const correctDigit = gameState.solution[targetIdx];
+        if (!correctDigit) return;
+
+        selectedIndex = targetIdx;
+        gameState = setCellValue(gameState, targetIdx, correctDigit);
+        clearHintsForCell(targetIdx);
+
+        if (isBroadcastHostOrPlayer()) {
+            onlineClient.broadcastGameEvent(onlineGameId, 'cell-update', {
+                index: targetIdx,
+                value: correctDigit,
+                notes: [],
+            });
+            syncLobbyProgress();
+        }
+
+        const { row, col } = getCellCoords(targetIdx);
+        boardView.announce(`Hint applied: Row ${row + 1}, Column ${col + 1} is ${correctDigit}.`);
+        persistOnlineSnapshot();
+        renderCurrentState();
+    }
+
+    function sendSpectatorHint(value) {
+        if (!isSpectating || !onlineGameId || selectedIndex === null) return;
+        if (gameState.board[selectedIndex] !== 0) {
+            boardView.announce('Select an empty cell to suggest a hint.');
+            return;
+        }
+
+        const senderId = onlineClient.clientId;
+        const existing = hintsBySender.get(senderId);
+
+        if (value === undefined) {
+            hintsBySender.delete(senderId);
+            onlineClient.sendWhisperEvent('hint', { senderId, index: null, value: null });
+            boardView.announce('Hint cleared.');
+        } else if (existing && existing.index === selectedIndex && existing.value === value) {
+            hintsBySender.delete(senderId);
+            onlineClient.sendWhisperEvent('hint', { senderId, index: null, value: null });
+            boardView.announce('Hint removed.');
+        } else {
+            hintsBySender.set(senderId, { senderId, index: selectedIndex, value });
+            onlineClient.sendWhisperEvent('hint', { senderId, index: selectedIndex, value });
+            const { row, col } = getCellCoords(selectedIndex);
+            boardView.announce(value
+                ? `Suggested ${value} at Row ${row + 1}, Column ${col + 1}.`
+                : `Nudged players to check Row ${row + 1}, Column ${col + 1}.`);
+        }
+
+        renderCurrentState();
+    }
+
+    function applyRemoteSyncPayload(data) {
+        if (!data || !data.gameState) return;
+        const hydrated = hydrateGameState(data.gameState);
+        if (!hydrated) return;
+
+        gameState = hydrated;
+        if (data.rematchRequestedBy !== undefined) {
+            rematchRequestedBy = data.rematchRequestedBy;
+        }
+        if (Array.isArray(data.hints)) {
+            hintsBySender.clear();
+            data.hints.forEach(([senderId, hint]) => {
+                if (senderId && hint) hintsBySender.set(senderId, hint);
+            });
+        }
+        persistOnlineSnapshot();
+        renderCurrentState();
+        updatePresenceUI();
     }
 
     function handleRemoteGameEvent(type, data) {
         if (type === 'init' || type === 'sync') {
-            if (data && data.gameState) {
-                gameState = data.gameState;
-                if (data.guestId && data.guestId === onlineClient.clientId && myRole !== 'host') {
-                    myRole = 'guest';
-                    mySymbol = 'O';
-                }
-                if (data.votes && Array.isArray(data.votes)) {
-                    votesByVoter.clear();
-                    data.votes.forEach(([voterId, cellIdx]) => {
-                        votesByVoter.set(voterId, cellIdx);
-                    });
-                }
-                renderCurrentState();
-                updatePresenceUI();
-            }
+            applyRemoteSyncPayload(data);
             return;
         }
 
-        if (type === 'move') {
-            const { index, symbol } = data;
-            try {
-                gameState = makeMove(gameState, index, symbol);
-                votesByVoter.clear();
-            } catch {
-                // Ignore illegal move attempts
+        if (type === 'cell-update') {
+            gameState = applyRemoteCellPatch(gameState, data);
+            if (typeof data.value === 'number' && data.value > 0) {
+                clearHintsForCell(data.index);
             }
+            persistOnlineSnapshot();
             renderCurrentState();
             return;
         }
 
-        if (type === 'vote') {
-            if (data && data.voterId && data.turn === gameState.currentTurn) {
+        if (type === 'hint') {
+            if (data && data.senderId) {
                 if (data.index === null || data.index === undefined) {
-                    votesByVoter.delete(data.voterId);
-                } else {
-                    votesByVoter.set(data.voterId, data.index);
+                    hintsBySender.delete(data.senderId);
+                } else if (gameState.board[data.index] === 0) {
+                    hintsBySender.set(data.senderId, {
+                        senderId: data.senderId,
+                        index: data.index,
+                        value: data.value ?? null,
+                    });
                 }
                 renderCurrentState();
             }
@@ -256,37 +543,61 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (type === 'reaction') {
             if (data && data.emoji) {
-                spawnFloatingEmoji(data.emoji);
+                spawnFloatingEmoji(reactionStage, data.emoji);
             }
             return;
         }
 
-        if (type === 'rematch-request') {
-            rematchRequestedBy = data.symbol;
-            renderCurrentState();
+        if (type === 'new-puzzle-request') {
+            if (data && (data.role === 'host' || data.role === 'guest')) {
+                rematchRequestedBy = data.role;
+                persistOnlineSnapshot();
+                renderCurrentState();
+            }
             return;
         }
 
-        if (type === 'rematch-accept') {
-            gameState = createInitialGameState();
+        if (type === 'new-puzzle-accept') {
+            if (data && data.gameState) {
+                const hydrated = hydrateGameState(data.gameState);
+                if (hydrated) {
+                    gameState = hydrated;
+                }
+            }
+            selectedIndex = null;
             rematchRequestedBy = null;
-            votesByVoter.clear();
+            hintsBySender.clear();
+            persistOnlineSnapshot();
+            syncLobbyProgress();
             renderCurrentState();
-            boardView.announce('Rematch started. Player X plays first.');
+            boardView.announce('New puzzle started.');
             return;
         }
 
         if (type === 'ping') {
-            if (data && data.gameState && myRole !== 'host') {
-                const remoteMoves = data.gameState.board.filter((c) => c !== null).length;
-                const localMoves = gameState.board.filter((c) => c !== null).length;
-                if (
-                    remoteMoves > localMoves
+            if (data && data.gameState) {
+                const remoteFilled = data.gameState.board?.filter((c) => c > 0).length || 0;
+                const localFilled = gameState.filledCount || 0;
+                const remoteInitial = data.gameState.givens?.filter(Boolean).length || 0;
+                const localInitial = gameState.givens?.filter(Boolean).length || 0;
+
+                const shouldRecoverHost = myRole === 'host' && localFilled <= localInitial && remoteFilled > localFilled;
+                const shouldAdoptRemote = myRole !== 'host' && (
+                    remoteFilled !== localFilled
+                    || remoteInitial !== localInitial
                     || data.gameState.status !== gameState.status
-                    || data.gameState.currentTurn !== gameState.currentTurn
-                ) {
-                    gameState = data.gameState;
-                    votesByVoter.clear();
+                    || data.rematchRequestedBy !== rematchRequestedBy
+                );
+
+                if (shouldRecoverHost || shouldAdoptRemote) {
+                    const hydrated = hydrateGameState(data.gameState);
+                    if (hydrated) {
+                        gameState = hydrated;
+                    }
+                    if (data.rematchRequestedBy !== undefined) {
+                        rematchRequestedBy = data.rematchRequestedBy;
+                    }
+                    persistOnlineSnapshot();
                     renderCurrentState();
                 }
             }
@@ -304,40 +615,56 @@ document.addEventListener('DOMContentLoaded', () => {
     function startGamePing() {
         stopGamePing();
         gamePingTimer = setInterval(() => {
-            if (mode !== 'online' || !onlineGameId || isSpectating) {
+            if (!isBroadcastHostOrPlayer()) {
                 return;
             }
 
             onlineClient.sendGamePing({
                 role: myRole,
-                symbol: mySymbol,
-                gameState: myRole === 'host' ? gameState : null,
+                gameState: serializeGameState(gameState),
+                rematchRequestedBy,
                 timestamp: Date.now(),
             });
 
-            if (myRole === 'host') {
-                const movesCount = gameState.board.filter((c) => c !== null).length;
-                const guestOnline = currentMembers.some((m) => m.role === 'guest');
-                let status = 'waiting';
-                if (gameState.status !== 'in_progress') {
-                    status = 'finished';
-                } else if (guestOnline || movesCount > 0) {
-                    status = 'in_progress';
-                }
-                onlineClient.broadcastLobbyUpdate(onlineGameId, status, movesCount);
-            }
+            syncLobbyProgress();
         }, GAME_PING_INTERVAL_MS);
+    }
+
+    function enterSpectatorView(gameId, announcementText = null) {
+        stopGamePing();
+        mode = 'watch';
+        isSpectating = true;
+        spectatedGameMode = null;
+        onlineGameId = gameId;
+        myRole = 'spectator';
+        selectedIndex = null;
+
+        setActiveModeTab('watch');
+        if (watchDirectory) watchDirectory.style.display = 'none';
+        if (gamePanel) gamePanel.style.display = 'flex';
+        if (spectatorBar) spectatorBar.style.display = 'flex';
+        if (watcherInteractions) watcherInteractions.style.display = 'flex';
+        if (playerControls) playerControls.style.display = 'none';
+        if (onlineControls) onlineControls.style.display = 'none';
+        if (difficultyGroup) difficultyGroup.style.display = 'none';
+        if (restartBtn) restartBtn.style.display = 'none';
+
+        if (announcementText) {
+            boardView.announce(announcementText);
+        }
+        renderCurrentState();
+        updatePresenceUI();
     }
 
     function handleGamePresenceChange(members) {
         currentMembers = onlineClient.getGameMembers() || members || [];
         updatePresenceUI();
 
-        // If Host: sync state and active votes to any newcomers
         if (myRole === 'host' && currentMembers.length > 1) {
             onlineClient.broadcastGameEvent(onlineGameId, 'sync', {
-                gameState,
-                votes: Array.from(votesByVoter.entries()),
+                gameState: serializeGameState(gameState),
+                rematchRequestedBy,
+                hints: Array.from(hintsBySender.entries()),
             });
         }
     }
@@ -351,17 +678,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         updatePresenceUI();
 
-        // If Host: send current state to newly joined member
         if (myRole === 'host') {
             onlineClient.broadcastGameEvent(onlineGameId, 'sync', {
-                gameState,
-                guestId: member.role === 'guest' ? member.id : null,
-                votes: Array.from(votesByVoter.entries()),
+                gameState: serializeGameState(gameState),
+                rematchRequestedBy,
+                hints: Array.from(hintsBySender.entries()),
             });
-
-            // Update lobby status
-            const movesCount = gameState.board.filter((c) => c !== null).length;
-            onlineClient.broadcastLobbyUpdate(onlineGameId, 'in_progress', movesCount);
+            syncLobbyProgress();
         }
     }
 
@@ -372,107 +695,26 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             currentMembers = currentMembers.filter((m) => m.id !== member.id);
         }
-        if (member && member.id && votesByVoter.has(member.id)) {
-            votesByVoter.delete(member.id);
+        if (member && member.id && hintsBySender.has(member.id)) {
+            hintsBySender.delete(member.id);
             renderCurrentState();
         }
         updatePresenceUI();
     }
 
-    async function handleCellClick(index) {
-        // Spectators can vote on empty cells during an active match
-        if (isSpectating) {
-            if (gameState.status !== 'in_progress' || gameState.board[index] !== null) {
-                return;
-            }
-
-            const voterId = onlineClient.clientId;
-            if (votesByVoter.get(voterId) === index) {
-                votesByVoter.delete(voterId);
-            } else {
-                votesByVoter.set(voterId, index);
-            }
-
-            const votedIndex = votesByVoter.get(voterId) ?? null;
-            renderCurrentState();
-            onlineClient.sendWhisperEvent('vote', {
-                voterId,
-                index: votedIndex,
-                turn: gameState.currentTurn,
-            });
-            boardView.announce(votedIndex !== null ? 'Voted for cell.' : 'Vote removed.');
-            return;
-        }
-
-        if (isLocked) return;
-
-        if (mode === 'local') {
-            try {
-                gameState = makeMove(gameState, index);
-                renderCurrentState();
-            } catch (err) {
-                boardView.announce(err.message);
-            }
-            return;
-        }
-
-        if (mode === 'computer') {
-            if (gameState.currentTurn !== 'X') return;
-
-            try {
-                gameState = makeMove(gameState, index, 'X');
-                renderCurrentState();
-
-                if (gameState.status === 'in_progress') {
-                    isLocked = true;
-                    renderCurrentState();
-
-                    setTimeout(() => {
-                        try {
-                            const aiMove = selectAiMove(gameState.board, 'O', difficulty);
-                            gameState = makeMove(gameState, aiMove, 'O');
-                        } catch (e) {
-                            boardView.announce(e.message);
-                        } finally {
-                            isLocked = false;
-                            renderCurrentState();
-                        }
-                    }, 350);
-                }
-            } catch (err) {
-                boardView.announce(err.message);
-            }
-            return;
-        }
-
-        if (mode === 'online') {
-            if (!mySymbol || gameState.currentTurn !== mySymbol) return;
-
-            try {
-                gameState = makeMove(gameState, index, mySymbol);
-                votesByVoter.clear();
-                renderCurrentState();
-
-                // Broadcast move peer-to-peer over WebSocket
-                onlineClient.broadcastGameEvent(onlineGameId, 'move', {
-                    index,
-                    symbol: mySymbol,
-                });
-
-                // Update lobby moves count
-                if (myRole === 'host') {
-                    const movesCount = gameState.board.filter((c) => c !== null).length;
-                    const status = gameState.status === 'in_progress' ? 'in_progress' : 'finished';
-                    onlineClient.broadcastLobbyUpdate(onlineGameId, status, movesCount);
-                }
-            } catch (err) {
-                boardView.announce(err.message || 'Invalid move.');
-            }
-        }
-    }
-
     function updateConnectionBadge(status) {
         if (!connectionBadge) return;
+
+        if (mode === 'solo' && !isSpectating) {
+            if (status === 'connected') {
+                connectionBadge.style.display = 'inline-flex';
+                connectionBadge.textContent = 'Live Watch Ready';
+                connectionBadge.className = 'connection-badge connection-badge--connected';
+            } else {
+                connectionBadge.style.display = 'none';
+            }
+            return;
+        }
 
         if (mode !== 'online' && !isSpectating) {
             connectionBadge.style.display = 'none';
@@ -492,86 +734,23 @@ document.addEventListener('DOMContentLoaded', () => {
         connectionBadge.className = `connection-badge connection-badge--${status}`;
     }
 
-    function renderLobbyList(members) {
-        if (!liveGamesList) return;
-
-        const liveGames = (members || []).filter((m) => m.game_id && m.status !== 'finished');
-
-        if (liveGames.length === 0) {
-            liveGamesList.innerHTML = `
-                <div style="text-align: center; padding: 1.5rem 0;">
-                    <p class="live-game-card__meta">No live matches right now.</p>
-                    <p style="margin-top: 0.5rem; font-size: 0.8125rem; color: var(--color-text-muted);">
-                        When players open an Online game, it will appear here in real time.
-                    </p>
-                </div>
-            `;
-            return;
-        }
-
-        liveGamesList.innerHTML = liveGames.map((game) => {
-            const shortId = game.game_id.slice(0, 8);
-            const statusLabel = game.status === 'waiting' ? '⏳ Waiting for Player 2' : '⚔️ In Progress';
-            const movesCount = parseInt(game.moves_count || 0, 10);
-
-            return `
-                <div class="live-game-card">
-                    <div class="live-game-card__info">
-                        <span class="live-game-card__title">Game #${shortId}</span>
-                        <span class="live-game-card__meta">${statusLabel} &bull; ${movesCount} move${movesCount === 1 ? '' : 's'}</span>
-                    </div>
-                    <button type="button" class="live-game-card__action-btn" data-watch-id="${game.game_id}">
-                        Watch Live 👁️
-                    </button>
-                </div>
-            `;
-        }).join('');
-
-        liveGamesList.querySelectorAll('[data-watch-id]').forEach((btn) => {
-            btn.addEventListener('click', () => {
-                spectateGame(btn.dataset.watchId);
-            });
-        });
-    }
-
     function spectateGame(gameId) {
-        mode = 'watch';
-        isSpectating = true;
-        isLocked = true;
-        onlineGameId = gameId;
-        myRole = 'spectator';
-        mySymbol = null;
+        if (!isValidGameId(gameId)) return;
+
         currentMembers = [];
-        votesByVoter.clear();
+        hintsBySender.clear();
+        rematchRequestedBy = null;
 
-        modeButtons.forEach((btn) => {
-            const isActive = btn.dataset.modeBtn === 'watch';
-            btn.classList.toggle('mode-tab--active', isActive);
-            btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
-        });
-
-        if (watchDirectory) watchDirectory.style.display = 'none';
-        if (gamePanel) gamePanel.style.display = 'flex';
-        if (spectatorBar) spectatorBar.style.display = 'flex';
-        if (watcherInteractions) watcherInteractions.style.display = 'flex';
-        if (onlineControls) onlineControls.style.display = 'none';
-        if (difficultyGroup) difficultyGroup.style.display = 'none';
-        if (restartBtn) restartBtn.style.display = 'none';
-
+        enterSpectatorView(gameId, 'Connecting to live Sudoku match...');
         window.history.pushState({}, '', `/games/${gameId}?watch=1`);
-        boardView.announce('Connecting to live game...');
 
         onlineClient.joinGameChannel(gameId, {
             role: 'spectator',
-            symbol: null,
             onEvent: handleRemoteGameEvent,
             onPresenceChange: handleGamePresenceChange,
             onMemberJoin: handleGameMemberJoin,
             onMemberLeave: handleGameMemberLeave,
         });
-
-        renderCurrentState();
-        updatePresenceUI();
     }
 
     function exitSpectating() {
@@ -579,11 +758,12 @@ document.addEventListener('DOMContentLoaded', () => {
         onlineGameId = null;
         isSpectating = false;
         currentMembers = [];
-        votesByVoter.clear();
+        hintsBySender.clear();
         updatePresenceUI();
 
         if (spectatorBar) spectatorBar.style.display = 'none';
         if (watcherInteractions) watcherInteractions.style.display = 'none';
+        if (hintsFeed) hintsFeed.style.display = 'none';
         if (gamePanel) gamePanel.style.display = 'none';
         if (watchDirectory) watchDirectory.style.display = 'block';
 
@@ -596,47 +776,223 @@ document.addEventListener('DOMContentLoaded', () => {
         if (watchDirectory) watchDirectory.style.display = 'block';
         if (spectatorBar) spectatorBar.style.display = 'none';
         if (watcherInteractions) watcherInteractions.style.display = 'none';
+        if (playerControls) playerControls.style.display = 'none';
+        if (hintsFeed) hintsFeed.style.display = 'none';
         if (restartBtn) restartBtn.style.display = 'none';
 
         onlineClient.joinLobby({
             onLobbyPresenceChange: (members) => {
                 activeLobbyMembers = members || [];
-                renderLobbyList(activeLobbyMembers);
+                lobbyView.render(activeLobbyMembers);
             },
             onLobbyMemberJoin: (member) => {
                 if (!activeLobbyMembers.some((m) => m.id === member.id)) {
                     activeLobbyMembers.push(member);
                 }
-                renderLobbyList(activeLobbyMembers);
+                lobbyView.render(activeLobbyMembers);
             },
             onLobbyMemberLeave: (member) => {
                 activeLobbyMembers = activeLobbyMembers.filter((m) => m.id !== member.id);
-                renderLobbyList(activeLobbyMembers);
+                lobbyView.render(activeLobbyMembers);
             },
             onLobbyUpdate: (update) => {
                 const member = activeLobbyMembers.find((m) => m.game_id === update.game_id);
                 if (member) {
                     member.status = update.status;
-                    member.moves_count = update.moves_count;
-                    renderLobbyList(activeLobbyMembers);
+                    member.game_mode = update.game_mode || member.game_mode;
+                    member.difficulty = update.difficulty;
+                    member.filled_count = update.filled_count;
+                    lobbyView.render(activeLobbyMembers);
                 }
             },
         });
     }
 
-    async function switchMode(newMode) {
-        if (mode === newMode && !onlineGameId && !isSpectating) return;
+    function startNewSoloGame() {
+        const hadExistingSoloRoom = Boolean(onlineGameId) && myRole === 'host';
+        if (!hadExistingSoloRoom) {
+            onlineGameId = generateGameId();
+            currentMembers = [];
+        }
 
-        mode = newMode;
-        modeButtons.forEach((btn) => {
-            const isActive = btn.dataset.modeBtn === mode;
-            btn.classList.toggle('mode-tab--active', isActive);
-            btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        myRole = 'host';
+        selectedIndex = null;
+        notesMode = false;
+        hintsBySender.clear();
+        rematchRequestedBy = null;
+        gameState = createSudokuGame({ difficulty });
+
+        if (!hadExistingSoloRoom) {
+            onlineClient.joinGameChannel(onlineGameId, {
+                role: 'host',
+                gameMode: 'solo',
+                onEvent: handleRemoteGameEvent,
+                onPresenceChange: handleGamePresenceChange,
+                onMemberJoin: handleGameMemberJoin,
+                onMemberLeave: handleGameMemberLeave,
+            });
+
+            onlineClient.joinLobby({
+                gameId: onlineGameId,
+                status: 'in_progress',
+                gameMode: 'solo',
+                difficulty: gameState.difficulty,
+                filledCount: gameState.filledCount,
+            });
+        } else {
+            onlineClient.broadcastGameEvent(onlineGameId, 'new-puzzle-accept', {
+                gameState: serializeGameState(gameState),
+            });
+            syncLobbyProgress();
+        }
+
+        startClock();
+        startGamePing();
+        renderCurrentState();
+        updatePresenceUI();
+        boardView.announce(`New ${difficulty} Sudoku puzzle ready.`);
+    }
+
+    function startNewOnlineGame() {
+        onlineGameId = generateGameId();
+        myRole = 'host';
+        selectedIndex = null;
+        notesMode = false;
+        hintsBySender.clear();
+        rematchRequestedBy = null;
+        gameState = createSudokuGame({ difficulty });
+
+        saveParticipantSession(onlineGameId, 'host');
+        persistOnlineSnapshot();
+
+        const inviteUrl = `${window.location.origin}/games/${onlineGameId}`;
+        window.history.pushState({}, '', `/games/${onlineGameId}`);
+
+        if (inviteUrlInput) {
+            inviteUrlInput.value = inviteUrl;
+        }
+
+        boardView.announce('Online Sudoku room created. Share the invite link with your partner or spectators.');
+
+        onlineClient.joinGameChannel(onlineGameId, {
+            role: 'host',
+            gameMode: 'online',
+            onEvent: handleRemoteGameEvent,
+            onPresenceChange: handleGamePresenceChange,
+            onMemberJoin: handleGameMemberJoin,
+            onMemberLeave: handleGameMemberLeave,
         });
 
-        if (difficultyGroup) {
-            difficultyGroup.style.display = mode === 'computer' ? 'flex' : 'none';
+        onlineClient.joinLobby({
+            gameId: onlineGameId,
+            status: 'waiting',
+            gameMode: 'online',
+            difficulty: gameState.difficulty,
+            filledCount: gameState.filledCount,
+        });
+
+        startClock();
+        renderCurrentState();
+        updatePresenceUI();
+        startGamePing();
+    }
+
+    function joinAsOnlinePlayer(role) {
+        myRole = role;
+        isSpectating = false;
+
+        if (playerControls) playerControls.style.display = 'flex';
+        if (difficultyGroup) difficultyGroup.style.display = role === 'host' ? 'flex' : 'none';
+
+        onlineClient.joinGameChannel(onlineGameId, {
+            role,
+            gameMode: 'online',
+            onEvent: handleRemoteGameEvent,
+            onPresenceChange: (members) => {
+                const resolvedMembers = onlineClient.getGameMembers() || members || [];
+                const otherGuestPresent = role === 'guest' && resolvedMembers.some(
+                    (m) => m.role === 'guest' && m.id !== onlineClient.clientId,
+                );
+                if (otherGuestPresent) {
+                    enterSpectatorView(onlineGameId, 'Room already has two co-op players. Joined as spectator.');
+                    return;
+                }
+                handleGamePresenceChange(members);
+            },
+            onMemberJoin: handleGameMemberJoin,
+            onMemberLeave: handleGameMemberLeave,
+        });
+
+        if (role === 'host') {
+            onlineClient.joinLobby({
+                gameId: onlineGameId,
+                status: gameState.status === 'solved' ? 'solved' : 'in_progress',
+                gameMode: 'online',
+                difficulty: gameState.difficulty,
+                filledCount: gameState.filledCount,
+            });
         }
+
+        startClock();
+        renderCurrentState();
+        updatePresenceUI();
+        startGamePing();
+    }
+
+    function resumeOnlineGame() {
+        const snapshot = loadOnlineGameSnapshot(onlineGameId);
+        if (snapshot) {
+            gameState = snapshot.gameState;
+            rematchRequestedBy = snapshot.rematchRequestedBy;
+        }
+
+        if (inviteUrlInput) {
+            inviteUrlInput.value = `${window.location.origin}/games/${onlineGameId}`;
+        }
+
+        const stored = loadParticipantSession(onlineGameId);
+        if (stored) {
+            joinAsOnlinePlayer(stored.role);
+            return;
+        }
+
+        myRole = 'spectator';
+
+        onlineClient.joinGameChannel(onlineGameId, {
+            role: 'spectator',
+            onEvent: handleRemoteGameEvent,
+            onPresenceChange: (members) => {
+                currentMembers = onlineClient.getGameMembers() || members || [];
+                const hostMember = currentMembers.find((m) => m.role === 'host');
+                const hasGuest = currentMembers.some((m) => m.role === 'guest');
+
+                if (hostMember?.game_mode === 'solo') {
+                    enterSpectatorView(onlineGameId, 'This is a live Solo match. Joined as spectator.');
+                    window.history.replaceState({}, '', `/games/${onlineGameId}?watch=1`);
+                    return;
+                }
+
+                if (!hasGuest) {
+                    saveParticipantSession(onlineGameId, 'guest');
+                    joinAsOnlinePlayer('guest');
+                } else {
+                    enterSpectatorView(onlineGameId, 'Room already has two co-op players. Joined as spectator.');
+                    window.history.replaceState({}, '', `/games/${onlineGameId}?watch=1`);
+                }
+            },
+            onMemberJoin: handleGameMemberJoin,
+            onMemberLeave: handleGameMemberLeave,
+        });
+
+        renderCurrentState();
+        updatePresenceUI();
+    }
+
+    function switchMode(newMode) {
+        if (mode === newMode && !isSpectating) return;
+
+        mode = newMode;
+        setActiveModeTab(mode);
 
         if (onlineControls) {
             onlineControls.style.display = mode === 'online' ? 'block' : 'none';
@@ -644,11 +1000,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (mode === 'watch') {
             stopGamePing();
+            stopClock();
             onlineClient.disconnect();
             onlineGameId = null;
             isSpectating = false;
             currentMembers = [];
-            votesByVoter.clear();
+            hintsBySender.clear();
             updatePresenceUI();
 
             if (window.location.pathname.startsWith('/games/')) {
@@ -663,11 +1020,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (watchDirectory) watchDirectory.style.display = 'none';
         if (spectatorBar) spectatorBar.style.display = 'none';
         if (watcherInteractions) watcherInteractions.style.display = 'none';
+        if (playerControls) playerControls.style.display = 'flex';
+        if (difficultyGroup) difficultyGroup.style.display = 'flex';
         isSpectating = false;
-        votesByVoter.clear();
+        hintsBySender.clear();
 
         if (mode === 'online') {
-            if (!onlineGameId) {
+            stopGamePing();
+            onlineClient.disconnect();
+            if (!onlineGameId || myRole === 'host') {
+                onlineGameId = null;
                 startNewOnlineGame();
             } else {
                 resumeOnlineGame();
@@ -676,117 +1038,94 @@ document.addEventListener('DOMContentLoaded', () => {
             stopGamePing();
             onlineClient.disconnect();
             onlineGameId = null;
+            myRole = null;
             currentMembers = [];
             updatePresenceUI();
             if (window.location.pathname.startsWith('/games/')) {
                 window.history.pushState({}, '', '/');
             }
-            restartGame();
+            startNewSoloGame();
         }
     }
 
-    function startNewOnlineGame() {
-        isLocked = false;
-        onlineGameId = Math.random().toString(36).substring(2, 10);
-        myRole = 'host';
-        mySymbol = 'X';
-        gameState = createInitialGameState();
-        rematchRequestedBy = null;
-
-        sessionStorage.setItem(`ttt_role_${onlineGameId}`, 'host');
-        sessionStorage.setItem(`ttt_symbol_${onlineGameId}`, 'X');
-
-        const inviteUrl = `${window.location.origin}/games/${onlineGameId}`;
-        window.history.pushState({}, '', `/games/${onlineGameId}`);
-
-        if (inviteUrlInput) {
-            inviteUrlInput.value = inviteUrl;
-        }
-
-        boardView.announce('Online game created. Share the invite link with your opponent.');
-
-        onlineClient.joinGameChannel(onlineGameId, {
-            role: 'host',
-            symbol: 'X',
-            onEvent: handleRemoteGameEvent,
-            onPresenceChange: handleGamePresenceChange,
-            onMemberJoin: handleGameMemberJoin,
-            onMemberLeave: handleGameMemberLeave,
-        });
-
-        // Also announce in lobby so spectators can watch
-        onlineClient.joinLobby({
-            gameId: onlineGameId,
-            status: 'waiting',
-            movesCount: 0,
-        });
-
-        renderCurrentState();
-        updatePresenceUI();
-        startGamePing();
-    }
-
-    function resumeOnlineGame() {
-        const storedRole = sessionStorage.getItem(`ttt_role_${onlineGameId}`);
-        const storedSymbol = sessionStorage.getItem(`ttt_symbol_${onlineGameId}`);
-
-        if (storedRole) {
-            myRole = storedRole;
-            mySymbol = storedSymbol;
-        } else {
-            // Join as Guest (Player O)
-            myRole = 'guest';
-            mySymbol = 'O';
-            sessionStorage.setItem(`ttt_role_${onlineGameId}`, 'guest');
-            sessionStorage.setItem(`ttt_symbol_${onlineGameId}`, 'O');
-        }
-
-        if (inviteUrlInput) {
-            inviteUrlInput.value = `${window.location.origin}/games/${onlineGameId}`;
-        }
-
-        onlineClient.joinGameChannel(onlineGameId, {
-            role: myRole,
-            symbol: mySymbol,
-            onEvent: handleRemoteGameEvent,
-            onPresenceChange: handleGamePresenceChange,
-            onMemberJoin: handleGameMemberJoin,
-            onMemberLeave: handleGameMemberLeave,
-        });
-
-        renderCurrentState();
-        updatePresenceUI();
-        startGamePing();
-    }
-
-    function restartGame() {
-        if (mode === 'online') {
-            if (rematchRequestedBy && rematchRequestedBy !== mySymbol) {
-                // Accept rematch
-                gameState = createInitialGameState();
-                rematchRequestedBy = null;
-                onlineClient.broadcastGameEvent(onlineGameId, 'rematch-accept', {});
-                renderCurrentState();
-                boardView.announce('Rematch accepted. Player X plays first.');
-            } else {
-                // Request rematch
-                rematchRequestedBy = mySymbol;
-                onlineClient.broadcastGameEvent(onlineGameId, 'rematch-request', { symbol: mySymbol });
-                renderCurrentState();
-                boardView.announce('Rematch requested. Waiting for opponent...');
-            }
+    function handleNewPuzzleAction() {
+        if (mode !== 'online') {
+            startNewSoloGame();
             return;
         }
 
-        gameState = createInitialGameState();
-        isLocked = false;
-        renderCurrentState();
-        boardView.announce('New game started. Player X plays first.');
+        const partnerOnline = currentMembers.some((m) => m.role !== myRole && (m.role === 'host' || m.role === 'guest'));
+        if (!partnerOnline || (rematchRequestedBy && rematchRequestedBy !== myRole)) {
+            gameState = createSudokuGame({ difficulty });
+            selectedIndex = null;
+            notesMode = false;
+            rematchRequestedBy = null;
+            hintsBySender.clear();
+            persistOnlineSnapshot();
+            onlineClient.broadcastGameEvent(onlineGameId, 'new-puzzle-accept', {
+                gameState: serializeGameState(gameState),
+            });
+            syncLobbyProgress();
+            startClock();
+            renderCurrentState();
+            boardView.announce('New co-op puzzle started.');
+        } else {
+            rematchRequestedBy = myRole;
+            persistOnlineSnapshot();
+            onlineClient.broadcastGameEvent(onlineGameId, 'new-puzzle-request', { role: myRole });
+            renderCurrentState();
+            boardView.announce('New puzzle requested. Waiting for partner...');
+        }
     }
 
-    // Event listeners
+    // Event Listeners
     if (restartBtn) {
-        restartBtn.addEventListener('click', () => restartGame());
+        restartBtn.addEventListener('click', () => handleNewPuzzleAction());
+    }
+
+    if (undoBtn) {
+        undoBtn.addEventListener('click', () => handleUndo());
+    }
+
+    if (eraseBtn) {
+        eraseBtn.addEventListener('click', () => applyPlayerDigit(0));
+    }
+
+    if (notesBtn) {
+        notesBtn.addEventListener('click', () => {
+            notesMode = !notesMode;
+            renderCurrentState();
+        });
+    }
+
+    if (hintBtn) {
+        hintBtn.addEventListener('click', () => handleLocalHint());
+    }
+
+    padButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const digit = parseInt(btn.dataset.digit, 10);
+            if (!Number.isNaN(digit)) {
+                applyPlayerDigit(digit);
+            }
+        });
+    });
+
+    spectatorPadButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const digit = parseInt(btn.dataset.hintDigit, 10);
+            if (!Number.isNaN(digit)) {
+                sendSpectatorHint(digit);
+            }
+        });
+    });
+
+    if (spectatorNudgeBtn) {
+        spectatorNudgeBtn.addEventListener('click', () => sendSpectatorHint(null));
+    }
+
+    if (spectatorClearHintBtn) {
+        spectatorClearHintBtn.addEventListener('click', () => sendSpectatorHint(undefined));
     }
 
     if (refreshLiveGamesBtn) {
@@ -802,7 +1141,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const emoji = btn.dataset.emoji;
             if (!emoji || !onlineGameId) return;
 
-            spawnFloatingEmoji(emoji);
+            spawnFloatingEmoji(reactionStage, emoji);
             onlineClient.sendWhisperEvent('reaction', {
                 emoji,
                 senderId: onlineClient.clientId,
@@ -823,15 +1162,15 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 if (navigator.share) {
                     await navigator.share({
-                        title: 'Play Tic Tac Toe',
-                        text: 'Join my Tic Tac Toe game!',
+                        title: 'Sudoku Live Co-op',
+                        text: 'Solve this Sudoku puzzle with me!',
                         url,
                     });
                     return;
                 }
                 await navigator.clipboard.writeText(url);
                 if (copyFeedback) {
-                    copyFeedback.textContent = 'Copied to clipboard! 📋';
+                    copyFeedback.textContent = 'Link copied to clipboard.';
                     setTimeout(() => {
                         copyFeedback.textContent = '';
                     }, 3000);
@@ -840,7 +1179,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 inviteUrlInput.select();
                 document.execCommand('copy');
                 if (copyFeedback) {
-                    copyFeedback.textContent = 'Copied!';
+                    copyFeedback.textContent = 'Link copied.';
                     setTimeout(() => {
                         copyFeedback.textContent = '';
                     }, 3000);
@@ -849,10 +1188,60 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Initial setup
-    if (difficultyGroup) {
-        difficultyGroup.style.display = mode === 'computer' ? 'flex' : 'none';
-    }
+    // Keyboard shortcuts & 9x9 arrow navigation
+    document.addEventListener('keydown', (e) => {
+        if (mode === 'watch' && !isSpectating) return;
+        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+
+        if (e.key >= '1' && e.key <= '9') {
+            const digit = parseInt(e.key, 10);
+            if (isSpectating) {
+                sendSpectatorHint(digit);
+            } else {
+                applyPlayerDigit(digit);
+            }
+            return;
+        }
+
+        if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') {
+            if (isSpectating) {
+                sendSpectatorHint(undefined);
+            } else {
+                applyPlayerDigit(0);
+            }
+            return;
+        }
+
+        if ((e.key === 'n' || e.key === 'N') && !isSpectating) {
+            notesMode = !notesMode;
+            renderCurrentState();
+            return;
+        }
+
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !isSpectating) {
+            e.preventDefault();
+            handleUndo();
+            return;
+        }
+
+        if (selectedIndex === null) return;
+        const { row, col } = getCellCoords(selectedIndex);
+        let nextIndex = null;
+
+        if (e.key === 'ArrowUp' && row > 0) nextIndex = (row - 1) * 9 + col;
+        if (e.key === 'ArrowDown' && row < 8) nextIndex = (row + 1) * 9 + col;
+        if (e.key === 'ArrowLeft' && col > 0) nextIndex = row * 9 + (col - 1);
+        if (e.key === 'ArrowRight' && col < 8) nextIndex = row * 9 + (col + 1);
+
+        if (nextIndex !== null) {
+            e.preventDefault();
+            selectedIndex = nextIndex;
+            renderCurrentState();
+            boardView.focusCell(nextIndex);
+        }
+    });
+
+    // Initial Boot
     if (onlineControls) {
         onlineControls.style.display = mode === 'online' ? 'block' : 'none';
     }
@@ -864,11 +1253,12 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (mode === 'watch') {
         openWatchDirectory();
     } else {
-        renderCurrentState();
+        startNewSoloGame();
     }
 
     function cleanupConnection() {
         stopGamePing();
+        stopClock();
         onlineClient.disconnect();
     }
 

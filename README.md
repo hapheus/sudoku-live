@@ -1,82 +1,56 @@
-# Tic Tac Toe
+# Sudoku Live
 
-A fast, lightweight, and accessible open-source Tic Tac Toe game built with Laravel 13, Native CSS, Vanilla JavaScript, and self-hosted WebSockets via Laravel Reverb.
-
-The application is mobile-first, privacy-friendly, zero-login, targets WCAG 2.2 Level AA accessibility, and runs completely self-hosted with minimal dependencies.
-
----
-
-## Screenshots
-
-| Desktop Gameplay | Mobile Viewport |
-| :---: | :---: |
-| ![Desktop Gameplay](docs/images/screenshot-gameplay.png) | ![Mobile Viewport](docs/images/screenshot-mobile.png) |
+A fast, accessible, zero-database Sudoku game built with Laravel 13, Native CSS, Vanilla JavaScript, and self-hosted WebSockets via Laravel Reverb & Laravel Echo.
 
 ---
 
 ## Key Features
 
-- **Mobile-First & Touch-First**: Responsive layout with minimum 44×44px interactive touch targets, square centering, and landscape/portrait adaptation.
-- **Accessible (Targeting WCAG 2.2 AA)**: Semantic HTML grid, native buttons, accessible cell coordinate labels (e.g., *"Row 1, Column 1, empty"*), `aria-live` turn and result announcements, high-contrast focus rings, visual win markers (not color alone), and `prefers-reduced-motion` support.
-- **Four Game Modes**:
-  1. **Local 2-Player**: Play on the same screen offline without network latency.
-  2. **Computer Opponent (AI)**: Three levels (Easy, Medium, and an unbeatable Hard algorithm powered by Minimax).
-  3. **Real-Time Online Multiplayer**: Zero-registration room creation, cryptographically secure invitation links, authoritative server state, and optimistic real-time sync.
-  4. **Live Spectator Watch Mode**: Browse all active public online matches in real time and watch live moves as they happen.
-- **Real-Time Presence & Opponent Tracking**: Instant visual indicator showing whether your opponent is connected or disconnected.
-- **Live Spectator Counter**: Live count of viewers watching each game in real time.
-- **Zero Database Load for Presence**: Managed entirely in-memory via Laravel Reverb Presence Channels (`presence-games.{id}`) without polling, heartbeats, or SQLite writes.
-- **Zero Heavy Frontend Frameworks**: Built with pure native CSS and vanilla ES modules (no Tailwind, Bootstrap, React, Vue, or Alpine).
-- **100% Database-Free (Zero-DB Architecture)**: All gameplay state, moves, rules, and rooms operate entirely in the browser and in-memory WebSockets. No database setup, no migrations, no SQLite file needed.
-- **Self-Hosted Real-Time WebSockets**: Powered by Laravel Reverb without third-party hosted services, Redis, or external servers.
+- **Calibrated Sudoku Generator & Unique-Solution Solver**:
+  - Generates randomized valid 9×9 boards with symmetric clue removal and MRV bitmask backtracking to guarantee a **single unique solution**.
+  - Four difficulty presets: **Easy** (38–42 clues, naked-singles solvable), **Medium** (30–34 clues), **Hard** (25–28 clues), and **Expert** (22–25 clues).
+- **Accessible & Keyboard-First (Targeting WCAG 2.2 AA)**:
+  - Semantic 9×9 `role="grid"` with `Row X, Column Y` coordinate labels, conflict announcements (`aria-invalid`), `aria-live` status updates, arrow-key navigation, digit entry (`1–9`), `Backspace`/`Delete`, `N` for pencil notes, and `Ctrl/Cmd+Z` undo.
+- **Three Game Modes**:
+  1. **Solo (Live Observable)**: Single-player solving with pencil-mark notes, automatic peer note cleanup, conflict highlighting, undo history, timer, and solver hints. Solo sessions also publish live to `presence-lobby` when Reverb is connected so spectators can watch, suggest hints, and react in real time (while remaining playable offline if Reverb is unavailable).
+  2. **Online Co-op**: Real-time collaborative solving over Laravel Reverb & Echo with invite links, presence tracking, shared cell updates/notes, and co-op new-puzzle negotiation. Additional visitors beyond two players automatically join as spectators.
+  3. **Watch Live (Spectator Mode)**: Browse active Solo and Co-op rooms in real time via `presence-lobby`, watch live progress (`filled_count/81`), suggest cell hints (`1–9` or nudge) that players can apply with one click, and send floating emoji reactions.
+- **100% Database-Free (Zero-DB Architecture)**:
+  - All puzzle generation, rules, and board state run in-browser (`sessionStorage` snapshot recovery + 5-second state reconciliation pings), with in-memory Reverb presence channels and a stateless, rate-limited HTTP broadcast relay (`POST /api/games/{gameId}/events`) with `eventId` deduplication.
 
 ---
 
 ## Technology Stack
 
-- **Backend**: Laravel 13, PHP 8.4+, Laravel Reverb
-- **Frontend**: Laravel Blade, Vanilla JavaScript (ES modules), Native CSS, Laravel Echo, Vite
-- **Development**: Nix (`devenv`), `direnv`, Composer, Node.js & npm
+- **Backend**: Laravel 13, PHP 8.3+, Laravel Reverb
+- **Frontend**: Laravel Blade, Vanilla JavaScript (ES modules), Native CSS, Laravel Echo, Pusher JS, Vite
+- **Development**: Nix (`devenv`), `direnv`, Composer, Node.js 20+ & npm, Docker Compose
 - **Testing & Quality**: PHPUnit, Vitest, Laravel Pint
-
----
-
-## Requirements
-
-- PHP 8.4 or newer with `mbstring` extension
-- Composer 2.x
-- Node.js 20+ and npm
-
-Alternatively, use `devenv` / `direnv` or Docker Compose for automated zero-install environment setup.
 
 ---
 
 ## Quick Start
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/haf/tictacagro.git
-cd tictacagro
-
-# 2. Install PHP and JavaScript dependencies
+# 1. Install PHP and JavaScript dependencies
 composer install
 npm install
 
-# 3. Prepare environment (Zero database setup required!)
+# 2. Prepare environment (Zero database setup required!)
 cp .env.example .env
 php artisan key:generate
 
-# 4. Build frontend assets
+# 3. Build frontend assets
 npm run build
 
-# 5. Start development servers
-# Option A: Run everything with Docker Compose (zero local dependencies)
+# 4. Start development servers
+# Option A: Docker Compose
 docker compose up -d
 
-# Option B: Start all services via devenv
+# Option B: devenv
 devenv up
 
-# Option C: Run commands manually in separate terminals
+# Option C: Manual terminals
 php artisan serve --port=8000
 php artisan reverb:start --port=8080
 ```
@@ -85,110 +59,50 @@ Open `http://localhost:8000` in your browser.
 
 ---
 
-## Running with Docker
+## Multiplayer & Spectator Architecture
 
-A multi-stage `Dockerfile` and `docker-compose.yml` are included to run the complete stack (Web server, Reverb WebSocket server, SQLite persistence, and compiled assets) with zero local runtime dependencies.
+```
+[Player A (Host)]  -- (Whisper + POST /api/games/{id}/events) --> [Laravel Reverb]
+                                                                        |
+                                                          (presence-games.{id} / lobby)
+                                                                        v
+[Player B (Partner)] <-- (Reverb WebSocket + Deduplication) ------ [Presence Channel]
+[Spectator Browsers] <-- (Live Sync, Cell Hints & Reactions) ----------+
+```
+
+- **State & Sync**: `cell-update`, `sync`, `new-puzzle-request`, and `new-puzzle-accept` events carry unique `eventId` tokens over both client whispers and the validated HTTP relay.
+- **Spectator Hints & Reactions**: Spectators select any empty cell on the board to suggest a digit `1–9` or send a nudge via `hint` whispers, or trigger floating emoji reactions (`👏`, `🔥`, `💡`, `😮`, `😂`, `🎉`). Active hints appear as badges on the board and as clickable chips for Solo or co-op players.
+
+---
+
+## Production Deployment (`cf-docker-tunnel-sync`)
+
+The repository includes [compose.prod.yml](compose.prod.yml) for running **Nginx + PHP-FPM (`app`)** and **Laravel Reverb (`reverb`)** in separate containers behind [cf-docker-tunnel-sync](https://github.com/hapheus/cf-docker-tunnel-sync):
 
 ```bash
-# Build and start in background
-docker compose up -d
-
-# View service logs
-docker compose logs -f
-
-# Stop container
-docker compose down
+cp .env.prod.example .env
+# Set DOMAIN_NAME, APP_KEY (php artisan key:generate --show), and random REVERB_APP_* credentials
+docker compose -f compose.prod.yml up -d --build
 ```
 
-Open `http://localhost:8000` to play.
-
----
-
-## Development Environment with devenv
-
-A reproducible environment configuration is provided via `devenv.nix` and `.envrc`.
-
-```bash
-direnv allow
-devenv up
-```
-
-`devenv up` automatically starts:
-- Laravel HTTP server on `http://localhost:8000`
-- Laravel Reverb WebSocket server on `ws://localhost:8080`
-- Vite development asset server with Hot Module Replacement (HMR)
-
----
-
-## Game Modes
-
-### 1. Local 2-Player
-Two players share one device. Turns alternate between X and O in the browser. Zero network requests required.
-
-### 2. Computer Opponent (AI)
-Play against the computer as X:
-- **Easy**: Selects random available cells.
-- **Medium**: Seizes immediate winning moves, blocks immediate opponent wins, and prefers the center and corners.
-- **Hard**: Implements Minimax game tree evaluation. Cannot lose against any legal opponent strategy.
-
-### 3. Online Multiplayer
-- **Create**: Click *Online* to generate a new game with a unique invite URL.
-- **Share**: Copy and send the link to a second player.
-- **Join**: The second player opens the link and joins immediately as player O.
-- **Play**: Moves are validated server-side and broadcast in real time over Reverb presence channels.
-- **Opponent Status**: A presence badge shows in real time whether the opponent is currently connected (🟢) or disconnected (🔴).
-- **Rematch**: Either player can request a rematch; the board resets once both agree.
-
-### 4. Live Spectator Watch Mode
-- **Browse**: Switch to the *Watch* tab to list all active games (`waiting` or `in_progress`).
-- **Spectate**: Click *Watch Live* to view any running match in real time with locked controls.
-- **Spectator Counter**: Real-time counter displays how many spectators are currently watching the game.
-
----
-
-## Multiplayer Architecture
-
-```
-[Browser A (Host)]  -- (HTTP POST /moves) --> [Laravel Controller]
-                                                     |
-                                            (Validates & Updates)
-                                                     v
-                                             [SQLite Database]
-                                                     |
-                                            (Dispatches Event)
-                                                     v
-[Browser B (Guest)] <-- (Reverb WebSocket) <-- [Laravel Reverb]
-[Spectator Browsers]<-- (Presence Channel) <-- [presence-games.{id}]
-```
-
-- **Commands via HTTP**: Move submissions, game creation, and joins are transactional HTTP requests.
-- **State Notifications via WebSockets**: Committed state changes are broadcast over presence channel `presence-games.{id}`.
-- **Presence & Spectators (Zero DB Load)**: Member connections, leaves, and spectator counts are tracked directly in-memory by Laravel Reverb without writing periodic heartbeats or polling SQLite.
-- **Lightweight Capability Authorization**: Each player receives a cryptographically secure 256-bit token. Channel subscriptions and move commands require authorization without user registration. Anonymous spectators are granted read-only access to presence channels.
-- **Concurrency & Reconnects**: SQLite uses atomic `WHERE version = :expected_version` checks. Clients refetch the authoritative state over HTTP upon reconnecting.
+- Web app is labeled for `sudoku.${DOMAIN_NAME}` (port `8000`).
+- Reverb WebSockets are labeled for `sudoku-ws.${DOMAIN_NAME}` (port `8080`, served publicly over `wss://` on `443`).
+- Internal broadcasts flow directly over the Docker network (`http://reverb:8080`) while browsers connect via `REVERB_PUBLIC_*`.
 
 ---
 
 ## Running Tests
 
-Run the backend and frontend test suites:
-
 ```bash
-# Run PHP backend and domain tests (32 tests)
+# Run PHP backend feature tests (13 tests)
 php artisan test
 
-# Run JavaScript frontend and client-side AI tests (13 tests)
+# Run JavaScript Sudoku generator, engine, and UI tests (24 tests)
 npm run test
 
 # Run code style checks (Laravel Pint)
 ./vendor/bin/pint --test
 ```
-
----
-
-## Contributing
-
-Please review [CONTRIBUTING.md](CONTRIBUTING.md) for branching conventions, conventional commit guidelines, and code standards.
 
 ---
 

@@ -15,7 +15,6 @@
 
   packages = [
     pkgs.php84Packages.composer
-    pkgs.sqlite
   ];
 
   # Background processes managed via `devenv up`
@@ -33,8 +32,6 @@
       fi
       composer install
       npm install
-      touch database/database.sqlite
-      php artisan migrate --force
     '';
     test.exec = ''
       php artisan test
@@ -43,6 +40,6 @@
   };
 
   enterShell = ''
-    echo "Tic Tac Toe development environment ready."
+    echo "Sudoku Live development environment ready."
   '';
 }

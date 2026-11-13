@@ -13,11 +13,10 @@ final class WebRouteTest extends TestCase
         $response = $this->get('/');
 
         $response->assertOk();
-        $response->assertSee('Tic');
-        $response->assertSee('Local 2P');
-        $response->assertSee('vs AI');
-        $response->assertSee('Online');
-        $response->assertSee('Watch');
+        $response->assertSee('Sudoku');
+        $response->assertSee('Solo');
+        $response->assertSee('Online Co-op');
+        $response->assertSee('Watch Live');
     }
 
     public function test_game_room_route_loads_without_database(): void
@@ -28,5 +27,10 @@ final class WebRouteTest extends TestCase
         $response->assertOk();
         $response->assertSee("data-game-id=\"{$gameId}\"", false);
         $response->assertSee('data-initial-mode="online"', false);
+    }
+
+    public function test_invalid_game_room_id_returns_404(): void
+    {
+        $this->get('/games/x')->assertNotFound();
     }
 }

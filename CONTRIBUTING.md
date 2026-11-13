@@ -1,6 +1,6 @@
-# Contributing to Tic Tac Toe
+# Contributing to Sudoku Live
 
-Thank you for contributing to the Tic Tac Toe project! This document outlines our workflow, conventions, and quality standards.
+Thank you for contributing to the Sudoku Live project! This document outlines our workflow, conventions, and quality standards.
 
 ---
 
@@ -47,8 +47,6 @@ Keep commits atomic, meaningful, and descriptive. Never commit secrets, local `.
    composer install
    npm install
    php artisan key:generate
-   touch database/database.sqlite
-   php artisan migrate
    ```
 3. With `devenv` / `direnv`:
    ```bash

@@ -5,7 +5,7 @@ declare(strict_types=1);
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
-    return view('game', ['mode' => 'local']);
+    return view('game', ['mode' => 'solo']);
 })->name('home');
 
 Route::get('/games/{game}', function (string $game) {
@@ -13,4 +13,6 @@ Route::get('/games/{game}', function (string $game) {
         'mode' => 'online',
         'gameId' => $game,
     ]);
-})->name('games.show');
+})
+    ->where('game', '[A-Za-z0-9_-]{6,64}')
+    ->name('games.show');

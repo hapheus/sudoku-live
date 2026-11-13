@@ -2,7 +2,39 @@ import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
 
 // Make Pusher available globally for Echo
-window.Pusher = Pusher;
+if (typeof window !== 'undefined') {
+    window.Pusher = Pusher;
+}
+
+const VALID_GAME_ID_RE = /^[A-Za-z0-9_-]{6,64}$/;
+const MAX_SEEN_EVENT_IDS = 200;
+
+export function isValidGameId(gameId) {
+    return typeof gameId === 'string' && VALID_GAME_ID_RE.test(gameId);
+}
+
+function randomHex(byteCount) {
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+        const bytes = new Uint8Array(byteCount);
+        crypto.getRandomValues(bytes);
+        return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    }
+    return Math.random().toString(36).substring(2, 2 + byteCount * 2);
+}
+
+export function generateGameId() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+    return `game_${randomHex(12)}`;
+}
+
+export function generateEventId() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+    return `evt_${Date.now().toString(36)}_${randomHex(6)}`;
+}
 
 export class OnlineGameClient {
     constructor({ reverbConfig, onConnectionChange }) {
@@ -12,13 +44,29 @@ export class OnlineGameClient {
         this.gameChannel = null;
         this.lobbyChannel = null;
         this.currentGameId = null;
+        this.seenEventIds = new Set();
 
         // Persistent client id per browser session
         this.clientId = sessionStorage.getItem('ttt_client_id');
-        if (!this.clientId) {
-            this.clientId = 'client_' + Math.random().toString(36).substring(2, 10);
+        if (!this.clientId || !/^[A-Za-z0-9_-]{4,64}$/.test(this.clientId)) {
+            this.clientId = `client_${randomHex(8)}`;
             sessionStorage.setItem('ttt_client_id', this.clientId);
         }
+    }
+
+    rememberEvent(eventId) {
+        if (!eventId || typeof eventId !== 'string') {
+            return false;
+        }
+        if (this.seenEventIds.has(eventId)) {
+            return true;
+        }
+        this.seenEventIds.add(eventId);
+        if (this.seenEventIds.size > MAX_SEEN_EVENT_IDS) {
+            const oldest = this.seenEventIds.values().next().value;
+            this.seenEventIds.delete(oldest);
+        }
+        return false;
     }
 
     ensureEcho(customHeaders = {}) {
@@ -88,24 +136,41 @@ export class OnlineGameClient {
     joinGameChannel(gameId, {
         role = 'spectator',
         symbol = null,
+        gameMode = 'online',
         onEvent = () => {},
         onPresenceChange = () => {},
         onMemberJoin = () => {},
         onMemberLeave = () => {},
     } = {}) {
+        if (!isValidGameId(gameId)) {
+            throw new Error('Invalid game room identifier.');
+        }
+
         this.leaveGameChannel();
+        this.seenEventIds.clear();
 
         this.currentGameId = gameId;
         this.ensureEcho({
             'X-Player-Role': role,
             'X-Player-Symbol': symbol || '',
+            'X-Game-Mode': gameMode,
             'X-Game-Id': gameId,
         });
         this.setAuthHeaders({
             'X-Player-Role': role,
             'X-Player-Symbol': symbol || '',
+            'X-Game-Mode': gameMode,
             'X-Game-Id': gameId,
         });
+
+        const dispatchUniqueEvent = (payload) => {
+            if (!payload || !payload.type) return;
+            const eventId = payload.data?.eventId;
+            if (eventId && this.rememberEvent(eventId)) {
+                return;
+            }
+            onEvent(payload.type, payload.data || {});
+        };
 
         this.gameChannel = this.echo.join(`games.${gameId}`);
 
@@ -113,16 +178,8 @@ export class OnlineGameClient {
             .here((members) => onPresenceChange(members))
             .joining((member) => onMemberJoin(member))
             .leaving((member) => onMemberLeave(member))
-            .listen('.GameBroadcastEvent', (payload) => {
-                if (payload && payload.type) {
-                    onEvent(payload.type, payload.data);
-                }
-            })
-            .listenForWhisper('game-event', (payload) => {
-                if (payload && payload.type) {
-                    onEvent(payload.type, payload.data);
-                }
-            });
+            .listen('.GameBroadcastEvent', dispatchUniqueEvent)
+            .listenForWhisper('game-event', dispatchUniqueEvent);
 
         return this.gameChannel;
     }
@@ -142,10 +199,17 @@ export class OnlineGameClient {
     }
 
     async broadcastGameEvent(gameId, type, data = {}) {
+        if (!isValidGameId(gameId)) return;
+
+        const payloadData = {
+            ...data,
+            eventId: data.eventId || generateEventId(),
+        };
+
         // 1. Whisper directly peer-to-peer over WebSocket
         if (this.gameChannel) {
             try {
-                this.gameChannel.whisper('game-event', { type, data });
+                this.gameChannel.whisper('game-event', { type, data: payloadData });
             } catch {
                 // Ignore whisper failure
             }
@@ -153,14 +217,14 @@ export class OnlineGameClient {
 
         // 2. Stateless HTTP broadcast relay to ensure 100% delivery
         try {
-            await fetch(`/api/games/${gameId}/events`, {
+            await fetch(`/api/games/${encodeURIComponent(gameId)}/events`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
                     'X-Client-Id': this.clientId,
                 },
-                body: JSON.stringify({ type, data }),
+                body: JSON.stringify({ type, data: payloadData }),
             });
         } catch {
             // Ignore HTTP relay error
@@ -170,7 +234,9 @@ export class OnlineGameClient {
     joinLobby({
         gameId = null,
         status = 'waiting',
-        movesCount = 0,
+        gameMode = 'online',
+        difficulty = 'medium',
+        filledCount = 0,
         onLobbyPresenceChange = () => {},
         onLobbyMemberJoin = () => {},
         onLobbyMemberLeave = () => {},
@@ -178,15 +244,21 @@ export class OnlineGameClient {
     } = {}) {
         this.leaveLobby();
 
+        const safeGameId = isValidGameId(gameId) ? gameId : '';
+
         this.ensureEcho({
-            'X-Game-Id': gameId || '',
+            'X-Game-Id': safeGameId,
             'X-Status': status,
-            'X-Moves-Count': movesCount.toString(),
+            'X-Game-Mode': gameMode,
+            'X-Difficulty': difficulty,
+            'X-Filled-Count': filledCount.toString(),
         });
         this.setAuthHeaders({
-            'X-Game-Id': gameId || '',
+            'X-Game-Id': safeGameId,
             'X-Status': status,
-            'X-Moves-Count': movesCount.toString(),
+            'X-Game-Mode': gameMode,
+            'X-Difficulty': difficulty,
+            'X-Filled-Count': filledCount.toString(),
         });
 
         this.lobbyChannel = this.echo.join('lobby');
@@ -200,14 +272,16 @@ export class OnlineGameClient {
         return this.lobbyChannel;
     }
 
-    broadcastLobbyUpdate(gameId, status, movesCount) {
-        if (this.lobbyChannel) {
+    broadcastLobbyUpdate(gameId, status, filledCount, difficulty = 'medium', gameMode = 'online') {
+        if (this.lobbyChannel && isValidGameId(gameId)) {
             try {
                 this.lobbyChannel.whisper('lobby-update', {
                     id: this.clientId,
                     game_id: gameId,
                     status,
-                    moves_count: movesCount,
+                    game_mode: gameMode,
+                    difficulty,
+                    filled_count: filledCount,
                 });
             } catch {
                 // Ignore whisper error

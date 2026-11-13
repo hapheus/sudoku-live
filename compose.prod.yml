@@ -1,0 +1,85 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sudoku-live-app
+    restart: unless-stopped
+    depends_on:
+      reverb:
+        condition: service_healthy
+    networks:
+      - default
+      - cf-tunnel-net
+    environment:
+      APP_NAME: "Sudoku Live"
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_KEY: ${APP_KEY:?Set APP_KEY (e.g. php artisan key:generate --show)}
+      APP_URL: "https://sudoku.${DOMAIN_NAME:?Set DOMAIN_NAME}"
+      CACHE_STORE: file
+      SESSION_DRIVER: cookie
+      SESSION_SECURE_COOKIE: "true"
+      BROADCAST_CONNECTION: reverb
+      QUEUE_CONNECTION: sync
+      REVERB_APP_ID: ${REVERB_APP_ID:?Set REVERB_APP_ID}
+      REVERB_APP_KEY: ${REVERB_APP_KEY:?Set REVERB_APP_KEY}
+      REVERB_APP_SECRET: ${REVERB_APP_SECRET:?Set REVERB_APP_SECRET}
+      # Internal Docker network communication (app -> reverb:8080)
+      REVERB_HOST: "reverb"
+      REVERB_PORT: "8080"
+      REVERB_SCHEME: "http"
+      # Public browser WebSocket endpoint via Cloudflare Tunnel
+      REVERB_PUBLIC_HOST: "sudoku-ws.${DOMAIN_NAME:?Set DOMAIN_NAME}"
+      REVERB_PUBLIC_PORT: "443"
+      REVERB_PUBLIC_SCHEME: "https"
+    labels:
+      cf.tunnel.hostname: "sudoku.${DOMAIN_NAME:?Set DOMAIN_NAME}"
+      cf.tunnel.port: "8000"
+      cf.tunnel.protocol: "http"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/up"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  reverb:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sudoku-live-reverb
+    command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080"]
+    restart: unless-stopped
+    networks:
+      - default
+      - cf-tunnel-net
+    environment:
+      APP_NAME: "Sudoku Live"
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_KEY: ${APP_KEY:?Set APP_KEY}
+      CACHE_STORE: file
+      SESSION_DRIVER: cookie
+      BROADCAST_CONNECTION: reverb
+      QUEUE_CONNECTION: sync
+      REVERB_APP_ID: ${REVERB_APP_ID:?Set REVERB_APP_ID}
+      REVERB_APP_KEY: ${REVERB_APP_KEY:?Set REVERB_APP_KEY}
+      REVERB_APP_SECRET: ${REVERB_APP_SECRET:?Set REVERB_APP_SECRET}
+      REVERB_SERVER_HOST: "0.0.0.0"
+      REVERB_SERVER_PORT: "8080"
+      REVERB_ALLOWED_ORIGINS: "sudoku.${DOMAIN_NAME:?Set DOMAIN_NAME}"
+    labels:
+      cf.tunnel.hostname: "sudoku-ws.${DOMAIN_NAME:?Set DOMAIN_NAME}"
+      cf.tunnel.port: "8080"
+      cf.tunnel.protocol: "http"
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@fsockopen('127.0.0.1', 8080) ? 0 : 1);"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+networks:
+  cf-tunnel-net:
+    external: true
