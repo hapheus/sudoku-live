@@ -114,5 +114,34 @@ describe('SudokuBoard & SpectatorHintsFeed React components', () => {
         expect(document.querySelectorAll('.board-col-axes .board-axis-label')).toHaveLength(9);
         expect(document.querySelectorAll('.board-row-axes .board-axis-label')).toHaveLength(9);
     });
+
+    it('highlights all matching digits and matching pencil notes when activeDigit is locked', () => {
+        const puzzle = [...SAMPLE_SOLUTION];
+        puzzle[0] = 0; // solution is 5
+        puzzle[1] = 0; // solution is 3
+
+        let state = createSudokuGame({ difficulty: 'easy', puzzle, solution: SAMPLE_SOLUTION });
+        state = toggleCellNote(state, 0, 5);
+        state = toggleCellNote(state, 0, 3);
+
+        render(
+            <SudokuBoard
+                gameState={state}
+                selectedIndex={null}
+                activeDigit={5}
+                hintsByCell={new Map()}
+                floatingReactions={[]}
+                onCellSelect={vi.fn()}
+            />,
+        );
+
+        const cells = screen.getAllByRole('gridcell');
+        const highlightedSameDigits = cells.filter((c) => c.classList.contains('sudoku-cell--same-digit'));
+        // There are 8 remaining 5s in the grid since cell 0 is empty
+        expect(highlightedSameDigits).toHaveLength(8);
+        const matchedNotes = cells[0].querySelectorAll('.sudoku-cell__note--match');
+        expect(matchedNotes).toHaveLength(1);
+        expect(matchedNotes[0]).toHaveTextContent('5');
+    });
 });
 

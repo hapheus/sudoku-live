@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getCellCoords } from './domain/sudoku-generator.js';
 import {
     applyRemoteCellPatch,
+    clearAllNotes,
     createSudokuGame,
+    fillCandidateNotes,
     hydrateGameState,
     serializeGameState,
     setCellValue,
@@ -129,6 +131,8 @@ export function App() {
         currentMembers,
         hintsMap,
         activeDigit,
+        isHelpOpen,
+        pendingConfirm,
     });
     stateRef.current = {
         mode,
@@ -141,6 +145,8 @@ export function App() {
         currentMembers,
         hintsMap,
         activeDigit,
+        isHelpOpen,
+        pendingConfirm,
     };
 
     const announce = useCallback((msg) => {
@@ -731,6 +737,12 @@ export function App() {
     // 1-second puzzle clock & periodic solo persistence
     useEffect(() => {
         const timer = setInterval(() => {
+            if (typeof document !== 'undefined' && document.hidden) {
+                return;
+            }
+            if (stateRef.current.isHelpOpen || stateRef.current.pendingConfirm) {
+                return;
+            }
             setGameState((prev) => {
                 if (stateRef.current.isSpectating || stateRef.current.mode === 'watch' || prev.status === 'solved') {
                     return prev;
@@ -839,14 +851,24 @@ export function App() {
             return;
         }
 
-        if (selectedIndex === null) {
+        const isGivenSelected = selectedIndex !== null && Boolean(cur.gameState.givens[selectedIndex]);
+        if (selectedIndex === null || (digit !== 0 && isGivenSelected)) {
             if (digit === 0) {
-                if (cur.activeDigit !== null) {
+                if (isGivenSelected) {
+                    showFeedback('Fixed starting clue — choose an empty cell.');
+                } else if (cur.activeDigit !== null) {
                     setActiveDigit(null);
                     showFeedback('Digit lock cleared.');
                 } else {
                     showFeedback('Select a cell to erase.');
                 }
+                return;
+            }
+
+            if (isGivenSelected) {
+                setSelectedIndex(null);
+                setActiveDigit(digit);
+                showFeedback(`Digit ${digit} locked — tap an empty cell to place it.`);
                 return;
             }
 
@@ -863,9 +885,7 @@ export function App() {
         writeDigitToCell(selectedIndex, digit);
     }, [selectedIndex, showFeedback, writeDigitToCell]);
 
-    const handleCellSelect = useCallback((idx) => {
-        setSelectedIndex(idx);
-
+    const broadcastCursor = useCallback((idx) => {
         const cur = stateRef.current;
         if (cur.mode === 'online' && !cur.isSpectating && (cur.myRole === 'host' || cur.myRole === 'guest') && cur.onlineGameId) {
             onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'cursor', {
@@ -874,11 +894,74 @@ export function App() {
                 index: idx,
             });
         }
+    }, []);
 
+    const focusCell = useCallback((idx) => {
+        setSelectedIndex(idx);
+        broadcastCursor(idx);
+    }, [broadcastCursor]);
+
+    const handleCellSelect = useCallback((idx) => {
+        setSelectedIndex(idx);
+        broadcastCursor(idx);
+
+        const cur = stateRef.current;
         if (!cur.isSpectating && cur.mode !== 'watch' && cur.gameState.status !== 'solved' && cur.activeDigit !== null) {
-            writeDigitToCell(idx, cur.activeDigit);
+            if (cur.gameState.board[idx] === 0) {
+                writeDigitToCell(idx, cur.activeDigit);
+            } else {
+                // Selecting an already-filled cell exits digit-lock so all matching digits highlight cleanly
+                setActiveDigit(null);
+            }
         }
-    }, [writeDigitToCell]);
+    }, [broadcastCursor, writeDigitToCell]);
+
+    const broadcastNoteChanges = useCallback((prevNotes, nextState) => {
+        const cur = stateRef.current;
+        const isBroadcaster = (cur.mode === 'solo' || cur.mode === 'online') && Boolean(cur.onlineGameId) && !cur.isSpectating;
+        if (!isBroadcaster) return;
+        for (let i = 0; i < 81; i++) {
+            if (prevNotes[i].join(',') !== nextState.notes[i].join(',')) {
+                onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'cell-update', {
+                    index: i,
+                    value: nextState.board[i] === 0 ? null : nextState.board[i],
+                    notes: nextState.notes[i],
+                });
+            }
+        }
+    }, []);
+
+    const handleFillCandidates = useCallback(() => {
+        const cur = stateRef.current;
+        if (cur.isSpectating || cur.mode === 'watch' || cur.gameState.status === 'solved') return;
+        const prevNotes = cur.gameState.notes.map((n) => [...n]);
+        const nextState = fillCandidateNotes(cur.gameState);
+        if (nextState === cur.gameState) {
+            showFeedback('Candidate notes are already up to date.');
+            return;
+        }
+        setGameState(nextState);
+        stateRef.current.gameState = nextState;
+        broadcastNoteChanges(prevNotes, nextState);
+        persistSnapshotIfNeeded(nextState);
+        showFeedback('Filled candidate notes for empty cells.');
+    }, [broadcastNoteChanges, persistSnapshotIfNeeded, showFeedback]);
+
+    const handleClearNotes = useCallback(() => {
+        const cur = stateRef.current;
+        if (cur.isSpectating || cur.mode === 'watch' || cur.gameState.status === 'solved') return;
+        const prevNotes = cur.gameState.notes.map((n) => [...n]);
+        const nextState = clearAllNotes(cur.gameState);
+        if (nextState === cur.gameState) {
+            showFeedback('No pencil notes to clear.');
+            return;
+        }
+        setGameState(nextState);
+        stateRef.current.gameState = nextState;
+        broadcastNoteChanges(prevNotes, nextState);
+        persistSnapshotIfNeeded(nextState);
+        showFeedback('Cleared all pencil notes.');
+    }, [broadcastNoteChanges, persistSnapshotIfNeeded, showFeedback]);
 
     const handleUndo = useCallback(() => {
         const cur = stateRef.current;
@@ -1173,6 +1256,15 @@ export function App() {
             if (mode === 'watch' && !isSpectating) return;
             if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
 
+            if (e.key === 'Escape') {
+                if (selectedIndex !== null || stateRef.current.activeDigit !== null) {
+                    e.preventDefault();
+                    setSelectedIndex(null);
+                    setActiveDigit(null);
+                }
+                return;
+            }
+
             if (e.key === '?' && !e.metaKey && !e.ctrlKey) {
                 e.preventDefault();
                 setIsHelpOpen(true);
@@ -1222,14 +1314,14 @@ export function App() {
 
             if (nextIndex !== null) {
                 e.preventDefault();
-                handleCellSelect(nextIndex);
+                focusCell(nextIndex);
                 cellRefs.current[nextIndex]?.focus();
             }
         };
 
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [applyPlayerDigit, handleCellSelect, handleUndo, isHelpOpen, isSpectating, mode, pendingConfirm, selectedIndex, sendSpectatorHint]);
+    }, [applyPlayerDigit, focusCell, handleUndo, isHelpOpen, isSpectating, mode, pendingConfirm, selectedIndex, sendSpectatorHint]);
 
     const showBoard = mode !== 'watch' || isSpectating;
     const showHints = mode === 'solo' || mode === 'online' || isSpectating;
@@ -1237,6 +1329,9 @@ export function App() {
         () => (showHints ? aggregateHintsByCell(hintsMap) : new Map()),
         [hintsMap, showHints],
     );
+    const highlightedDigit = selectedIndex !== null && gameState.board[selectedIndex] > 0
+        ? gameState.board[selectedIndex]
+        : activeDigit;
 
     const partnerOnline = currentMembers.some(
         (m) => m.role !== myRole && (m.role === 'host' || m.role === 'guest'),
@@ -1377,6 +1472,7 @@ export function App() {
                 <SudokuBoard
                     gameState={gameState}
                     selectedIndex={selectedIndex}
+                    activeDigit={activeDigit}
                     hintsByCell={hintsByCell}
                     floatingReactions={floatingReactions}
                     cellRefs={cellRefs}
@@ -1409,7 +1505,7 @@ export function App() {
                     hintsByCell={hintsByCell}
                     canApply={(mode === 'solo' || mode === 'online') && !isSpectating && gameState.status !== 'solved'}
                     onSelectHint={(idx) => {
-                        handleCellSelect(idx);
+                        focusCell(idx);
                         cellRefs.current[idx]?.focus();
                     }}
                     onApplyHint={(idx, digit) => {
@@ -1442,10 +1538,13 @@ export function App() {
                     notesMode={notesMode}
                     canUndo={Boolean(gameState.history?.length) && gameState.status !== 'solved'}
                     activeDigit={activeDigit}
+                    highlightedDigit={highlightedDigit}
                     isSolved={gameState.status === 'solved'}
                     onUndo={handleUndo}
                     onErase={() => applyPlayerDigit(0)}
                     onToggleNotes={() => setNotesMode((prev) => !prev)}
+                    onFillCandidates={handleFillCandidates}
+                    onClearNotes={handleClearNotes}
                     onLocalHint={handleLocalHint}
                     onDigit={applyPlayerDigit}
                 />

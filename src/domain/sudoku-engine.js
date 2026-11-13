@@ -215,6 +215,68 @@ export function toggleCellNote(state, index, digit, { recordHistory = true } = {
     };
 }
 
+export function getCandidateDigits(board, index) {
+    if (index < 0 || index >= 81 || board[index] !== 0) {
+        return [];
+    }
+    const used = new Set();
+    for (const peerIdx of getPeerIndices(index)) {
+        const val = board[peerIdx];
+        if (val >= 1 && val <= 9) {
+            used.add(val);
+        }
+    }
+    const candidates = [];
+    for (let d = 1; d <= 9; d++) {
+        if (!used.has(d)) candidates.push(d);
+    }
+    return candidates;
+}
+
+export function fillCandidateNotes(state) {
+    if (state.status === 'solved') return state;
+    const nextNotes = state.board.map((val, idx) => (
+        val === 0 && !state.givens[idx] ? getCandidateDigits(state.board, idx) : []
+    ));
+
+    const unchanged = nextNotes.every((arr, idx) => (
+        arr.length === state.notes[idx].length && arr.every((d, i) => d === state.notes[idx][i])
+    ));
+    if (unchanged) return state;
+
+    return {
+        ...state,
+        notes: nextNotes,
+        history: [
+            ...state.history.slice(-49),
+            {
+                board: [...state.board],
+                notes: cloneNotes(state.notes),
+                cellOwners: cloneOwners(state.cellOwners),
+            },
+        ],
+    };
+}
+
+export function clearAllNotes(state) {
+    if (state.status === 'solved') return state;
+    const hasAnyNotes = state.notes.some((arr) => arr.length > 0);
+    if (!hasAnyNotes) return state;
+
+    return {
+        ...state,
+        notes: Array.from({ length: 81 }, () => []),
+        history: [
+            ...state.history.slice(-49),
+            {
+                board: [...state.board],
+                notes: cloneNotes(state.notes),
+                cellOwners: cloneOwners(state.cellOwners),
+            },
+        ],
+    };
+}
+
 export function applyRemoteCellPatch(state, { index, value, notes = null, owner = null }) {
     if (index < 0 || index >= 81 || state.givens[index]) {
         return state;

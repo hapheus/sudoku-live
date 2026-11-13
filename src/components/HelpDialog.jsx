@@ -66,6 +66,7 @@ export function HelpDialog({ isOpen, onClose }) {
                             <li><span>Clear cell</span><kbd>Backspace / Del / 0</kbd></li>
                             <li><span>Toggle pencil notes</span><kbd>N</kbd></li>
                             <li><span>Undo last move</span><kbd>Ctrl / ⌘ + Z</kbd></li>
+                            <li><span>Clear selection / digit lock</span><kbd>Esc</kbd></li>
                             <li><span>Jump between grid &amp; pad</span><kbd>Tab</kbd></li>
                         </ul>
                     </div>

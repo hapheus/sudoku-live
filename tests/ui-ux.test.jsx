@@ -222,4 +222,37 @@ describe('UI/UX components & Solo persistence', () => {
         clearSoloGameSnapshot();
         expect(loadSoloGameSnapshot()).toBeNull();
     });
+
+    it('highlights matched numpad digit and exposes Fill Candidates / Clear Notes when notesMode is active', () => {
+        const puzzle = [...SAMPLE_SOLUTION];
+        puzzle[0] = 0;
+        const onFillCandidates = vi.fn();
+        const onClearNotes = vi.fn();
+
+        render(
+            <PlayerControls
+                board={puzzle}
+                notesMode
+                canUndo
+                activeDigit={null}
+                highlightedDigit={5}
+                isSolved={false}
+                onUndo={vi.fn()}
+                onErase={vi.fn()}
+                onToggleNotes={vi.fn()}
+                onFillCandidates={onFillCandidates}
+                onClearNotes={onClearNotes}
+                onLocalHint={vi.fn()}
+                onDigit={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByRole('button', { name: 'Enter 5, 1 remaining' })).toHaveClass('numpad-btn--matched');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Fill Candidates' }));
+        expect(onFillCandidates).toHaveBeenCalledTimes(1);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Clear Notes' }));
+        expect(onClearNotes).toHaveBeenCalledTimes(1);
+    });
 });

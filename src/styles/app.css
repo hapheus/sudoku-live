@@ -834,28 +834,9 @@ body {
     z-index: 4;
 }
 
-.sudoku-cell--peer {
-    background-color: var(--color-peer);
-}
-
-.sudoku-cell--same-digit {
-    background-color: var(--color-same-digit);
-}
-
-.sudoku-cell--partner-cursor {
-    background-color: var(--color-partner-bg);
-}
-
-.sudoku-cell--selected {
-    background-color: var(--color-selected) !important;
-    outline: 2px solid var(--color-primary);
-    outline-offset: -2px;
-    z-index: 2;
-}
-
 .sudoku-cell--given {
     color: var(--color-given);
-    background-color: rgba(15, 23, 42, 0.38);
+    background-color: rgba(15, 23, 42, 0.42);
 }
 
 .sudoku-cell--given .sudoku-cell__digit {
@@ -874,16 +855,52 @@ body {
     font-weight: 600;
 }
 
-.sudoku-cell--conflict {
-    background-color: var(--color-error-bg) !important;
-    color: var(--color-error) !important;
-    outline: 2px solid rgba(248, 113, 113, 0.7);
-    outline-offset: -2px;
-    z-index: 3;
+.sudoku-cell--peer {
+    background-color: rgba(56, 189, 248, 0.11);
+}
+
+.sudoku-cell--partner-cursor {
+    background-color: var(--color-partner-bg);
 }
 
 .sudoku-cell--hinted {
     background-color: var(--color-hint-bg);
+}
+
+.sudoku-cell--same-digit {
+    background-color: rgba(56, 189, 248, 0.30);
+    outline: 1.5px solid rgba(56, 189, 248, 0.6);
+    outline-offset: -2px;
+    z-index: 1;
+}
+
+.sudoku-cell--same-digit.sudoku-cell--given .sudoku-cell__digit {
+    color: #e0f2fe;
+}
+
+.sudoku-cell--same-digit.sudoku-cell--user .sudoku-cell__digit {
+    color: #7dd3fc;
+    font-weight: 800;
+}
+
+.sudoku-cell--same-digit.sudoku-cell--partner .sudoku-cell__digit {
+    color: #ddd6fe;
+    font-weight: 800;
+}
+
+.sudoku-cell--selected {
+    background-color: rgba(56, 189, 248, 0.38) !important;
+    outline: 2.5px solid var(--color-primary);
+    outline-offset: -2.5px;
+    z-index: 2;
+}
+
+.sudoku-cell--conflict {
+    background-color: var(--color-error-bg) !important;
+    color: var(--color-error) !important;
+    outline: 2px solid rgba(248, 113, 113, 0.75);
+    outline-offset: -2px;
+    z-index: 3;
 }
 
 .sudoku-cell__digit {
@@ -908,6 +925,13 @@ body {
     font-weight: 600;
     color: var(--color-text-muted);
     line-height: 1;
+    border-radius: 3px;
+}
+
+.sudoku-cell__note--match {
+    background: rgba(56, 189, 248, 0.28);
+    color: #e0f2fe;
+    font-weight: 800;
 }
 
 .sudoku-cell__hint-badge {
@@ -1105,6 +1129,41 @@ body {
     }
 }
 
+.notes-quick-bar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+}
+
+.notes-quick-btn {
+    min-height: var(--touch-min);
+    padding: 0.35rem 0.75rem;
+    background: rgba(56, 189, 248, 0.12);
+    border: 1px solid rgba(56, 189, 248, 0.45);
+    border-radius: var(--radius-sm);
+    color: var(--color-primary);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.notes-quick-btn:hover {
+    background: rgba(56, 189, 248, 0.22);
+}
+
+.notes-quick-btn--muted {
+    background: var(--color-surface);
+    border-color: var(--color-border);
+    color: var(--color-text-muted);
+    font-weight: 600;
+}
+
+.notes-quick-btn--muted:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+}
+
 .numpad {
     display: grid;
     grid-template-columns: repeat(9, minmax(0, 1fr));
@@ -1135,6 +1194,11 @@ body {
 
 .numpad-btn:active:not(:disabled) {
     transform: scale(0.96);
+}
+
+.numpad-btn--matched {
+    background: rgba(56, 189, 248, 0.12);
+    border-color: rgba(56, 189, 248, 0.55);
 }
 
 .numpad-btn--active {

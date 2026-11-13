@@ -5,6 +5,7 @@ import { getSudokuCellAriaLabel } from '../utils/aria-helpers.js';
 export function SudokuBoard({
     gameState,
     selectedIndex,
+    activeDigit = null,
     hintsByCell,
     floatingReactions,
     cellRefs,
@@ -14,6 +15,7 @@ export function SudokuBoard({
 }) {
     const selectedCoords = selectedIndex !== null ? getCellCoords(selectedIndex) : null;
     const selectedValue = selectedIndex !== null ? gameState.board[selectedIndex] : 0;
+    const highlightedDigit = selectedValue > 0 ? selectedValue : (activeDigit || 0);
     const conflictSet = new Set(gameState.conflicts || []);
     const activeTabStop = selectedIndex !== null ? selectedIndex : 0;
     const isSolved = gameState.status === 'solved';
@@ -79,7 +81,7 @@ export function SudokuBoard({
                                         || coords.col === selectedCoords.col
                                         || coords.box === selectedCoords.box
                                     );
-                                    const isSameDigit = selectedValue > 0 && value === selectedValue && !isSelected;
+                                    const isSameDigit = highlightedDigit > 0 && value === highlightedDigit && !isSelected;
 
                                     const classNames = [
                                         'sudoku-cell',
@@ -129,11 +131,18 @@ export function SudokuBoard({
                                                 <>
                                                     {cellNotes.length > 0 && (
                                                         <span className="sudoku-cell__notes" aria-hidden="true">
-                                                            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => (
-                                                                <span key={d} className="sudoku-cell__note">
-                                                                    {cellNotes.includes(d) ? d : ''}
-                                                                </span>
-                                                            ))}
+                                                            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => {
+                                                                const hasNote = cellNotes.includes(d);
+                                                                const isMatchedNote = hasNote && highlightedDigit === d;
+                                                                return (
+                                                                    <span
+                                                                        key={d}
+                                                                        className={`sudoku-cell__note ${isMatchedNote ? 'sudoku-cell__note--match' : ''}`}
+                                                                    >
+                                                                        {hasNote ? d : ''}
+                                                                    </span>
+                                                                );
+                                                            })}
                                                         </span>
                                                     )}
                                                     {hint && (

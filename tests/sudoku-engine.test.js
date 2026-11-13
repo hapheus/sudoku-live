@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
     applyRemoteCellPatch,
+    clearAllNotes,
     createSudokuGame,
+    fillCandidateNotes,
     findConflicts,
+    getCandidateDigits,
     hydrateGameState,
     serializeGameState,
     setCellValue,
@@ -108,6 +111,26 @@ describe('Sudoku Engine', () => {
         const hydrated = hydrateGameState(serializeGameState(state));
         expect(hydrated.cellOwners[1]).toBe('guest');
         expect(hydrated.cellOwners[0]).toBeNull();
+    });
+
+    it('computes valid candidates and supports undoable fillCandidateNotes / clearAllNotes', () => {
+        const puzzle = [...SAMPLE_SOLUTION];
+        puzzle[0] = 0; // only valid candidate is 5 (3 is already in col 0)
+        puzzle[1] = 0; // only valid candidate is 3 (5 is already in col 1)
+
+        let state = createSudokuGame({ difficulty: 'easy', puzzle, solution: SAMPLE_SOLUTION });
+        expect(getCandidateDigits(state.board, 0)).toEqual([5]);
+        expect(getCandidateDigits(state.board, 1)).toEqual([3]);
+
+        state = fillCandidateNotes(state);
+        expect(state.notes[0]).toEqual([5]);
+        expect(state.notes[1]).toEqual([3]);
+
+        state = clearAllNotes(state);
+        expect(state.notes[0]).toEqual([]);
+
+        state = undoLastMove(state);
+        expect(state.notes[0]).toEqual([5]);
     });
 });
 

@@ -6,10 +6,13 @@ export function PlayerControls({
     notesMode,
     canUndo,
     activeDigit = null,
+    highlightedDigit = null,
     isSolved = false,
     onUndo,
     onErase,
     onToggleNotes,
+    onFillCandidates,
+    onClearNotes,
     onLocalHint,
     onDigit,
 }) {
@@ -77,12 +80,38 @@ export function PlayerControls({
                 </button>
             </div>
 
+            {notesMode && !isSolved && (onFillCandidates || onClearNotes) && (
+                <div className="notes-quick-bar" role="group" aria-label="Pencil note helpers">
+                    {onFillCandidates && (
+                        <button
+                            type="button"
+                            id="auto-notes-btn"
+                            className="notes-quick-btn"
+                            onClick={onFillCandidates}
+                        >
+                            Fill Candidates
+                        </button>
+                    )}
+                    {onClearNotes && (
+                        <button
+                            type="button"
+                            id="clear-notes-btn"
+                            className="notes-quick-btn notes-quick-btn--muted"
+                            onClick={onClearNotes}
+                        >
+                            Clear Notes
+                        </button>
+                    )}
+                </div>
+            )}
+
             <div className="numpad" role="group" aria-label="Number pad 1 to 9">
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => {
                     const remaining = Math.max(0, 9 - (counts[d] || 0));
                     const isComplete = remaining === 0;
                     const isDisabled = isSolved || (isComplete && !notesMode);
                     const isActiveDigit = activeDigit === d;
+                    const isMatchedDigit = !isActiveDigit && highlightedDigit === d;
 
                     return (
                         <button
@@ -92,6 +121,7 @@ export function PlayerControls({
                                 'numpad-btn',
                                 isComplete ? 'numpad-btn--complete' : '',
                                 isActiveDigit ? 'numpad-btn--active' : '',
+                                isMatchedDigit ? 'numpad-btn--matched' : '',
                             ].filter(Boolean).join(' ')}
                             data-digit={d}
                             disabled={isDisabled}
