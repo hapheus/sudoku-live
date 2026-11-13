@@ -21,11 +21,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const modeButtons = document.querySelectorAll('[data-mode-btn]');
     const difficultyRadios = document.querySelectorAll('input[name="ai-difficulty"]');
 
+    // Watch Mode & Presence Elements
+    const watchDirectory = document.getElementById('watch-directory');
+    const liveGamesList = document.getElementById('live-games-list');
+    const refreshLiveGamesBtn = document.getElementById('refresh-live-games-btn');
+    const spectatorBar = document.getElementById('spectator-bar');
+    const exitWatchBtn = document.getElementById('exit-watch-btn');
+    const gamePanel = document.getElementById('game-panel');
+    const opponentStatus = document.getElementById('opponent-status');
+    const spectatorStatus = document.getElementById('spectator-status');
+
     // State
-    let mode = root.dataset.initialMode || 'local'; // 'local' | 'computer' | 'online'
+    let mode = root.dataset.initialMode || 'local'; // 'local' | 'computer' | 'online' | 'watch'
     let difficulty = localStorage.getItem('ttt_difficulty') || 'hard';
     let gameState = createInitialGameState();
     let isLocked = false;
+    let isSpectating = false;
+    let currentMembers = [];
 
     // Online state
     let onlineGameId = root.dataset.gameId || null;
@@ -33,8 +45,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let participantRole = null;
     let participantSymbol = null;
 
-    // Load stored token for existing game
-    if (onlineGameId) {
+    // Check URL parameters for watch mode or stored tokens
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('watch') === '1' && onlineGameId) {
+        mode = 'watch';
+        isSpectating = true;
+    } else if (onlineGameId) {
         mode = 'online';
         participantToken = sessionStorage.getItem(`ttt_token_${onlineGameId}`);
     }
@@ -69,6 +85,20 @@ document.addEventListener('DOMContentLoaded', () => {
         onConnectionChange: (status) => {
             updateConnectionBadge(status);
         },
+        onPresenceChange: (members) => {
+            currentMembers = members || [];
+            updatePresenceUI();
+        },
+        onMemberJoin: (member) => {
+            if (!currentMembers.some((m) => m.id === member.id)) {
+                currentMembers.push(member);
+            }
+            updatePresenceUI();
+        },
+        onMemberLeave: (member) => {
+            currentMembers = currentMembers.filter((m) => m.id !== member.id);
+            updatePresenceUI();
+        },
     });
 
     // Board View
@@ -79,17 +109,72 @@ document.addEventListener('DOMContentLoaded', () => {
         onCellClick: (index) => handleCellClick(index),
     });
 
+    function updatePresenceUI() {
+        if (!opponentStatus || !spectatorStatus) return;
+
+        if (mode === 'online') {
+            // Opponent presence badge
+            if (participantRole) {
+                const opponentRole = participantRole === 'host' ? 'guest' : 'host';
+                const opponentOnline = currentMembers.some((m) => m.role === opponentRole);
+
+                opponentStatus.style.display = 'inline-flex';
+                if (opponentOnline) {
+                    opponentStatus.className = 'presence-badge presence-badge--online';
+                    opponentStatus.textContent = '🟢 Opponent online';
+                } else {
+                    opponentStatus.className = 'presence-badge presence-badge--offline';
+                    opponentStatus.textContent = '🔴 Opponent offline';
+                }
+            } else {
+                opponentStatus.style.display = 'none';
+            }
+
+            // Spectators badge
+            const spectatorCount = currentMembers.filter((m) => m.role === 'spectator').length;
+            if (spectatorCount > 0) {
+                spectatorStatus.style.display = 'inline-flex';
+                spectatorStatus.textContent = `👁️ ${spectatorCount} Spectator${spectatorCount === 1 ? '' : 's'}`;
+            } else {
+                spectatorStatus.style.display = 'none';
+            }
+            return;
+        }
+
+        if (isSpectating) {
+            // Player statuses for spectators
+            const hostOnline = currentMembers.some((m) => m.role === 'host');
+            const guestOnline = currentMembers.some((m) => m.role === 'guest');
+
+            opponentStatus.style.display = 'inline-flex';
+            opponentStatus.className = 'presence-badge';
+            opponentStatus.textContent = `X: ${hostOnline ? '🟢' : '🔴'} | O: ${guestOnline ? '🟢' : '🔴'}`;
+
+            // Spectator count badge
+            const spectatorCount = currentMembers.filter((m) => m.role === 'spectator').length;
+            spectatorStatus.style.display = 'inline-flex';
+            spectatorStatus.textContent = `👁️ ${spectatorCount} Watching`;
+            return;
+        }
+
+        // Other modes or directory view
+        opponentStatus.style.display = 'none';
+        spectatorStatus.style.display = 'none';
+    }
+
     function renderCurrentState() {
         boardView.render(gameState, {
-            locked: isLocked,
+            locked: isLocked || isSpectating,
             yourSymbol: mode === 'online' ? participantSymbol : null,
-            mode,
+            mode: isSpectating ? 'watch' : mode,
             opponentName: mode === 'online' ? 'Opponent' : 'Computer',
         });
 
-        // Restart / Rematch button text
+        // Restart / Rematch button
         if (restartBtn) {
-            if (mode === 'online') {
+            if (isSpectating || mode === 'watch') {
+                restartBtn.style.display = 'none';
+            } else if (mode === 'online') {
                 const isFinished = gameState.status === 'won' || gameState.status === 'draw';
                 restartBtn.style.display = isFinished ? 'inline-flex' : 'none';
                 if (gameState.rematch_requested_by && gameState.rematch_requested_by === participantRole) {
@@ -111,7 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function handleCellClick(index) {
-        if (isLocked) return;
+        if (isLocked || isSpectating) return;
 
         if (mode === 'local') {
             try {
@@ -169,7 +254,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 handleServerState(nextState);
             } catch (err) {
                 boardView.announce(err.message || 'Move failed.');
-                // Refresh authoritative state on conflict
                 try {
                     const fresh = await onlineClient.fetchGameState(onlineGameId, participantToken);
                     handleServerState(fresh);
@@ -200,12 +284,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         renderCurrentState();
+        updatePresenceUI();
     }
 
     function updateConnectionBadge(status) {
         if (!connectionBadge) return;
 
-        if (mode !== 'online') {
+        if (mode !== 'online' && !isSpectating) {
             connectionBadge.style.display = 'none';
             return;
         }
@@ -223,8 +308,119 @@ document.addEventListener('DOMContentLoaded', () => {
         connectionBadge.className = `connection-badge connection-badge--${status}`;
     }
 
+    function formatTimeAgo(isoString) {
+        if (!isoString) return '';
+        const diffMs = Date.now() - new Date(isoString).getTime();
+        const mins = Math.floor(diffMs / 60000);
+        if (mins < 1) return 'just now';
+        if (mins === 1) return '1 min ago';
+        return `${mins} mins ago`;
+    }
+
+    async function loadLiveGames() {
+        if (!liveGamesList) return;
+        liveGamesList.innerHTML = '<p class="live-game-card__meta">Loading live games...</p>';
+
+        try {
+            const data = await onlineClient.fetchLiveGames();
+            const games = Array.isArray(data) ? data : (data.games || []);
+            if (!Array.isArray(games) || games.length === 0) {
+                liveGamesList.innerHTML = `
+                    <div style="text-align: center; padding: 1.5rem 0;">
+                        <p class="live-game-card__meta">No live matches right now.</p>
+                        <p style="margin-top: 0.5rem; font-size: 0.8125rem; color: var(--color-text-muted);">
+                            Start an Online game or click Refresh to check again.
+                        </p>
+                    </div>
+                `;
+                return;
+            }
+
+            liveGamesList.innerHTML = games.map((game) => {
+                const shortId = game.id.slice(0, 8);
+                const statusLabel = game.status === 'waiting' ? '⏳ Waiting for Player 2' : '⚔️ In Progress';
+                const timeAgo = formatTimeAgo(game.created_at);
+                const movesCount = game.move_count ?? game.moves_count ?? 0;
+
+                return `
+                    <div class="live-game-card">
+                        <div class="live-game-card__info">
+                            <span class="live-game-card__title">Game #${shortId}</span>
+                            <span class="live-game-card__meta">${statusLabel} &bull; ${movesCount} move${movesCount === 1 ? '' : 's'} &bull; ${timeAgo}</span>
+                        </div>
+                        <button type="button" class="live-game-card__action-btn" data-watch-id="${game.id}">
+                            Watch Live 👁️
+                        </button>
+                    </div>
+                `;
+            }).join('');
+
+            liveGamesList.querySelectorAll('[data-watch-id]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const targetId = btn.dataset.watchId;
+                    spectateGame(targetId);
+                });
+            });
+        } catch (err) {
+            liveGamesList.innerHTML = `<p class="live-game-card__meta" style="color: #f87171;">Failed to load live games: ${err.message}</p>`;
+        }
+    }
+
+    async function spectateGame(gameId) {
+        mode = 'watch';
+        isSpectating = true;
+        isLocked = true;
+        onlineGameId = gameId;
+        participantToken = null;
+        participantRole = null;
+        participantSymbol = null;
+        currentMembers = [];
+
+        modeButtons.forEach((btn) => {
+            const isActive = btn.dataset.modeBtn === 'watch';
+            btn.classList.toggle('mode-tab--active', isActive);
+            btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+
+        if (watchDirectory) watchDirectory.style.display = 'none';
+        if (gamePanel) gamePanel.style.display = 'flex';
+        if (spectatorBar) spectatorBar.style.display = 'flex';
+        if (onlineControls) onlineControls.style.display = 'none';
+        if (difficultyGroup) difficultyGroup.style.display = 'none';
+        if (restartBtn) restartBtn.style.display = 'none';
+
+        window.history.pushState({}, '', `/games/${gameId}?watch=1`);
+        boardView.announce('Connecting to live game...');
+
+        try {
+            const freshState = await onlineClient.fetchGameState(gameId);
+            handleServerState(freshState);
+            onlineClient.subscribe(gameId, null);
+        } catch (err) {
+            boardView.announce(err.message || 'Failed to watch game.');
+        } finally {
+            renderCurrentState();
+            updatePresenceUI();
+        }
+    }
+
+    function exitSpectating() {
+        onlineClient.disconnect();
+        onlineGameId = null;
+        isSpectating = false;
+        currentMembers = [];
+        updatePresenceUI();
+
+        if (spectatorBar) spectatorBar.style.display = 'none';
+        if (gamePanel) gamePanel.style.display = 'none';
+        if (watchDirectory) watchDirectory.style.display = 'block';
+
+        window.history.pushState({}, '', '/');
+        loadLiveGames();
+    }
+
     async function switchMode(newMode) {
-        if (mode === newMode && !onlineGameId) return;
+        if (mode === newMode && !onlineGameId && !isSpectating) return;
 
         mode = newMode;
         modeButtons.forEach((btn) => {
@@ -241,6 +437,32 @@ document.addEventListener('DOMContentLoaded', () => {
             onlineControls.style.display = mode === 'online' ? 'block' : 'none';
         }
 
+        if (mode === 'watch') {
+            onlineClient.disconnect();
+            onlineGameId = null;
+            isSpectating = false;
+            currentMembers = [];
+            updatePresenceUI();
+
+            if (gamePanel) gamePanel.style.display = 'none';
+            if (watchDirectory) watchDirectory.style.display = 'block';
+            if (spectatorBar) spectatorBar.style.display = 'none';
+            if (restartBtn) restartBtn.style.display = 'none';
+
+            if (window.location.pathname.startsWith('/games/')) {
+                window.history.pushState({}, '', '/');
+            }
+
+            await loadLiveGames();
+            return;
+        }
+
+        // Return to standard game panel
+        if (gamePanel) gamePanel.style.display = 'flex';
+        if (watchDirectory) watchDirectory.style.display = 'none';
+        if (spectatorBar) spectatorBar.style.display = 'none';
+        isSpectating = false;
+
         if (mode === 'online') {
             if (!onlineGameId) {
                 await startNewOnlineGame();
@@ -250,6 +472,8 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             onlineClient.disconnect();
             onlineGameId = null;
+            currentMembers = [];
+            updatePresenceUI();
             if (window.location.pathname.startsWith('/games/')) {
                 window.history.pushState({}, '', '/');
             }
@@ -337,6 +561,14 @@ document.addEventListener('DOMContentLoaded', () => {
         restartBtn.addEventListener('click', () => restartGame());
     }
 
+    if (refreshLiveGamesBtn) {
+        refreshLiveGamesBtn.addEventListener('click', () => loadLiveGames());
+    }
+
+    if (exitWatchBtn) {
+        exitWatchBtn.addEventListener('click', () => exitSpectating());
+    }
+
     modeButtons.forEach((btn) => {
         btn.addEventListener('click', () => {
             switchMode(btn.dataset.modeBtn);
@@ -383,8 +615,12 @@ document.addEventListener('DOMContentLoaded', () => {
         onlineControls.style.display = mode === 'online' ? 'block' : 'none';
     }
 
-    if (mode === 'online' && onlineGameId) {
+    if (isSpectating && onlineGameId) {
+        spectateGame(onlineGameId);
+    } else if (mode === 'online' && onlineGameId) {
         resumeOnlineGame();
+    } else if (mode === 'watch') {
+        switchMode('watch');
     } else {
         renderCurrentState();
     }

@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tic Tac Toe — Fast, Accessible, Real-Time</title>
-    <meta name="description" content="A fast, lightweight, and accessible Tic Tac Toe game supporting local 2-player, AI computer opponent, and real-time online multiplayer.">
+    <meta name="description" content="A fast, lightweight, and accessible Tic Tac Toe game supporting local 2-player, AI computer opponent, real-time online multiplayer, and live spectator watch mode.">
     <meta name="theme-color" content="#0b1120">
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -61,6 +61,15 @@
                         data-mode-btn="online">
                     🌐 Online
                 </button>
+                <button type="button"
+                        role="tab"
+                        id="tab-watch"
+                        aria-selected="{{ ($mode ?? '') === 'watch' ? 'true' : 'false' }}"
+                        aria-controls="watch-directory"
+                        class="mode-tab {{ ($mode ?? '') === 'watch' ? 'mode-tab--active' : '' }}"
+                        data-mode-btn="watch">
+                    👀 Watch
+                </button>
             </div>
         </nav>
 
@@ -101,9 +110,37 @@
             <div id="copy-feedback" class="online-box__feedback" role="status" aria-live="polite"></div>
         </section>
 
+        <!-- Watch Directory (shown in Watch Mode) -->
+        <section id="watch-directory" class="watch-box" style="display: none;" aria-label="Live Games Directory">
+            <div class="watch-box__header">
+                <h2 class="watch-box__title">Live Online Matches</h2>
+                <button type="button" id="refresh-live-games-btn" class="watch-box__refresh-btn">
+                    🔄 Refresh
+                </button>
+            </div>
+            <div id="live-games-list" class="live-games-list" role="feed">
+                <p class="live-game-card__meta">Loading live games...</p>
+            </div>
+        </section>
+
+        <!-- Spectator Top Bar (when spectating a game) -->
+        <div id="spectator-bar" class="spectator-bar" style="display: none;">
+            <span>👁️ <strong>Spectating Live Match</strong></span>
+            <button type="button" id="exit-watch-btn" class="spectator-bar__back-btn">
+                ← Back to Live Games
+            </button>
+        </div>
+
         <!-- Status Banner -->
         <section class="status-banner" aria-label="Game Status">
             <span id="connection-status" class="connection-badge" style="display: none;" aria-live="polite"></span>
+
+            <!-- Real-time Presence Indicators (Opponent Online & Live Spectator Counter) -->
+            <div class="presence-indicators" id="presence-indicators">
+                <span id="opponent-status" class="presence-badge" style="display: none;" aria-live="polite"></span>
+                <span id="spectator-status" class="presence-badge presence-badge--spectators" style="display: none;" aria-live="polite"></span>
+            </div>
+
             <div id="game-status-text" class="status-badge status-badge--active-turn" role="status">
                 Loading game...
             </div>
