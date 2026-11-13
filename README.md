@@ -1,58 +1,166 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Tic Tac Toe
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A fast, lightweight, and accessible open-source Tic Tac Toe game built with Laravel 13, Native CSS, Vanilla JavaScript, and self-hosted WebSockets via Laravel Reverb.
 
-## About Laravel
+The application is mobile-first, privacy-friendly, zero-login, targets WCAG 2.2 Level AA accessibility, and runs completely self-hosted with minimal dependencies.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+---
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Screenshots
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+| Desktop Gameplay | Mobile Viewport |
+| :---: | :---: |
+| ![Desktop Gameplay](docs/images/screenshot-gameplay.png) | ![Mobile Viewport](docs/images/screenshot-mobile.png) |
 
-## Learning Laravel
+---
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+## Key Features
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+- **Mobile-First & Touch-First**: Responsive layout with minimum 44×44px interactive touch targets, square centering, and landscape/portrait adaptation.
+- **Accessible (Targeting WCAG 2.2 AA)**: Semantic HTML grid, native buttons, accessible cell coordinate labels (e.g., *"Row 1, Column 1, empty"*), `aria-live` turn and result announcements, high-contrast focus rings, visual win markers (not color alone), and `prefers-reduced-motion` support.
+- **Three Game Modes**:
+  1. **Local 2-Player**: Play on the same screen offline without network latency.
+  2. **Computer Opponent (AI)**: Three levels (Easy, Medium, and an unbeatable Hard algorithm powered by Minimax).
+  3. **Real-Time Online Multiplayer**: Zero-registration room creation, cryptographically secure invitation links, authoritative server state, and optimistic real-time sync.
+- **Zero Heavy Frontend Frameworks**: Built with pure native CSS and vanilla ES modules (no Tailwind, Bootstrap, React, Vue, or Alpine).
+- **Self-Hosted Real-Time WebSockets**: Powered by Laravel Reverb without third-party hosted services or Redis dependencies.
+- **ACID Persistence & Concurrency**: SQLite with atomic versioned conditional updates preventing duplicate, conflicting, or out-of-order moves.
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+---
 
-## Agentic Development
+## Technology Stack
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+- **Backend**: Laravel 13, PHP 8.4+, Laravel Reverb, SQLite
+- **Frontend**: Laravel Blade, Vanilla JavaScript (ES modules), Native CSS, Laravel Echo, Vite
+- **Development**: Nix (`devenv`), `direnv`, Composer, Node.js & npm
+- **Testing & Quality**: PHPUnit, Vitest, Laravel Pint
+
+---
+
+## Requirements
+
+- PHP 8.4 or newer with `pdo_sqlite` and `mbstring` extensions
+- Composer 2.x
+- Node.js 20+ and npm
+- SQLite 3
+
+Alternatively, use `devenv` / `direnv` for automated zero-install environment setup.
+
+---
+
+## Quick Start
 
 ```bash
-composer require laravel/boost --dev
+# 1. Clone the repository
+git clone https://github.com/haf/tictacagro.git
+cd tictacagro
 
-php artisan boost:install
+# 2. Install PHP and JavaScript dependencies
+composer install
+npm install
+
+# 3. Prepare environment and database
+cp .env.example .env
+php artisan key:generate
+touch database/database.sqlite
+php artisan migrate
+
+# 4. Build frontend assets
+npm run build
+
+# 5. Start development servers
+# Option A: Start all services via devenv (recommended)
+devenv up
+
+# Option B: Run commands in separate terminals
+php artisan serve --port=8000
+php artisan reverb:start --port=8080
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Open `http://localhost:8000` in your browser.
+
+---
+
+## Development Environment with devenv
+
+A reproducible environment configuration is provided via `devenv.nix` and `.envrc`.
+
+```bash
+direnv allow
+devenv up
+```
+
+`devenv up` automatically starts:
+- Laravel HTTP server on `http://localhost:8000`
+- Laravel Reverb WebSocket server on `ws://localhost:8080`
+- Vite development asset server with Hot Module Replacement (HMR)
+
+---
+
+## Game Modes
+
+### 1. Local 2-Player
+Two players share one device. Turns alternate between X and O in the browser. Zero network requests required.
+
+### 2. Computer Opponent (AI)
+Play against the computer as X:
+- **Easy**: Selects random available cells.
+- **Medium**: Seizes immediate winning moves, blocks immediate opponent wins, and prefers the center and corners.
+- **Hard**: Implements Minimax game tree evaluation. Cannot lose against any legal opponent strategy.
+
+### 3. Online Multiplayer
+- **Create**: Click *Online* to generate a new game with a unique invite URL.
+- **Share**: Copy and send the link to a second player.
+- **Join**: The second player opens the link and joins immediately as player O.
+- **Play**: Moves are validated server-side and broadcast in real time over private Reverb channels.
+- **Rematch**: Either player can request a rematch; the board resets once both agree.
+
+---
+
+## Multiplayer Architecture
+
+```
+[Browser A (Host)]  -- (HTTP POST /moves) --> [Laravel Controller]
+                                                     |
+                                            (Validates & Updates)
+                                                     v
+                                             [SQLite Database]
+                                                     |
+                                            (Dispatches Event)
+                                                     v
+[Browser B (Guest)] <-- (Reverb WebSocket) <-- [Laravel Reverb]
+```
+
+- **Commands via HTTP**: Move submissions, game creation, and joins are transactional HTTP requests.
+- **State Notifications via WebSockets**: Committed state changes are broadcast over private channel `private-games.{id}`.
+- **Lightweight Capability Authorization**: Each player receives a cryptographically secure 256-bit token. Channel subscriptions and move commands require authorization without user registration.
+- **Concurrency & Reconnects**: SQLite uses atomic `WHERE version = :expected_version` checks. Clients refetch the authoritative state over HTTP upon reconnecting.
+
+---
+
+## Running Tests
+
+Run the backend and frontend test suites:
+
+```bash
+# Run PHP backend and domain tests (38 tests)
+php artisan test
+
+# Run JavaScript frontend and client-side AI tests (13 tests)
+npm run test
+
+# Run code style checks (Laravel Pint)
+./vendor/bin/pint --test
+```
+
+---
 
 ## Contributing
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Please review [CONTRIBUTING.md](CONTRIBUTING.md) for branching conventions, conventional commit guidelines, and code standards.
 
-## Code of Conduct
-
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
-
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+---
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+This project is open-source software licensed under the [MIT License](LICENSE).
