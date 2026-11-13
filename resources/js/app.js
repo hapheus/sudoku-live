@@ -30,6 +30,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const gamePanel = document.getElementById('game-panel');
     const opponentStatus = document.getElementById('opponent-status');
     const spectatorStatus = document.getElementById('spectator-status');
+    const watcherInteractions = document.getElementById('watcher-interactions');
+    const reactionStage = document.getElementById('reaction-stage');
+    const emojiButtons = document.querySelectorAll('.emoji-btn');
 
     // State
     let mode = root.dataset.initialMode || 'local'; // 'local' | 'computer' | 'online' | 'watch'
@@ -40,6 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentMembers = [];
     let activeLobbyMembers = [];
     let rematchRequestedBy = null;
+    const votesByVoter = new Map();
 
     // Online state (pure in-browser)
     const GAME_PING_INTERVAL_MS = 5000;
@@ -142,12 +146,43 @@ document.addEventListener('DOMContentLoaded', () => {
         spectatorStatus.style.display = 'none';
     }
 
+    function computeVoteCounts() {
+        const counts = {};
+        for (const cellIndex of votesByVoter.values()) {
+            if (cellIndex !== null && cellIndex !== undefined) {
+                counts[cellIndex] = (counts[cellIndex] || 0) + 1;
+            }
+        }
+        return counts;
+    }
+
+    function spawnFloatingEmoji(emoji) {
+        if (!reactionStage || !emoji) return;
+
+        const el = document.createElement('span');
+        el.className = 'floating-emoji';
+        el.setAttribute('aria-hidden', 'true');
+        el.textContent = emoji;
+        el.style.left = `${15 + Math.floor(Math.random() * 68)}%`;
+
+        reactionStage.appendChild(el);
+        setTimeout(() => {
+            el.remove();
+        }, 1850);
+    }
+
     function renderCurrentState() {
+        const showVotes = mode === 'online' || isSpectating;
+        const allowVote = isSpectating && gameState.status === 'in_progress';
+
         boardView.render(gameState, {
             locked: isLocked || isSpectating,
             yourSymbol: mode === 'online' ? mySymbol : null,
             mode: isSpectating ? 'watch' : mode,
             opponentName: mode === 'online' ? 'Opponent' : 'Computer',
+            votes: showVotes ? computeVoteCounts() : {},
+            myVote: isSpectating ? (votesByVoter.get(onlineClient.clientId) ?? null) : null,
+            allowVote,
         });
 
         // Restart / Rematch button
@@ -183,6 +218,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     myRole = 'guest';
                     mySymbol = 'O';
                 }
+                if (data.votes && Array.isArray(data.votes)) {
+                    votesByVoter.clear();
+                    data.votes.forEach(([voterId, cellIdx]) => {
+                        votesByVoter.set(voterId, cellIdx);
+                    });
+                }
                 renderCurrentState();
                 updatePresenceUI();
             }
@@ -193,10 +234,30 @@ document.addEventListener('DOMContentLoaded', () => {
             const { index, symbol } = data;
             try {
                 gameState = makeMove(gameState, index, symbol);
+                votesByVoter.clear();
             } catch {
                 // Ignore illegal move attempts
             }
             renderCurrentState();
+            return;
+        }
+
+        if (type === 'vote') {
+            if (data && data.voterId && data.turn === gameState.currentTurn) {
+                if (data.index === null || data.index === undefined) {
+                    votesByVoter.delete(data.voterId);
+                } else {
+                    votesByVoter.set(data.voterId, data.index);
+                }
+                renderCurrentState();
+            }
+            return;
+        }
+
+        if (type === 'reaction') {
+            if (data && data.emoji) {
+                spawnFloatingEmoji(data.emoji);
+            }
             return;
         }
 
@@ -209,6 +270,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (type === 'rematch-accept') {
             gameState = createInitialGameState();
             rematchRequestedBy = null;
+            votesByVoter.clear();
             renderCurrentState();
             boardView.announce('Rematch started. Player X plays first.');
             return;
@@ -224,6 +286,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     || data.gameState.currentTurn !== gameState.currentTurn
                 ) {
                     gameState = data.gameState;
+                    votesByVoter.clear();
                     renderCurrentState();
                 }
             }
@@ -267,17 +330,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleGamePresenceChange(members) {
-        currentMembers = members || [];
+        currentMembers = onlineClient.getGameMembers() || members || [];
         updatePresenceUI();
 
-        // If Host: sync state to any newcomers
+        // If Host: sync state and active votes to any newcomers
         if (myRole === 'host' && currentMembers.length > 1) {
-            onlineClient.broadcastGameEvent(onlineGameId, 'sync', { gameState });
+            onlineClient.broadcastGameEvent(onlineGameId, 'sync', {
+                gameState,
+                votes: Array.from(votesByVoter.entries()),
+            });
         }
     }
 
     function handleGameMemberJoin(member) {
-        if (!currentMembers.some((m) => m.id === member.id)) {
+        const authoritativeMembers = onlineClient.getGameMembers();
+        if (authoritativeMembers) {
+            currentMembers = authoritativeMembers;
+        } else if (!currentMembers.some((m) => m.id === member.id)) {
             currentMembers.push(member);
         }
         updatePresenceUI();
@@ -287,6 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
             onlineClient.broadcastGameEvent(onlineGameId, 'sync', {
                 gameState,
                 guestId: member.role === 'guest' ? member.id : null,
+                votes: Array.from(votesByVoter.entries()),
             });
 
             // Update lobby status
@@ -296,12 +366,45 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleGameMemberLeave(member) {
-        currentMembers = currentMembers.filter((m) => m.id !== member.id);
+        const authoritativeMembers = onlineClient.getGameMembers();
+        if (authoritativeMembers) {
+            currentMembers = authoritativeMembers;
+        } else {
+            currentMembers = currentMembers.filter((m) => m.id !== member.id);
+        }
+        if (member && member.id && votesByVoter.has(member.id)) {
+            votesByVoter.delete(member.id);
+            renderCurrentState();
+        }
         updatePresenceUI();
     }
 
     async function handleCellClick(index) {
-        if (isLocked || isSpectating) return;
+        // Spectators can vote on empty cells during an active match
+        if (isSpectating) {
+            if (gameState.status !== 'in_progress' || gameState.board[index] !== null) {
+                return;
+            }
+
+            const voterId = onlineClient.clientId;
+            if (votesByVoter.get(voterId) === index) {
+                votesByVoter.delete(voterId);
+            } else {
+                votesByVoter.set(voterId, index);
+            }
+
+            const votedIndex = votesByVoter.get(voterId) ?? null;
+            renderCurrentState();
+            onlineClient.sendWhisperEvent('vote', {
+                voterId,
+                index: votedIndex,
+                turn: gameState.currentTurn,
+            });
+            boardView.announce(votedIndex !== null ? 'Voted for cell.' : 'Vote removed.');
+            return;
+        }
+
+        if (isLocked) return;
 
         if (mode === 'local') {
             try {
@@ -347,6 +450,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             try {
                 gameState = makeMove(gameState, index, mySymbol);
+                votesByVoter.clear();
                 renderCurrentState();
 
                 // Broadcast move peer-to-peer over WebSocket
@@ -438,6 +542,7 @@ document.addEventListener('DOMContentLoaded', () => {
         myRole = 'spectator';
         mySymbol = null;
         currentMembers = [];
+        votesByVoter.clear();
 
         modeButtons.forEach((btn) => {
             const isActive = btn.dataset.modeBtn === 'watch';
@@ -448,6 +553,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (watchDirectory) watchDirectory.style.display = 'none';
         if (gamePanel) gamePanel.style.display = 'flex';
         if (spectatorBar) spectatorBar.style.display = 'flex';
+        if (watcherInteractions) watcherInteractions.style.display = 'flex';
         if (onlineControls) onlineControls.style.display = 'none';
         if (difficultyGroup) difficultyGroup.style.display = 'none';
         if (restartBtn) restartBtn.style.display = 'none';
@@ -473,9 +579,11 @@ document.addEventListener('DOMContentLoaded', () => {
         onlineGameId = null;
         isSpectating = false;
         currentMembers = [];
+        votesByVoter.clear();
         updatePresenceUI();
 
         if (spectatorBar) spectatorBar.style.display = 'none';
+        if (watcherInteractions) watcherInteractions.style.display = 'none';
         if (gamePanel) gamePanel.style.display = 'none';
         if (watchDirectory) watchDirectory.style.display = 'block';
 
@@ -487,6 +595,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (gamePanel) gamePanel.style.display = 'none';
         if (watchDirectory) watchDirectory.style.display = 'block';
         if (spectatorBar) spectatorBar.style.display = 'none';
+        if (watcherInteractions) watcherInteractions.style.display = 'none';
         if (restartBtn) restartBtn.style.display = 'none';
 
         onlineClient.joinLobby({
@@ -539,6 +648,7 @@ document.addEventListener('DOMContentLoaded', () => {
             onlineGameId = null;
             isSpectating = false;
             currentMembers = [];
+            votesByVoter.clear();
             updatePresenceUI();
 
             if (window.location.pathname.startsWith('/games/')) {
@@ -552,7 +662,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (gamePanel) gamePanel.style.display = 'flex';
         if (watchDirectory) watchDirectory.style.display = 'none';
         if (spectatorBar) spectatorBar.style.display = 'none';
+        if (watcherInteractions) watcherInteractions.style.display = 'none';
         isSpectating = false;
+        votesByVoter.clear();
 
         if (mode === 'online') {
             if (!onlineGameId) {
@@ -685,6 +797,20 @@ document.addEventListener('DOMContentLoaded', () => {
         exitWatchBtn.addEventListener('click', () => exitSpectating());
     }
 
+    emojiButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const emoji = btn.dataset.emoji;
+            if (!emoji || !onlineGameId) return;
+
+            spawnFloatingEmoji(emoji);
+            onlineClient.sendWhisperEvent('reaction', {
+                emoji,
+                senderId: onlineClient.clientId,
+            });
+            boardView.announce(`Sent ${emoji} reaction.`);
+        });
+    });
+
     modeButtons.forEach((btn) => {
         btn.addEventListener('click', () => {
             switchMode(btn.dataset.modeBtn);
@@ -741,5 +867,11 @@ document.addEventListener('DOMContentLoaded', () => {
         renderCurrentState();
     }
 
-    window.addEventListener('beforeunload', stopGamePing);
+    function cleanupConnection() {
+        stopGamePing();
+        onlineClient.disconnect();
+    }
+
+    window.addEventListener('beforeunload', cleanupConnection);
+    window.addEventListener('pagehide', cleanupConnection);
 });

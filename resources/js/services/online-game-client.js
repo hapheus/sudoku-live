@@ -62,9 +62,27 @@ export class OnlineGameClient {
     }
 
     setAuthHeaders(headers = {}) {
-        if (this.echo && this.echo.connector && this.echo.connector.options && this.echo.connector.options.auth) {
+        if (!this.echo || !this.echo.connector) return;
+
+        if (this.echo.connector.options && this.echo.connector.options.auth) {
             Object.assign(this.echo.connector.options.auth.headers, headers);
         }
+
+        const pusherConfig = this.echo.connector.pusher && this.echo.connector.pusher.config;
+        if (pusherConfig) {
+            if (pusherConfig.channelAuthorization && pusherConfig.channelAuthorization.headers) {
+                Object.assign(pusherConfig.channelAuthorization.headers, headers);
+            }
+            if (pusherConfig.auth && pusherConfig.auth.headers) {
+                Object.assign(pusherConfig.auth.headers, headers);
+            }
+        }
+    }
+
+    getGameMembers() {
+        const membersMap = this.gameChannel?.subscription?.members?.members;
+        if (!membersMap) return null;
+        return Object.values(membersMap);
     }
 
     joinGameChannel(gameId, {
@@ -109,17 +127,18 @@ export class OnlineGameClient {
         return this.gameChannel;
     }
 
-    sendGamePing(payload = {}) {
+    sendWhisperEvent(type, data = {}) {
         if (this.gameChannel) {
             try {
-                this.gameChannel.whisper('game-event', {
-                    type: 'ping',
-                    data: payload,
-                });
+                this.gameChannel.whisper('game-event', { type, data });
             } catch {
                 // Ignore whisper failure if channel is not ready
             }
         }
+    }
+
+    sendGamePing(payload = {}) {
+        this.sendWhisperEvent('ping', payload);
     }
 
     async broadcastGameEvent(gameId, type, data = {}) {
