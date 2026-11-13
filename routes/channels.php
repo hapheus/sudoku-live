@@ -2,30 +2,25 @@
 
 declare(strict_types=1);
 
-use App\Models\Game;
 use Illuminate\Support\Facades\Broadcast;
 
-Broadcast::channel('games.{gameId}', function ($user, string $gameId): array|false {
-    $game = Game::find($gameId);
-    if (! $game) {
-        return false;
-    }
+Broadcast::channel('games.{gameId}', function ($user, string $gameId): array {
+    $role = request()->header('X-Player-Role') ?? request('role', 'spectator');
+    $symbol = request()->header('X-Player-Symbol') ?? request('symbol');
 
-    $token = $user?->token ?? request()->header('X-Participant-Token');
-    $role = is_string($token) ? $game->resolveRole($token) : null;
-
-    if ($role !== null) {
-        return [
-            'id' => (string) $user->getAuthIdentifier(),
-            'role' => $role,
-            'symbol' => $role === 'host' ? $game->host_symbol : $game->guest_symbol,
-        ];
-    }
-
-    // Spectator
     return [
         'id' => (string) $user->getAuthIdentifier(),
-        'role' => 'spectator',
-        'symbol' => null,
+        'role' => $role,
+        'symbol' => $symbol,
+    ];
+}, ['guards' => ['participant']]);
+
+Broadcast::channel('lobby', function ($user): array {
+    return [
+        'id' => (string) $user->getAuthIdentifier(),
+        'game_id' => request()->header('X-Game-Id') ?? request('game_id'),
+        'status' => request()->header('X-Status') ?? request('status', 'waiting'),
+        'moves_count' => (int) (request()->header('X-Moves-Count') ?? request('moves_count', 0)),
+        'created_at' => now()->toIso8601String(),
     ];
 }, ['guards' => ['participant']]);

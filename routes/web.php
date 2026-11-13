@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use App\Models\Game;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -10,9 +9,6 @@ Route::get('/', function () {
 })->name('home');
 
 Route::get('/games/{game}', function (string $game) {
-    // Verify game exists or return 404
-    Game::findOrFail($game);
-
     return view('game', [
         'mode' => 'online',
         'gameId' => $game,

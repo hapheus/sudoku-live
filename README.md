@@ -27,14 +27,14 @@ The application is mobile-first, privacy-friendly, zero-login, targets WCAG 2.2 
 - **Live Spectator Counter**: Live count of viewers watching each game in real time.
 - **Zero Database Load for Presence**: Managed entirely in-memory via Laravel Reverb Presence Channels (`presence-games.{id}`) without polling, heartbeats, or SQLite writes.
 - **Zero Heavy Frontend Frameworks**: Built with pure native CSS and vanilla ES modules (no Tailwind, Bootstrap, React, Vue, or Alpine).
-- **Self-Hosted Real-Time WebSockets**: Powered by Laravel Reverb without third-party hosted services or Redis dependencies.
-- **ACID Persistence & Concurrency**: SQLite with atomic versioned conditional updates preventing duplicate, conflicting, or out-of-order moves.
+- **100% Database-Free (Zero-DB Architecture)**: All gameplay state, moves, rules, and rooms operate entirely in the browser and in-memory WebSockets. No database setup, no migrations, no SQLite file needed.
+- **Self-Hosted Real-Time WebSockets**: Powered by Laravel Reverb without third-party hosted services, Redis, or external servers.
 
 ---
 
 ## Technology Stack
 
-- **Backend**: Laravel 13, PHP 8.4+, Laravel Reverb, SQLite
+- **Backend**: Laravel 13, PHP 8.4+, Laravel Reverb
 - **Frontend**: Laravel Blade, Vanilla JavaScript (ES modules), Native CSS, Laravel Echo, Vite
 - **Development**: Nix (`devenv`), `direnv`, Composer, Node.js & npm
 - **Testing & Quality**: PHPUnit, Vitest, Laravel Pint
@@ -43,12 +43,11 @@ The application is mobile-first, privacy-friendly, zero-login, targets WCAG 2.2 
 
 ## Requirements
 
-- PHP 8.4 or newer with `pdo_sqlite` and `mbstring` extensions
+- PHP 8.4 or newer with `mbstring` extension
 - Composer 2.x
 - Node.js 20+ and npm
-- SQLite 3
 
-Alternatively, use `devenv` / `direnv` for automated zero-install environment setup.
+Alternatively, use `devenv` / `direnv` or Docker Compose for automated zero-install environment setup.
 
 ---
 
@@ -63,11 +62,9 @@ cd tictacagro
 composer install
 npm install
 
-# 3. Prepare environment and database
+# 3. Prepare environment (Zero database setup required!)
 cp .env.example .env
 php artisan key:generate
-touch database/database.sqlite
-php artisan migrate
 
 # 4. Build frontend assets
 npm run build
@@ -177,7 +174,7 @@ Play against the computer as X:
 Run the backend and frontend test suites:
 
 ```bash
-# Run PHP backend and domain tests (40 tests)
+# Run PHP backend and domain tests (32 tests)
 php artisan test
 
 # Run JavaScript frontend and client-side AI tests (13 tests)

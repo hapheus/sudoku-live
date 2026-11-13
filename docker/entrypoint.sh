@@ -26,20 +26,9 @@ if ! grep -q "APP_KEY=base64:" .env && [ -z "$APP_KEY" ]; then
     php artisan key:generate --force
 fi
 
-# Ensure SQLite file exists
-mkdir -p database
-if [ ! -f database/database.sqlite ]; then
-    echo "Initializing database.sqlite..."
-    touch database/database.sqlite
-fi
-
 # Set proper ownership and permissions
-chown -R www-data:www-data storage bootstrap/cache database
-chmod -R 775 storage bootstrap/cache database
-
-# Run database migrations
-echo "Running migrations..."
-php artisan migrate --force
+chown -R www-data:www-data storage bootstrap/cache
+chmod -R 775 storage bootstrap/cache
 
 echo "Starting Web server and Reverb WebSocket server..."
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf

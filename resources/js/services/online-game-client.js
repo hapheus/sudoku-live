@@ -1,143 +1,29 @@
 import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
 
-// Make Pusher available in window for Echo
+// Make Pusher available globally for Echo
 window.Pusher = Pusher;
 
 export class OnlineGameClient {
-    constructor({
-        reverbConfig,
-        onStateUpdated,
-        onConnectionChange,
-        onPresenceChange,
-        onMemberJoin,
-        onMemberLeave,
-    }) {
+    constructor({ reverbConfig, onConnectionChange }) {
         this.reverbConfig = reverbConfig;
-        this.onStateUpdated = onStateUpdated || (() => {});
         this.onConnectionChange = onConnectionChange || (() => {});
-        this.onPresenceChange = onPresenceChange || (() => {});
-        this.onMemberJoin = onMemberJoin || (() => {});
-        this.onMemberLeave = onMemberLeave || (() => {});
         this.echo = null;
-        this.channel = null;
-        this.gameId = null;
-        this.token = null;
+        this.gameChannel = null;
+        this.lobbyChannel = null;
+        this.currentGameId = null;
+
+        // Persistent client id per browser session
+        this.clientId = sessionStorage.getItem('ttt_client_id');
+        if (!this.clientId) {
+            this.clientId = 'client_' + Math.random().toString(36).substring(2, 10);
+            sessionStorage.setItem('ttt_client_id', this.clientId);
+        }
     }
 
-    async createGame() {
-        const response = await fetch('/api/games', {
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-            },
-        });
-
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({}));
-            throw new Error(err.message || 'Failed to create game.');
-        }
-
-        return await response.json();
-    }
-
-    async joinGame(gameId, token = null) {
-        const headers = {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-        };
-        if (token) {
-            headers['X-Participant-Token'] = token;
-        }
-
-        const response = await fetch(`/api/games/${gameId}/join`, {
-            method: 'POST',
-            headers,
-        });
-
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({}));
-            throw new Error(err.message || 'Failed to join game.');
-        }
-
-        return await response.json();
-    }
-
-    async fetchGameState(gameId, token = null) {
-        const headers = { 'Accept': 'application/json' };
-        if (token) {
-            headers['X-Participant-Token'] = token;
-        }
-
-        const response = await fetch(`/api/games/${gameId}`, { headers });
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({}));
-            throw new Error(err.message || 'Failed to load game.');
-        }
-
-        const data = await response.json();
-        return data.state;
-    }
-
-    async fetchLiveGames() {
-        const response = await fetch('/api/games/live', {
-            headers: { 'Accept': 'application/json' },
-        });
-
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({}));
-            throw new Error(err.message || 'Failed to load live games.');
-        }
-
-        return await response.json();
-    }
-
-    async sendMove(gameId, token, index, expectedVersion) {
-        const response = await fetch(`/api/games/${gameId}/moves`, {
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'X-Participant-Token': token,
-            },
-            body: JSON.stringify({ index, expected_version: expectedVersion }),
-        });
-
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({}));
-            throw new Error(err.message || 'Move failed.');
-        }
-
-        const data = await response.json();
-        return data.state;
-    }
-
-    async requestRematch(gameId, token) {
-        const response = await fetch(`/api/games/${gameId}/rematch`, {
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'X-Participant-Token': token,
-            },
-        });
-
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({}));
-            throw new Error(err.message || 'Failed to request rematch.');
-        }
-
-        const data = await response.json();
-        return data.state;
-    }
-
-    subscribe(gameId, token = null) {
-        this.gameId = gameId;
-        this.token = token;
-
+    ensureEcho(customHeaders = {}) {
         if (this.echo) {
-            this.disconnect();
+            return this.echo;
         }
 
         const isHttps = this.reverbConfig.scheme === 'https' || window.location.protocol === 'https:';
@@ -146,10 +32,10 @@ export class OnlineGameClient {
             ? this.reverbConfig.host
             : (window.location.hostname || 'localhost');
 
-        const authHeaders = {};
-        if (token) {
-            authHeaders['X-Participant-Token'] = token;
-        }
+        const authHeaders = {
+            'X-Client-Id': this.clientId,
+            ...customHeaders,
+        };
 
         this.echo = new Echo({
             broadcaster: 'reverb',
@@ -165,50 +51,164 @@ export class OnlineGameClient {
             },
         });
 
-        // Connection status tracking
         const pusherConnection = this.echo.connector.pusher.connection;
         this.onConnectionChange(pusherConnection.state);
 
         pusherConnection.bind('state_change', (states) => {
             this.onConnectionChange(states.current);
-
-            // Reconnected: fetch latest authoritative state in case events were missed
-            if (states.current === 'connected' && states.previous !== 'connecting') {
-                this.fetchGameState(this.gameId, this.token)
-                    .then((state) => this.onStateUpdated(state))
-                    .catch(() => {});
-            }
         });
 
-        // Presence Channel: tracks active players and spectators in real time with zero DB writes
-        this.channel = this.echo.join(`games.${gameId}`);
-
-        this.channel
-            .here((members) => {
-                this.onPresenceChange(members);
-            })
-            .joining((member) => {
-                this.onMemberJoin(member);
-            })
-            .leaving((member) => {
-                this.onMemberLeave(member);
-            })
-            .listen('.GameUpdated', (payload) => {
-                if (payload && payload.state) {
-                    this.onStateUpdated(payload.state);
-                }
-            });
+        return this.echo;
     }
 
-    disconnect() {
-        if (this.channel && this.gameId && this.echo) {
+    setAuthHeaders(headers = {}) {
+        if (this.echo && this.echo.connector && this.echo.connector.options && this.echo.connector.options.auth) {
+            Object.assign(this.echo.connector.options.auth.headers, headers);
+        }
+    }
+
+    joinGameChannel(gameId, {
+        role = 'spectator',
+        symbol = null,
+        onEvent = () => {},
+        onPresenceChange = () => {},
+        onMemberJoin = () => {},
+        onMemberLeave = () => {},
+    } = {}) {
+        this.leaveGameChannel();
+
+        this.currentGameId = gameId;
+        this.ensureEcho({
+            'X-Player-Role': role,
+            'X-Player-Symbol': symbol || '',
+            'X-Game-Id': gameId,
+        });
+        this.setAuthHeaders({
+            'X-Player-Role': role,
+            'X-Player-Symbol': symbol || '',
+            'X-Game-Id': gameId,
+        });
+
+        this.gameChannel = this.echo.join(`games.${gameId}`);
+
+        this.gameChannel
+            .here((members) => onPresenceChange(members))
+            .joining((member) => onMemberJoin(member))
+            .leaving((member) => onMemberLeave(member))
+            .listen('.GameBroadcastEvent', (payload) => {
+                if (payload && payload.type) {
+                    onEvent(payload.type, payload.data);
+                }
+            })
+            .listenForWhisper('game-event', (payload) => {
+                if (payload && payload.type) {
+                    onEvent(payload.type, payload.data);
+                }
+            });
+
+        return this.gameChannel;
+    }
+
+    async broadcastGameEvent(gameId, type, data = {}) {
+        // 1. Whisper directly peer-to-peer over WebSocket
+        if (this.gameChannel) {
             try {
-                this.echo.leave(`games.${this.gameId}`);
+                this.gameChannel.whisper('game-event', { type, data });
+            } catch {
+                // Ignore whisper failure
+            }
+        }
+
+        // 2. Stateless HTTP broadcast relay to ensure 100% delivery
+        try {
+            await fetch(`/api/games/${gameId}/events`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-Client-Id': this.clientId,
+                },
+                body: JSON.stringify({ type, data }),
+            });
+        } catch {
+            // Ignore HTTP relay error
+        }
+    }
+
+    joinLobby({
+        gameId = null,
+        status = 'waiting',
+        movesCount = 0,
+        onLobbyPresenceChange = () => {},
+        onLobbyMemberJoin = () => {},
+        onLobbyMemberLeave = () => {},
+        onLobbyUpdate = () => {},
+    } = {}) {
+        this.leaveLobby();
+
+        this.ensureEcho({
+            'X-Game-Id': gameId || '',
+            'X-Status': status,
+            'X-Moves-Count': movesCount.toString(),
+        });
+        this.setAuthHeaders({
+            'X-Game-Id': gameId || '',
+            'X-Status': status,
+            'X-Moves-Count': movesCount.toString(),
+        });
+
+        this.lobbyChannel = this.echo.join('lobby');
+
+        this.lobbyChannel
+            .here((members) => onLobbyPresenceChange(members))
+            .joining((member) => onLobbyMemberJoin(member))
+            .leaving((member) => onLobbyMemberLeave(member))
+            .listenForWhisper('lobby-update', (data) => onLobbyUpdate(data));
+
+        return this.lobbyChannel;
+    }
+
+    broadcastLobbyUpdate(gameId, status, movesCount) {
+        if (this.lobbyChannel) {
+            try {
+                this.lobbyChannel.whisper('lobby-update', {
+                    id: this.clientId,
+                    game_id: gameId,
+                    status,
+                    moves_count: movesCount,
+                });
+            } catch {
+                // Ignore whisper error
+            }
+        }
+    }
+
+    leaveGameChannel() {
+        if (this.gameChannel && this.currentGameId && this.echo) {
+            try {
+                this.echo.leave(`games.${this.currentGameId}`);
             } catch {
                 // Ignore
             }
-            this.channel = null;
+            this.gameChannel = null;
+            this.currentGameId = null;
         }
+    }
+
+    leaveLobby() {
+        if (this.lobbyChannel && this.echo) {
+            try {
+                this.echo.leave('lobby');
+            } catch {
+                // Ignore
+            }
+            this.lobbyChannel = null;
+        }
+    }
+
+    disconnect() {
+        this.leaveGameChannel();
+        this.leaveLobby();
         if (this.echo) {
             try {
                 this.echo.disconnect();
