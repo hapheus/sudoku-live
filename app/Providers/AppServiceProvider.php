@@ -27,13 +27,21 @@ class AppServiceProvider extends ServiceProvider
         Auth::viaRequest('participant', function (Request $request) {
             $token = $request->header('X-Participant-Token') ?? $request->input('participant_token');
 
-            if (! is_string($token) || $token === '') {
-                return null;
+            if (is_string($token) && $token !== '') {
+                return new GenericUser([
+                    'id' => hash('sha256', $token),
+                    'token' => $token,
+                    'is_spectator' => false,
+                ]);
             }
 
+            // Spectators without participant token get an anonymous spectator identity
+            $spectatorId = $request->header('X-Spectator-Id') ?? ('spectator_'.bin2hex(random_bytes(8)));
+
             return new GenericUser([
-                'id' => hash('sha256', $token),
-                'token' => $token,
+                'id' => $spectatorId,
+                'token' => null,
+                'is_spectator' => true,
             ]);
         });
     }

@@ -18,10 +18,14 @@ The application is mobile-first, privacy-friendly, zero-login, targets WCAG 2.2 
 
 - **Mobile-First & Touch-First**: Responsive layout with minimum 44×44px interactive touch targets, square centering, and landscape/portrait adaptation.
 - **Accessible (Targeting WCAG 2.2 AA)**: Semantic HTML grid, native buttons, accessible cell coordinate labels (e.g., *"Row 1, Column 1, empty"*), `aria-live` turn and result announcements, high-contrast focus rings, visual win markers (not color alone), and `prefers-reduced-motion` support.
-- **Three Game Modes**:
+- **Four Game Modes**:
   1. **Local 2-Player**: Play on the same screen offline without network latency.
   2. **Computer Opponent (AI)**: Three levels (Easy, Medium, and an unbeatable Hard algorithm powered by Minimax).
   3. **Real-Time Online Multiplayer**: Zero-registration room creation, cryptographically secure invitation links, authoritative server state, and optimistic real-time sync.
+  4. **Live Spectator Watch Mode**: Browse all active public online matches in real time and watch live moves as they happen.
+- **Real-Time Presence & Opponent Tracking**: Instant visual indicator showing whether your opponent is connected or disconnected.
+- **Live Spectator Counter**: Live count of viewers watching each game in real time.
+- **Zero Database Load for Presence**: Managed entirely in-memory via Laravel Reverb Presence Channels (`presence-games.{id}`) without polling, heartbeats, or SQLite writes.
 - **Zero Heavy Frontend Frameworks**: Built with pure native CSS and vanilla ES modules (no Tailwind, Bootstrap, React, Vue, or Alpine).
 - **Self-Hosted Real-Time WebSockets**: Powered by Laravel Reverb without third-party hosted services or Redis dependencies.
 - **ACID Persistence & Concurrency**: SQLite with atomic versioned conditional updates preventing duplicate, conflicting, or out-of-order moves.
@@ -134,8 +138,14 @@ Play against the computer as X:
 - **Create**: Click *Online* to generate a new game with a unique invite URL.
 - **Share**: Copy and send the link to a second player.
 - **Join**: The second player opens the link and joins immediately as player O.
-- **Play**: Moves are validated server-side and broadcast in real time over private Reverb channels.
+- **Play**: Moves are validated server-side and broadcast in real time over Reverb presence channels.
+- **Opponent Status**: A presence badge shows in real time whether the opponent is currently connected (🟢) or disconnected (🔴).
 - **Rematch**: Either player can request a rematch; the board resets once both agree.
+
+### 4. Live Spectator Watch Mode
+- **Browse**: Switch to the *Watch* tab to list all active games (`waiting` or `in_progress`).
+- **Spectate**: Click *Watch Live* to view any running match in real time with locked controls.
+- **Spectator Counter**: Real-time counter displays how many spectators are currently watching the game.
 
 ---
 
@@ -151,11 +161,13 @@ Play against the computer as X:
                                             (Dispatches Event)
                                                      v
 [Browser B (Guest)] <-- (Reverb WebSocket) <-- [Laravel Reverb]
+[Spectator Browsers]<-- (Presence Channel) <-- [presence-games.{id}]
 ```
 
 - **Commands via HTTP**: Move submissions, game creation, and joins are transactional HTTP requests.
-- **State Notifications via WebSockets**: Committed state changes are broadcast over private channel `private-games.{id}`.
-- **Lightweight Capability Authorization**: Each player receives a cryptographically secure 256-bit token. Channel subscriptions and move commands require authorization without user registration.
+- **State Notifications via WebSockets**: Committed state changes are broadcast over presence channel `presence-games.{id}`.
+- **Presence & Spectators (Zero DB Load)**: Member connections, leaves, and spectator counts are tracked directly in-memory by Laravel Reverb without writing periodic heartbeats or polling SQLite.
+- **Lightweight Capability Authorization**: Each player receives a cryptographically secure 256-bit token. Channel subscriptions and move commands require authorization without user registration. Anonymous spectators are granted read-only access to presence channels.
 - **Concurrency & Reconnects**: SQLite uses atomic `WHERE version = :expected_version` checks. Clients refetch the authoritative state over HTTP upon reconnecting.
 
 ---
@@ -165,7 +177,7 @@ Play against the computer as X:
 Run the backend and frontend test suites:
 
 ```bash
-# Run PHP backend and domain tests (38 tests)
+# Run PHP backend and domain tests (40 tests)
 php artisan test
 
 # Run JavaScript frontend and client-side AI tests (13 tests)

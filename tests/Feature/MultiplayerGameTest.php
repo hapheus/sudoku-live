@@ -276,19 +276,23 @@ final class MultiplayerGameTest extends TestCase
         $gameId = $createResponse->json('game_id');
         $hostToken = $createResponse->json('participant_token');
 
-        // Unauthorized when token missing
-        $unauth = $this->post('/broadcasting/auth', [
-            'channel_name' => "private-games.{$gameId}",
-            'socket_id' => '1234.5678',
-        ]);
-        $unauth->assertStatus(403);
-
-        // Authorized with valid host token
-        $auth = $this->withHeader('X-Participant-Token', $hostToken)
+        // Authorized with valid host token as player (role: host)
+        $playerAuth = $this->withHeader('X-Participant-Token', $hostToken)
             ->post('/broadcasting/auth', [
-                'channel_name' => "private-games.{$gameId}",
+                'channel_name' => "presence-games.{$gameId}",
                 'socket_id' => '1234.5678',
             ]);
-        $auth->assertOk();
+        $playerAuth->assertOk();
+        $this->assertStringContainsString('host', (string) $playerAuth->json('channel_data'));
+
+        // Authorized without participant token as spectator (role: spectator)
+        $this->flushHeaders();
+        app('auth')->forgetGuards();
+        $spectatorAuth = $this->post('/broadcasting/auth', [
+            'channel_name' => "presence-games.{$gameId}",
+            'socket_id' => '1234.5678',
+        ]);
+        $spectatorAuth->assertOk();
+        $this->assertStringContainsString('spectator', (string) $spectatorAuth->json('channel_data'));
     }
 }
