@@ -8,7 +8,13 @@ const DIFFICULTY_LABELS = {
     expert: 'Expert',
 };
 
-export function WatchDirectory({ rooms, onRefresh, onWatchGame }) {
+export function WatchDirectory({
+    rooms,
+    connectionStatus = 'connected',
+    onReconnect = null,
+    onRefresh,
+    onWatchGame,
+}) {
     const seenGameIds = new Set();
     const liveGames = [];
 
@@ -23,23 +29,50 @@ export function WatchDirectory({ rooms, onRefresh, onWatchGame }) {
         liveGames.push(room);
     }
 
+    const canReconnect = connectionStatus === 'failed' || connectionStatus === 'disconnected' || connectionStatus === 'unavailable';
+    const connectionLabels = {
+        connected: 'Live',
+        connecting: 'Connecting...',
+        unavailable: 'Offline',
+        failed: 'Connection lost',
+        disconnected: 'Disconnected',
+    };
+
     return (
         <section id="watch-directory" className="watch-box" aria-label="Live Games Directory">
             <div className="watch-box__header">
                 <h2 className="watch-box__title">Live Sudoku Matches</h2>
-                <button
-                    type="button"
-                    id="refresh-live-games-btn"
-                    className="watch-box__refresh-btn"
-                    onClick={onRefresh}
-                >
-                    Refresh
-                </button>
+                <div className="watch-box__actions">
+                    <span className={`connection-badge connection-badge--${connectionStatus}`} aria-live="polite">
+                        {connectionLabels[connectionStatus] || connectionStatus}
+                    </span>
+                    {canReconnect && onReconnect && (
+                        <button
+                            type="button"
+                            className="connection-retry-btn"
+                            onClick={onReconnect}
+                        >
+                            Reconnect
+                        </button>
+                    )}
+                    <button
+                        type="button"
+                        id="refresh-live-games-btn"
+                        className="watch-box__refresh-btn"
+                        onClick={onRefresh}
+                    >
+                        Refresh
+                    </button>
+                </div>
             </div>
             <div id="live-games-list" className="live-games-list" role="feed">
                 {liveGames.length === 0 ? (
                     <div className="watch-empty">
-                        <p className="live-game-card__meta">No live Sudoku matches right now.</p>
+                        <p className="live-game-card__meta">
+                            {canReconnect
+                                ? 'Not connected to the live server right now.'
+                                : 'No live Sudoku matches right now.'}
+                        </p>
                         <p className="watch-empty__sub">
                             Start a Solo or Online Co-op game and it will appear here in real time.
                         </p>

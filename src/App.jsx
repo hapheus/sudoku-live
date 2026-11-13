@@ -343,10 +343,13 @@ export function App() {
                 const localFilled = cur.gameState.filledCount || 0;
                 const remoteInitial = data.gameState.givens?.filter(Boolean).length || 0;
                 const localInitial = cur.gameState.givens?.filter(Boolean).length || 0;
+                const boardsDiffer = Array.isArray(data.gameState.board)
+                    && data.gameState.board.some((v, idx) => v !== cur.gameState.board[idx]);
 
                 const shouldRecoverHost = cur.myRole === 'host' && localFilled <= localInitial && remoteFilled > localFilled;
                 const shouldAdoptRemote = cur.myRole !== 'host' && (
-                    remoteFilled !== localFilled
+                    boardsDiffer
+                    || remoteFilled !== localFilled
                     || remoteInitial !== localInitial
                     || data.gameState.status !== cur.gameState.status
                     || data.rematchRequestedBy !== cur.rematchRequestedBy
@@ -472,6 +475,7 @@ export function App() {
     const spectateGame = useCallback((gameId) => {
         if (!isValidGameId(gameId)) return;
 
+        onlineClientRef.current?.leaveLobby();
         setCurrentMembers([]);
         setHintsMap(new Map());
         setRematchRequestedBy(null);
@@ -1400,6 +1404,8 @@ export function App() {
             {mode === 'watch' && !isSpectating && (
                 <WatchDirectory
                     rooms={activeLobbyRooms}
+                    connectionStatus={connectionStatus}
+                    onReconnect={handleReconnect}
                     onRefresh={openWatchDirectory}
                     onWatchGame={spectateGame}
                 />
@@ -1457,16 +1463,18 @@ export function App() {
                 </section>
             )}
 
-            <StatusBanner
-                connectionStatus={connectionStatus}
-                mode={mode}
-                isSpectating={isSpectating}
-                myRole={myRole}
-                currentMembers={currentMembers}
-                spectatedGameMode={spectatedGameMode}
-                gameState={gameState}
-                onReconnect={handleReconnect}
-            />
+            {showBoard && (
+                <StatusBanner
+                    connectionStatus={connectionStatus}
+                    mode={mode}
+                    isSpectating={isSpectating}
+                    myRole={myRole}
+                    currentMembers={currentMembers}
+                    spectatedGameMode={spectatedGameMode}
+                    gameState={gameState}
+                    onReconnect={handleReconnect}
+                />
+            )}
 
             {showBoard && (
                 <SudokuBoard

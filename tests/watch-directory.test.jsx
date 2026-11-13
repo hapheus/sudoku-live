@@ -35,4 +35,23 @@ describe('WatchDirectory React component', () => {
         fireEvent.click(watchButtons[0]);
         expect(onWatch).toHaveBeenCalledWith('solo-room-1');
     });
+
+    it('renders offline notice and Reconnect button when disconnected', () => {
+        const onReconnect = vi.fn();
+        render(
+            <WatchDirectory
+                rooms={[]}
+                connectionStatus="disconnected"
+                onReconnect={onReconnect}
+                onRefresh={vi.fn()}
+                onWatchGame={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByText('Disconnected')).toBeInTheDocument();
+        expect(screen.getByText('Not connected to the live server right now.')).toBeInTheDocument();
+        const reconnectBtn = screen.getByRole('button', { name: 'Reconnect' });
+        fireEvent.click(reconnectBtn);
+        expect(onReconnect).toHaveBeenCalledTimes(1);
+    });
 });
