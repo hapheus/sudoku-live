@@ -1700,3 +1700,176 @@ input:focus-visible {
         border: 2px solid ButtonText;
     }
 }
+
+/* Focused game shell: calm emerald palette with full Solo, Watch Live, Hints & Co-op support. */
+:root {
+    --color-bg: #101b1a;
+    --color-surface: #182624;
+    --color-surface-elevated: #223531;
+    --color-surface-hover: #253c37;
+    --color-border: #344b45;
+    --color-grid-box: #82958a;
+    --color-grid-cell: #344b45;
+    --color-text: #f2f1e8;
+    --color-text-muted: #a5b6aa;
+    --color-given: #f2f1e8;
+    --color-user: #b9e7bd;
+    --color-primary: #b9e7bd;
+    --color-primary-dark: #93c99b;
+    --color-focus: #b9e7bd;
+    --color-peer: #243b33;
+    --board-max-size: 460px;
+}
+
+body {
+    padding: calc(0.75rem + env(safe-area-inset-top, 0px)) calc(0.75rem + env(safe-area-inset-right, 0px)) calc(1.5rem + env(safe-area-inset-bottom, 0px)) calc(0.75rem + env(safe-area-inset-left, 0px));
+}
+
+.splash-screen {
+    min-height: calc(100svh - 2.25rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 24px;
+    background: radial-gradient(ellipse at 50% 35%, #223c31 0%, transparent 60%);
+    animation: game-enter 650ms ease both;
+}
+
+.splash-art {
+    width: 144px;
+    height: 144px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 5px;
+    margin-bottom: 36px;
+    transform: rotate(-8deg);
+}
+
+.splash-art span {
+    display: grid;
+    place-items: center;
+    border: 1px solid #536e5e;
+    border-radius: 9px;
+    color: #cad5c4;
+    font-size: 23px;
+    font-weight: 400;
+}
+
+.splash-art .splash-art__center {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: var(--color-bg);
+    box-shadow: 0 0 40px #b9e7bd22;
+}
+
+.splash-title {
+    font-size: clamp(2.6rem, 8vw, 3.5rem);
+    font-weight: 500;
+    letter-spacing: -0.065em;
+    line-height: 1.1;
+}
+
+.splash-tagline {
+    color: var(--color-text-muted);
+    margin-top: 14px;
+    font-size: 1rem;
+    letter-spacing: 0.025em;
+    text-align: center;
+}
+
+.splash-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    margin-top: 44px;
+}
+
+.splash-play {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    gap: 54px;
+    min-height: 56px;
+    min-width: 212px;
+    padding: 14px 28px;
+    border: 0;
+    border-radius: 100px;
+    background: var(--color-primary);
+    color: var(--color-bg);
+    font: 600 1rem var(--font-sans);
+    cursor: pointer;
+    transition: background 150ms ease, transform 150ms ease;
+}
+
+.splash-play:hover { background: #d0f2cf; }
+.splash-play:active { transform: scale(0.97); }
+.splash-play span { font-size: 24px; line-height: 1; }
+
+.splash-watch {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 46px;
+    min-width: 212px;
+    padding: 10px 24px;
+    border: 1px solid var(--color-border);
+    border-radius: 100px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    font: 600 0.9375rem var(--font-sans);
+    cursor: pointer;
+    transition: background 150ms ease, border-color 150ms ease;
+}
+
+.splash-watch:hover {
+    background: var(--color-surface-hover);
+    border-color: var(--color-primary);
+}
+
+.app-container {
+    max-width: 500px;
+    gap: 0.75rem;
+    animation: game-enter 300ms ease both;
+}
+
+.status-badge--active-turn {
+    border-color: rgba(185, 231, 189, 0.45);
+}
+
+.sudoku-board {
+    border-radius: 6px;
+    border-width: 2px;
+    box-shadow: none;
+    background: var(--color-surface);
+}
+.sudoku-cell--given { background: transparent; }
+.sudoku-cell--given .sudoku-cell__digit { font-weight: 500; }
+.sudoku-cell__digit { font-size: clamp(1.15rem, 4.8vw, 1.65rem); }
+.sudoku-cell--peer { background: #243b33; }
+.sudoku-cell--partner-cursor { background: var(--color-partner-bg); }
+.sudoku-cell--hinted { background: var(--color-hint-bg); }
+.sudoku-cell--same-digit { background: #365642; outline-color: #92c99b; }
+.sudoku-cell--same-digit.sudoku-cell--given .sudoku-cell__digit,
+.sudoku-cell--same-digit.sudoku-cell--user .sudoku-cell__digit { color: #e3f3d9; }
+.sudoku-cell--selected { background: #3b614a !important; }
+.sudoku-cell__note--match { background: #365642; color: #e3f3d9; }
+.tool-btn--active { background: #2b4836; color: var(--color-primary); border-color: var(--color-primary); }
+.numpad-btn__digit { color: var(--color-primary); }
+.numpad-btn--active, .numpad-btn--matched { background: #2b4836; border-color: var(--color-primary); }
+.btn-primary:hover:not(:disabled) { background: #d0f2cf; color: var(--color-bg); }
+
+@keyframes game-enter {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 499px) {
+    .numpad, .numpad--6x6 { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.35rem; }
+    .numpad-btn { min-height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .splash-screen, .app-container { animation: none; }
+}

@@ -29,6 +29,7 @@ import { ALLOWED_REACTIONS, aggregateHintsByCell } from './utils/watcher-helpers
 import { ModeTabs } from './components/ModeTabs.jsx';
 import { VariantSelector } from './components/VariantSelector.jsx';
 import { DifficultySelector } from './components/DifficultySelector.jsx';
+import messages from './locales/en.json';
 import { WatchDirectory } from './components/WatchDirectory.jsx';
 import { StatusBanner } from './components/StatusBanner.jsx';
 import { SudokuBoard } from './components/SudokuBoard.jsx';
@@ -87,6 +88,9 @@ function replaceBrowserUrl(path) {
 export function App() {
     const initialRoute = useMemo(() => parseInitialRoute(), []);
 
+    const [hasStarted, setHasStarted] = useState(() => Boolean(
+        initialRoute.initialGameId || initialRoute.initialWatch || initialRoute.initialMode === 'watch',
+    ));
     const [difficulty, setDifficulty] = useState(() => localStorage.getItem('sudoku_difficulty') || 'medium');
     const [variant, setVariant] = useState(() => normalizeVariant(localStorage.getItem('sudoku_variant') || '3x3'));
     const [mode, setMode] = useState(initialRoute.initialMode);
@@ -758,7 +762,7 @@ export function App() {
     // 1-second puzzle clock & periodic solo persistence
     useEffect(() => {
         const timer = setInterval(() => {
-            if (typeof document !== 'undefined' && document.hidden) {
+            if (!hasStarted || (typeof document !== 'undefined' && document.hidden)) {
                 return;
             }
             if (stateRef.current.isHelpOpen || stateRef.current.pendingConfirm) {
@@ -777,7 +781,7 @@ export function App() {
             });
         }, 1000);
         return () => clearInterval(timer);
-    }, []);
+    }, [hasStarted]);
 
     // 5-second state reconciliation & lobby heartbeat
     useEffect(() => {
@@ -1333,7 +1337,7 @@ export function App() {
     // Keyboard shortcuts & grid arrow navigation (both 9x9 and 6x6)
     useEffect(() => {
         const handleKeyDown = (e) => {
-            if (isHelpOpen || pendingConfirm) return;
+            if (!hasStarted || isHelpOpen || pendingConfirm) return;
             if (mode === 'watch' && !isSpectating) return;
             if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
 
@@ -1407,7 +1411,7 @@ export function App() {
 
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [applyPlayerDigit, focusCell, handleUndo, isHelpOpen, isSpectating, mode, pendingConfirm, selectedIndex, sendSpectatorHint]);
+    }, [hasStarted, applyPlayerDigit, focusCell, handleUndo, isHelpOpen, isSpectating, mode, pendingConfirm, selectedIndex, sendSpectatorHint]);
 
     const showBoard = mode !== 'watch' || isSpectating;
     const showHints = mode === 'solo' || mode === 'online' || isSpectating;
@@ -1441,6 +1445,39 @@ export function App() {
         } else if (rematchRequestedBy) {
             restartLabel = 'Accept New Puzzle';
         }
+    }
+
+    if (!hasStarted) {
+        return (
+            <main className="splash-screen">
+                <div className="splash-art" aria-hidden="true">
+                    {[1, 0, 3, 0, 5, 0, 7, 0, 9].map((digit, index) => (
+                        <span key={index} className={digit === 5 ? 'splash-art__center' : ''}>{digit || ''}</span>
+                    ))}
+                </div>
+                <h1 className="splash-title">{messages.gameTitle}</h1>
+                <p className="splash-tagline">{messages.splashTagline}</p>
+                <div className="splash-actions">
+                    <button className="splash-play" type="button" onClick={() => {
+                        setHasStarted(true);
+                        setSelectedIndex(0);
+                        requestAnimationFrame(() => cellRefs.current[0]?.focus());
+                    }}>
+                        {messages.play}<span aria-hidden="true">↗</span>
+                    </button>
+                    <button
+                        className="splash-watch"
+                        type="button"
+                        onClick={() => {
+                            setHasStarted(true);
+                            switchMode('watch');
+                        }}
+                    >
+                        Watch Live &amp; Co-op
+                    </button>
+                </div>
+            </main>
+        );
     }
 
     return (
