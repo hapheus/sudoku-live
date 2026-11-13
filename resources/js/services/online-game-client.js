@@ -109,6 +109,19 @@ export class OnlineGameClient {
         return this.gameChannel;
     }
 
+    sendGamePing(payload = {}) {
+        if (this.gameChannel) {
+            try {
+                this.gameChannel.whisper('game-event', {
+                    type: 'ping',
+                    data: payload,
+                });
+            } catch {
+                // Ignore whisper failure if channel is not ready
+            }
+        }
+    }
+
     async broadcastGameEvent(gameId, type, data = {}) {
         // 1. Whisper directly peer-to-peer over WebSocket
         if (this.gameChannel) {
