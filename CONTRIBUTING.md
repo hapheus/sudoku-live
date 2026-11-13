@@ -44,11 +44,14 @@ Keep commits atomic, meaningful, and descriptive. Never commit secrets, local `.
 2. Initialize environment:
    ```bash
    cp .env.example .env
-   composer install
    npm install
-   php artisan key:generate
    ```
-3. With `devenv` / `direnv`:
+3. Start Centrifugo and the Vite dev server:
+   ```bash
+   docker compose up centrifugo -d
+   npm run dev
+   ```
+4. Or with `devenv` / `direnv`:
    ```bash
    direnv allow
    devenv up
@@ -58,23 +61,23 @@ Keep commits atomic, meaningful, and descriptive. Never commit secrets, local `.
 
 ## Testing & Verification Standards
 
-Before opening a pull request, ensure all tests and style checks pass:
+Before opening a pull request, ensure all tests, builds, and container checks pass:
 
-1. **Backend Tests**:
-   ```bash
-   php artisan test
-   ```
-2. **Frontend Tests**:
+1. **Unit & Component Tests (Vitest)**:
    ```bash
    npm run test
    ```
-3. **Code Style (Laravel Pint)**:
-   ```bash
-   ./vendor/bin/pint --test
-   ```
-4. **Vite Production Build**:
+2. **Vite Production Build**:
    ```bash
    npm run build
+   ```
+3. **Capacitor CLI Check**:
+   ```bash
+   npx cap ls
+   ```
+4. **Centrifugo & Docker Compose Validation**:
+   ```bash
+   docker compose config -q
    ```
 
 ---

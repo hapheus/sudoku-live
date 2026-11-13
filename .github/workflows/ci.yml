@@ -7,30 +7,8 @@ on:
     branches: [main, develop]
 
 jobs:
-  backend:
-    name: PHP (Pint & PHPUnit)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.4'
-          extensions: mbstring
-          coverage: none
-
-      - name: Install Composer dependencies
-        run: composer install --no-interaction --prefer-dist --no-progress
-
-      - name: Check code style with Pint
-        run: ./vendor/bin/pint --test
-
-      - name: Run PHPUnit tests
-        run: php artisan test
-
   frontend:
-    name: JS (Vitest & Vite Build)
+    name: React + Vite (Vitest & Build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

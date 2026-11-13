@@ -1,0 +1,32 @@
+import { getCellCoords } from '../domain/sudoku-generator.js';
+
+export function getSudokuCellAriaLabel(index, value, {
+    isGiven = false,
+    isConflict = false,
+    notes = [],
+    hint = null,
+} = {}) {
+    const { row, col } = getCellCoords(index);
+    const parts = [`Row ${row + 1}, Column ${col + 1}`];
+
+    if (value >= 1 && value <= 9) {
+        parts.push(isGiven ? `given ${value}` : `${value}`);
+    } else {
+        parts.push('empty');
+        if (notes && notes.length > 0) {
+            parts.push(`notes ${notes.join(', ')}`);
+        }
+    }
+
+    if (isConflict) {
+        parts.push('conflict');
+    }
+
+    if (hint && hint.topValue) {
+        parts.push(`spectator hint ${hint.topValue}`);
+    } else if (hint) {
+        parts.push('spectator nudge');
+    }
+
+    return parts.join(', ');
+}

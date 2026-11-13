@@ -11,29 +11,15 @@ services:
     ports:
       - "8000:8000"
     environment:
-      APP_NAME: "Sudoku Live"
-      APP_ENV: local
-      APP_DEBUG: "true"
-      APP_KEY: "base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-      APP_URL: "http://localhost:8000"
-      CACHE_STORE: file
-      SESSION_DRIVER: cookie
-      BROADCAST_CONNECTION: null
-      QUEUE_CONNECTION: sync
-      # Internal app -> centrifugo container communication
-      CENTRIFUGO_INTERNAL_URL: "http://centrifugo:8080"
-      CENTRIFUGO_API_KEY: "sudokulive-api-key"
-      CENTRIFUGO_HMAC_SECRET: "sudokulive-hmac-secret-change-me-32bytes"
-      # Public browser -> host-mapped Centrifugo port
-      CENTRIFUGO_PUBLIC_HOST: "localhost"
-      CENTRIFUGO_PUBLIC_PORT: "8081"
-      CENTRIFUGO_PUBLIC_SCHEME: "http"
+      WS_HOST: "localhost"
+      WS_PORT: "8081"
+      WS_SCHEME: "http"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/up"]
       interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 5s
 
   centrifugo:
     image: centrifugo/centrifugo:v6
@@ -45,8 +31,6 @@ services:
     volumes:
       - ./docker/centrifugo/config.json:/centrifugo/config.json:ro
     environment:
-      CENTRIFUGO_HTTP_API_KEY: "sudokulive-api-key"
-      CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY: "sudokulive-hmac-secret-change-me-32bytes"
       CENTRIFUGO_CLIENT_ALLOWED_ORIGINS: "*"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]

@@ -1,0 +1,16 @@
+{
+  "name": "Sudoku Live",
+  "short_name": "Sudoku Live",
+  "description": "Real-time Co-op & Spectator Sudoku powered by Centrifugo",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

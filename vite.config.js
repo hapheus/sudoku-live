@@ -1,20 +1,16 @@
 import { defineConfig } from 'vite';
-import laravel from 'laravel-vite-plugin';
+import react from '@vitejs/plugin-react';
 
 export default defineConfig({
-    plugins: [
-        laravel({
-            input: ['resources/css/app.css', 'resources/js/app.js'],
-            refresh: true,
-        }),
-    ],
-    server: {
-        watch: {
-            ignored: ['**/storage/framework/views/**'],
-        },
+    plugins: [react()],
+    build: {
+        outDir: 'dist',
+        emptyOutDir: true,
     },
     test: {
         environment: 'jsdom',
         globals: true,
+        setupFiles: ['./tests/setup.js'],
+        include: ['tests/**/*.test.{js,jsx}'],
     },
 });

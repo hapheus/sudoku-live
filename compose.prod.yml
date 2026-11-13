@@ -12,24 +12,10 @@ services:
       - default
       - cf-tunnel-net
     environment:
-      APP_NAME: "Sudoku Live"
-      APP_ENV: production
-      APP_DEBUG: "false"
-      APP_KEY: ${APP_KEY:?Set APP_KEY (e.g. php artisan key:generate --show)}
-      APP_URL: "https://sudoku.${DOMAIN_NAME:?Set DOMAIN_NAME}"
-      CACHE_STORE: file
-      SESSION_DRIVER: cookie
-      SESSION_SECURE_COOKIE: "true"
-      BROADCAST_CONNECTION: null
-      QUEUE_CONNECTION: sync
-      # Internal Docker network communication (app -> centrifugo:8080)
-      CENTRIFUGO_INTERNAL_URL: "http://centrifugo:8080"
-      CENTRIFUGO_API_KEY: ${CENTRIFUGO_API_KEY:?Set CENTRIFUGO_API_KEY}
-      CENTRIFUGO_HMAC_SECRET: ${CENTRIFUGO_HMAC_SECRET:?Set CENTRIFUGO_HMAC_SECRET}
-      # Public browser / mobile WebSocket endpoint via Cloudflare Tunnel
-      CENTRIFUGO_PUBLIC_HOST: "sudoku-ws.${DOMAIN_NAME:?Set DOMAIN_NAME}"
-      CENTRIFUGO_PUBLIC_PORT: "443"
-      CENTRIFUGO_PUBLIC_SCHEME: "https"
+      WS_HOST: "sudoku-ws.${DOMAIN_NAME:?Set DOMAIN_NAME}"
+      WS_PORT: "443"
+      WS_SCHEME: "https"
+      PUBLIC_APP_URL: "https://sudoku.${DOMAIN_NAME:?Set DOMAIN_NAME}"
     labels:
       cf.tunnel.hostname: "sudoku.${DOMAIN_NAME:?Set DOMAIN_NAME}"
       cf.tunnel.port: "8000"
@@ -39,7 +25,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 10s
 
   centrifugo:
     image: centrifugo/centrifugo:v6
@@ -52,9 +38,7 @@ services:
     volumes:
       - ./docker/centrifugo/config.json:/centrifugo/config.json:ro
     environment:
-      CENTRIFUGO_HTTP_API_KEY: ${CENTRIFUGO_API_KEY:?Set CENTRIFUGO_API_KEY}
-      CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY: ${CENTRIFUGO_HMAC_SECRET:?Set CENTRIFUGO_HMAC_SECRET}
-      CENTRIFUGO_CLIENT_ALLOWED_ORIGINS: "https://sudoku.${DOMAIN_NAME:?Set DOMAIN_NAME}"
+      CENTRIFUGO_CLIENT_ALLOWED_ORIGINS: "https://sudoku.${DOMAIN_NAME:?Set DOMAIN_NAME} capacitor://localhost https://localhost http://localhost"
     labels:
       cf.tunnel.hostname: "sudoku-ws.${DOMAIN_NAME:?Set DOMAIN_NAME}"
       cf.tunnel.port: "8080"
