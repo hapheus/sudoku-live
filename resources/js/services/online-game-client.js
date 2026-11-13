@@ -5,10 +5,20 @@ import Pusher from 'pusher-js';
 window.Pusher = Pusher;
 
 export class OnlineGameClient {
-    constructor({ reverbConfig, onStateUpdated, onConnectionChange }) {
+    constructor({
+        reverbConfig,
+        onStateUpdated,
+        onConnectionChange,
+        onPresenceChange,
+        onMemberJoin,
+        onMemberLeave,
+    }) {
         this.reverbConfig = reverbConfig;
         this.onStateUpdated = onStateUpdated || (() => {});
         this.onConnectionChange = onConnectionChange || (() => {});
+        this.onPresenceChange = onPresenceChange || (() => {});
+        this.onMemberJoin = onMemberJoin || (() => {});
+        this.onMemberLeave = onMemberLeave || (() => {});
         this.echo = null;
         this.channel = null;
         this.gameId = null;
@@ -70,6 +80,19 @@ export class OnlineGameClient {
         return data.state;
     }
 
+    async fetchLiveGames() {
+        const response = await fetch('/api/games/live', {
+            headers: { 'Accept': 'application/json' },
+        });
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.message || 'Failed to load live games.');
+        }
+
+        return await response.json();
+    }
+
     async sendMove(gameId, token, index, expectedVersion) {
         const response = await fetch(`/api/games/${gameId}/moves`, {
             method: 'POST',
@@ -109,7 +132,7 @@ export class OnlineGameClient {
         return data.state;
     }
 
-    subscribe(gameId, token) {
+    subscribe(gameId, token = null) {
         this.gameId = gameId;
         this.token = token;
 
@@ -123,6 +146,11 @@ export class OnlineGameClient {
             ? this.reverbConfig.host
             : (window.location.hostname || 'localhost');
 
+        const authHeaders = {};
+        if (token) {
+            authHeaders['X-Participant-Token'] = token;
+        }
+
         this.echo = new Echo({
             broadcaster: 'reverb',
             key: this.reverbConfig.key,
@@ -133,9 +161,7 @@ export class OnlineGameClient {
             enabledTransports: ['ws', 'wss'],
             authEndpoint: '/broadcasting/auth',
             auth: {
-                headers: {
-                    'X-Participant-Token': token,
-                },
+                headers: authHeaders,
             },
         });
 
@@ -154,22 +180,41 @@ export class OnlineGameClient {
             }
         });
 
-        this.channel = this.echo.private(`games.${gameId}`);
+        // Presence Channel: tracks active players and spectators in real time with zero DB writes
+        this.channel = this.echo.join(`games.${gameId}`);
 
-        this.channel.listen('.GameUpdated', (payload) => {
-            if (payload && payload.state) {
-                this.onStateUpdated(payload.state);
-            }
-        });
+        this.channel
+            .here((members) => {
+                this.onPresenceChange(members);
+            })
+            .joining((member) => {
+                this.onMemberJoin(member);
+            })
+            .leaving((member) => {
+                this.onMemberLeave(member);
+            })
+            .listen('.GameUpdated', (payload) => {
+                if (payload && payload.state) {
+                    this.onStateUpdated(payload.state);
+                }
+            });
     }
 
     disconnect() {
-        if (this.channel && this.gameId) {
-            this.echo.leave(`games.${this.gameId}`);
+        if (this.channel && this.gameId && this.echo) {
+            try {
+                this.echo.leave(`games.${this.gameId}`);
+            } catch {
+                // Ignore
+            }
             this.channel = null;
         }
         if (this.echo) {
-            this.echo.disconnect();
+            try {
+                this.echo.disconnect();
+            } catch {
+                // Ignore
+            }
             this.echo = null;
         }
     }

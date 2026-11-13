@@ -15,6 +15,28 @@ use Symfony\Component\HttpFoundation\Response;
 
 final class GameController extends Controller
 {
+    public function live(): JsonResponse
+    {
+        $games = Game::whereIn('status', ['waiting', 'in_progress'])
+            ->orderByDesc('updated_at')
+            ->limit(50)
+            ->get()
+            ->map(fn (Game $g) => [
+                'id' => $g->id,
+                'status' => $g->status,
+                'current_turn' => $g->current_turn,
+                'move_count' => count(array_filter($g->board, fn ($c) => $c !== null)),
+                'has_guest' => $g->hasGuest(),
+                'created_at' => $g->created_at->toIso8601String(),
+                'updated_at' => $g->updated_at->toIso8601String(),
+            ]);
+
+        return response()->json([
+            'games' => $games,
+            'count' => $games->count(),
+        ]);
+    }
+
     public function store(): JsonResponse
     {
         $hostToken = bin2hex(random_bytes(32));

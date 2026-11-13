@@ -129,7 +129,10 @@ export class BoardView {
             badgeType = 'draw';
         } else {
             // In progress
-            if (locked) {
+            if (mode === 'watch') {
+                text = `Live match — Player ${state.currentTurn}'s turn`;
+                badgeType = 'active-turn';
+            } else if (locked) {
                 text = mode === 'computer' ? 'Computer is thinking...' : 'Processing move...';
                 badgeType = 'thinking';
             } else if (mode === 'online' && yourSymbol) {

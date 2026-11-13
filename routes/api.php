@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\GameController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('games')->group(function (): void {
+    Route::get('live', [GameController::class, 'live'])->name('api.games.live');
     Route::post('/', [GameController::class, 'store'])->name('api.games.store');
     Route::get('{game}', [GameController::class, 'show'])->name('api.games.show');
     Route::post('{game}/join', [GameController::class, 'join'])->name('api.games.join');
