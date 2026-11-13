@@ -18,9 +18,9 @@
   ];
 
   # Background processes managed via `devenv up`
+  # Start the WebSocket server separately via: docker compose up -d centrifugo
   processes = {
     server.exec = "php artisan serve --port=8000";
-    reverb.exec = "php artisan reverb:start --port=8080";
     vite.exec = "npm run dev";
   };
 

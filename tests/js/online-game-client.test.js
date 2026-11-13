@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
     OnlineGameClient,
+    extractMemberFromClientInfo,
     generateEventId,
     generateGameId,
     isValidGameId,
@@ -30,9 +31,44 @@ describe('OnlineGameClient helpers', () => {
         expect(e1).not.toBe(e2);
     });
 
+    it('builds WebSocket URLs correctly for local http and production https', () => {
+        const localClient = new OnlineGameClient({
+            wsConfig: { host: 'localhost', port: 8081, scheme: 'http' },
+        });
+        expect(localClient.buildWsUrl()).toBe('ws://localhost:8081/connection/websocket');
+
+        const prodClient = new OnlineGameClient({
+            wsConfig: { host: 'sudoku-ws.example.com', port: 443, scheme: 'https' },
+        });
+        expect(prodClient.buildWsUrl()).toBe('wss://sudoku-ws.example.com/connection/websocket');
+
+        const overrideClient = new OnlineGameClient({
+            wsConfig: { wsUrl: 'wss://custom.example.com/connection/websocket' },
+        });
+        expect(overrideClient.buildWsUrl()).toBe('wss://custom.example.com/connection/websocket');
+    });
+
+    it('extracts member metadata from Centrifugo ClientInfo', () => {
+        expect(extractMemberFromClientInfo({
+            client: 'server-conn-1',
+            user: 'client_abc',
+            chanInfo: {
+                id: 'client_abc',
+                role: 'host',
+                game_mode: 'solo',
+            },
+        })).toEqual({
+            id: 'client_abc',
+            role: 'host',
+            game_mode: 'solo',
+        });
+
+        expect(extractMemberFromClientInfo(null)).toBeNull();
+    });
+
     it('deduplicates seen event IDs up to bounded window', () => {
         const client = new OnlineGameClient({
-            reverbConfig: { key: 'k', host: 'localhost', port: 8080, scheme: 'http' },
+            wsConfig: { host: 'localhost', port: 8081, scheme: 'http' },
         });
 
         expect(client.rememberEvent('evt-1')).toBe(false);
@@ -40,50 +76,55 @@ describe('OnlineGameClient helpers', () => {
         expect(client.rememberEvent('evt-2')).toBe(false);
     });
 
-    it('shares identical eventId across whisper and HTTP relay', async () => {
+    it('shares identical eventId across client publish and HTTP relay and suppresses sender echo', async () => {
         const client = new OnlineGameClient({
-            reverbConfig: { key: 'k', host: 'localhost', port: 8080, scheme: 'http' },
+            wsConfig: { host: 'localhost', port: 8081, scheme: 'http' },
         });
 
-        const whisperSpy = vi.fn();
-        client.gameChannel = { whisper: whisperSpy };
+        const publishSpy = vi.fn().mockResolvedValue({});
+        client.gameChannel = { publish: publishSpy };
 
         const fetchSpy = vi.fn().mockResolvedValue({ ok: true });
         vi.stubGlobal('fetch', fetchSpy);
 
         await client.broadcastGameEvent('room-abc123', 'cell-update', { index: 40, value: 7, notes: [] });
 
-        expect(whisperSpy).toHaveBeenCalledTimes(1);
+        expect(publishSpy).toHaveBeenCalledTimes(1);
         expect(fetchSpy).toHaveBeenCalledTimes(1);
 
-        const whisperPayload = whisperSpy.mock.calls[0][1];
+        const publishedPayload = publishSpy.mock.calls[0][0];
         const fetchBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
 
-        expect(whisperPayload.data.eventId).toBeTruthy();
-        expect(fetchBody.data.eventId).toBe(whisperPayload.data.eventId);
+        expect(publishedPayload.type).toBe('cell-update');
+        expect(publishedPayload.data.eventId).toBeTruthy();
+        expect(fetchBody.data.eventId).toBe(publishedPayload.data.eventId);
         expect(fetchBody.data.index).toBe(40);
         expect(fetchBody.data.value).toBe(7);
+        expect(client.rememberEvent(publishedPayload.data.eventId)).toBe(true);
 
         vi.unstubAllGlobals();
     });
 
     it('broadcasts game_mode in lobby updates for solo and online games', () => {
         const client = new OnlineGameClient({
-            reverbConfig: { key: 'k', host: 'localhost', port: 8080, scheme: 'http' },
+            wsConfig: { host: 'localhost', port: 8081, scheme: 'http' },
         });
 
-        const whisperSpy = vi.fn();
-        client.lobbyChannel = { whisper: whisperSpy };
+        const publishSpy = vi.fn().mockResolvedValue({});
+        client.lobbyChannel = { publish: publishSpy };
 
         client.broadcastLobbyUpdate('solo-room-1', 'in_progress', 35, 'hard', 'solo');
 
-        expect(whisperSpy).toHaveBeenCalledWith('lobby-update', {
-            id: client.clientId,
-            game_id: 'solo-room-1',
-            status: 'in_progress',
-            game_mode: 'solo',
-            difficulty: 'hard',
-            filled_count: 35,
+        expect(publishSpy).toHaveBeenCalledWith({
+            type: 'lobby-update',
+            data: {
+                id: client.clientId,
+                game_id: 'solo-room-1',
+                status: 'in_progress',
+                game_mode: 'solo',
+                difficulty: 'hard',
+                filled_count: 35,
+            },
         });
     });
 });

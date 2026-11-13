@@ -14,7 +14,7 @@ COPY vite.config.js ./
 RUN npm run build
 
 # ==============================================================================
-# Stage 2: Production PHP-FPM + Nginx / Reverb Runtime
+# Stage 2: Production PHP-FPM + Nginx Runtime
 # ==============================================================================
 FROM php:8.4-fpm-alpine
 
@@ -60,7 +60,7 @@ RUN mkdir -p /run/nginx \
     storage/logs \
     bootstrap/cache
 
-# Expose HTTP port (8000) and Reverb WebSocket port (8080)
-EXPOSE 8000 8080
+# Expose HTTP port (8000)
+EXPOSE 8000
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

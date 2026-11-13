@@ -111,15 +111,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    const reverbConfig = window.REVERB_CONFIG || {
-        key: root.dataset.reverbKey,
-        host: root.dataset.reverbHost,
-        port: root.dataset.reverbPort,
-        scheme: root.dataset.reverbScheme,
+    const wsConfig = window.CENTRIFUGO_CONFIG || {
+        host: root.dataset.wsHost,
+        port: root.dataset.wsPort,
+        scheme: root.dataset.wsScheme,
+        wsUrl: root.dataset.wsUrl,
     };
 
     const onlineClient = new OnlineGameClient({
-        reverbConfig,
+        wsConfig,
         onConnectionChange: (status) => {
             updateConnectionBadge(status);
         },

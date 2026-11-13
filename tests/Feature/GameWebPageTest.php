@@ -31,23 +31,21 @@ final class GameWebPageTest extends TestCase
         $response->assertSee('data-initial-mode="online"', false);
     }
 
-    public function test_page_uses_split_horizon_public_reverb_options_for_browser_echo(): void
+    public function test_page_uses_split_horizon_public_centrifugo_options_for_browser_client(): void
     {
         config([
-            'reverb.apps.apps.0.options.host' => 'reverb',
-            'reverb.apps.apps.0.options.port' => 8080,
-            'reverb.apps.apps.0.options.scheme' => 'http',
-            'reverb.apps.apps.0.public_options.host' => 'sudoku-ws.example.com',
-            'reverb.apps.apps.0.public_options.port' => 443,
-            'reverb.apps.apps.0.public_options.scheme' => 'https',
+            'centrifugo.internal_url' => 'http://centrifugo:8080',
+            'centrifugo.public_host' => 'sudoku-ws.example.com',
+            'centrifugo.public_port' => 443,
+            'centrifugo.public_scheme' => 'https',
         ]);
 
         $response = $this->get('/');
 
         $response->assertOk();
-        $response->assertSee('data-reverb-host="sudoku-ws.example.com"', false);
-        $response->assertSee('data-reverb-port="443"', false);
-        $response->assertSee('data-reverb-scheme="https"', false);
+        $response->assertSee('data-ws-host="sudoku-ws.example.com"', false);
+        $response->assertSee('data-ws-port="443"', false);
+        $response->assertSee('data-ws-scheme="https"', false);
     }
 
     public function test_trusted_proxies_honor_cloudflare_https_headers(): void

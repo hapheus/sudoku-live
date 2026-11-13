@@ -1,10 +1,4 @@
-import Echo from 'laravel-echo';
-import Pusher from 'pusher-js';
-
-// Make Pusher available globally for Echo
-if (typeof window !== 'undefined') {
-    window.Pusher = Pusher;
-}
+import { Centrifuge, UnauthorizedError } from 'centrifuge';
 
 const VALID_GAME_ID_RE = /^[A-Za-z0-9_-]{6,64}$/;
 const MAX_SEEN_EVENT_IDS = 200;
@@ -36,14 +30,34 @@ export function generateEventId() {
     return `evt_${Date.now().toString(36)}_${randomHex(6)}`;
 }
 
+export function extractMemberFromClientInfo(info) {
+    if (!info || typeof info !== 'object') {
+        return null;
+    }
+
+    const chanInfo = info.chanInfo && typeof info.chanInfo === 'object' ? info.chanInfo : {};
+    const id = chanInfo.id || info.user || info.client;
+    if (!id) {
+        return null;
+    }
+
+    return {
+        ...chanInfo,
+        id,
+    };
+}
+
 export class OnlineGameClient {
-    constructor({ reverbConfig, onConnectionChange }) {
-        this.reverbConfig = reverbConfig;
+    constructor({ wsConfig, reverbConfig, onConnectionChange } = {}) {
+        this.wsConfig = wsConfig || reverbConfig || {};
         this.onConnectionChange = onConnectionChange || (() => {});
-        this.echo = null;
+        this.client = null;
+        this.serverClientId = null;
         this.gameChannel = null;
         this.lobbyChannel = null;
         this.currentGameId = null;
+        this.gameMembers = new Map();
+        this.gamePresenceReady = false;
         this.seenEventIds = new Set();
 
         // Persistent client id per browser session
@@ -69,68 +83,94 @@ export class OnlineGameClient {
         return false;
     }
 
-    ensureEcho(customHeaders = {}) {
-        if (this.echo) {
-            return this.echo;
+    buildWsUrl() {
+        if (typeof this.wsConfig.wsUrl === 'string' && this.wsConfig.wsUrl.trim() !== '') {
+            return this.wsConfig.wsUrl.trim();
         }
 
-        const isHttps = this.reverbConfig.scheme === 'https' || window.location.protocol === 'https:';
-        const port = parseInt(this.reverbConfig.port || (isHttps ? 443 : 80), 10);
-        const host = (this.reverbConfig.host && this.reverbConfig.host !== 'localhost' && this.reverbConfig.host !== '127.0.0.1')
-            ? this.reverbConfig.host
-            : (window.location.hostname || 'localhost');
+        const browserProtocol = typeof window !== 'undefined' && window.location ? window.location.protocol : 'http:';
+        const browserHostname = typeof window !== 'undefined' && window.location ? window.location.hostname : 'localhost';
 
-        const authHeaders = {
-            'X-Client-Id': this.clientId,
-            ...customHeaders,
-        };
+        const isHttps = this.wsConfig.scheme === 'https' || browserProtocol === 'https:';
+        const wsScheme = isHttps ? 'wss' : 'ws';
+        const port = parseInt(this.wsConfig.port || (isHttps ? 443 : 80), 10);
+        const host = (this.wsConfig.host && this.wsConfig.host !== 'localhost' && this.wsConfig.host !== '127.0.0.1')
+            ? this.wsConfig.host
+            : (browserHostname || 'localhost');
 
-        this.echo = new Echo({
-            broadcaster: 'reverb',
-            key: this.reverbConfig.key,
-            wsHost: host,
-            wsPort: port,
-            wssPort: port,
-            forceTLS: isHttps,
-            enabledTransports: ['ws', 'wss'],
-            authEndpoint: '/broadcasting/auth',
-            auth: {
-                headers: authHeaders,
-            },
-        });
+        const omitPort = Number.isNaN(port) || (isHttps && port === 443) || (!isHttps && port === 80);
+        const portSuffix = omitPort ? '' : `:${port}`;
 
-        const pusherConnection = this.echo.connector.pusher.connection;
-        this.onConnectionChange(pusherConnection.state);
-
-        pusherConnection.bind('state_change', (states) => {
-            this.onConnectionChange(states.current);
-        });
-
-        return this.echo;
+        return `${wsScheme}://${host}${portSuffix}/connection/websocket`;
     }
 
-    setAuthHeaders(headers = {}) {
-        if (!this.echo || !this.echo.connector) return;
+    async fetchToken(endpoint, body = {}, headers = {}) {
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-Client-Id': this.clientId,
+                ...headers,
+            },
+            body: JSON.stringify({
+                client_id: this.clientId,
+                ...body,
+            }),
+        });
 
-        if (this.echo.connector.options && this.echo.connector.options.auth) {
-            Object.assign(this.echo.connector.options.auth.headers, headers);
+        if (response.status === 401 || response.status === 403) {
+            throw new UnauthorizedError(`Unauthorized token request (${response.status})`);
         }
 
-        const pusherConfig = this.echo.connector.pusher && this.echo.connector.pusher.config;
-        if (pusherConfig) {
-            if (pusherConfig.channelAuthorization && pusherConfig.channelAuthorization.headers) {
-                Object.assign(pusherConfig.channelAuthorization.headers, headers);
-            }
-            if (pusherConfig.auth && pusherConfig.auth.headers) {
-                Object.assign(pusherConfig.auth.headers, headers);
-            }
+        if (!response.ok) {
+            throw new Error(`Failed to fetch Centrifugo token (${response.status})`);
         }
+
+        const payload = await response.json();
+        if (!payload || typeof payload.token !== 'string' || payload.token === '') {
+            throw new Error('Invalid Centrifugo token response.');
+        }
+
+        return payload.token;
+    }
+
+    ensureClient() {
+        if (this.client) {
+            return this.client;
+        }
+
+        this.client = new Centrifuge(this.buildWsUrl(), {
+            getToken: () => this.fetchToken('/api/centrifugo/connection-token'),
+        });
+
+        this.client.on('state', (ctx) => {
+            this.onConnectionChange(ctx.newState);
+        });
+
+        this.client.on('connected', (ctx) => {
+            this.serverClientId = ctx.client || null;
+        });
+
+        this.client.on('disconnected', () => {
+            this.serverClientId = null;
+        });
+
+        this.onConnectionChange(this.client.state);
+        this.client.connect();
+
+        return this.client;
     }
 
     getGameMembers() {
-        const membersMap = this.gameChannel?.subscription?.members?.members;
-        if (!membersMap) return null;
-        return Object.values(membersMap);
+        if (!this.gameChannel || !this.gamePresenceReady) {
+            return null;
+        }
+        return Array.from(this.gameMembers.values());
+    }
+
+    isSelfClientPublication(ctx) {
+        return Boolean(ctx?.info?.client && this.serverClientId && ctx.info.client === this.serverClientId);
     }
 
     joinGameChannel(gameId, {
@@ -150,46 +190,97 @@ export class OnlineGameClient {
         this.seenEventIds.clear();
 
         this.currentGameId = gameId;
-        this.ensureEcho({
-            'X-Player-Role': role,
-            'X-Player-Symbol': symbol || '',
-            'X-Game-Mode': gameMode,
-            'X-Game-Id': gameId,
-        });
-        this.setAuthHeaders({
-            'X-Player-Role': role,
-            'X-Player-Symbol': symbol || '',
-            'X-Game-Mode': gameMode,
-            'X-Game-Id': gameId,
+        this.gameMembers.clear();
+        this.gamePresenceReady = false;
+
+        const client = this.ensureClient();
+        const channel = `sudoku:game.${gameId}`;
+
+        const sub = client.newSubscription(channel, {
+            getToken: (ctx) => this.fetchToken('/api/centrifugo/subscription-token', {
+                channel: ctx.channel,
+                role,
+                symbol: symbol || '',
+                game_mode: gameMode,
+                game_id: gameId,
+            }, {
+                'X-Player-Role': role,
+                'X-Player-Symbol': symbol || '',
+                'X-Game-Mode': gameMode,
+                'X-Game-Id': gameId,
+            }),
         });
 
-        const dispatchUniqueEvent = (payload) => {
+        this.gameChannel = sub;
+
+        sub.on('subscribed', async () => {
+            if (this.gameChannel !== sub) return;
+
+            try {
+                const res = await sub.presence();
+                if (this.gameChannel !== sub) return;
+
+                this.gameMembers.clear();
+                Object.values(res?.clients || {}).forEach((info) => {
+                    const member = extractMemberFromClientInfo(info);
+                    if (member) {
+                        this.gameMembers.set(member.id, member);
+                    }
+                });
+                this.gamePresenceReady = true;
+                onPresenceChange(this.getGameMembers());
+            } catch {
+                if (this.gameChannel === sub) {
+                    this.gamePresenceReady = true;
+                    onPresenceChange(this.getGameMembers());
+                }
+            }
+        });
+
+        sub.on('join', (ctx) => {
+            if (this.gameChannel !== sub) return;
+            const member = extractMemberFromClientInfo(ctx?.info);
+            if (!member) return;
+
+            this.gameMembers.set(member.id, member);
+            onMemberJoin(member);
+        });
+
+        sub.on('leave', (ctx) => {
+            if (this.gameChannel !== sub) return;
+            const member = extractMemberFromClientInfo(ctx?.info);
+            if (!member) return;
+
+            this.gameMembers.delete(member.id);
+            onMemberLeave(member);
+        });
+
+        sub.on('publication', (ctx) => {
+            if (this.gameChannel !== sub) return;
+            if (this.isSelfClientPublication(ctx)) return;
+
+            const payload = ctx?.data;
             if (!payload || !payload.type) return;
+
             const eventId = payload.data?.eventId;
             if (eventId && this.rememberEvent(eventId)) {
                 return;
             }
+
             onEvent(payload.type, payload.data || {});
-        };
+        });
 
-        this.gameChannel = this.echo.join(`games.${gameId}`);
+        sub.subscribe();
 
-        this.gameChannel
-            .here((members) => onPresenceChange(members))
-            .joining((member) => onMemberJoin(member))
-            .leaving((member) => onMemberLeave(member))
-            .listen('.GameBroadcastEvent', dispatchUniqueEvent)
-            .listenForWhisper('game-event', dispatchUniqueEvent);
-
-        return this.gameChannel;
+        return sub;
     }
 
     sendWhisperEvent(type, data = {}) {
         if (this.gameChannel) {
             try {
-                this.gameChannel.whisper('game-event', { type, data });
+                Promise.resolve(this.gameChannel.publish({ type, data })).catch(() => {});
             } catch {
-                // Ignore whisper failure if channel is not ready
+                // Ignore publish failure if channel is not ready
             }
         }
     }
@@ -201,21 +292,25 @@ export class OnlineGameClient {
     async broadcastGameEvent(gameId, type, data = {}) {
         if (!isValidGameId(gameId)) return;
 
+        const eventId = data.eventId || generateEventId();
         const payloadData = {
             ...data,
-            eventId: data.eventId || generateEventId(),
+            eventId,
         };
 
-        // 1. Whisper directly peer-to-peer over WebSocket
+        // Record eventId before publishing so server-relayed echoes without client info are ignored by the sender
+        this.rememberEvent(eventId);
+
+        // 1. Publish directly over Centrifugo WebSocket for minimal latency
         if (this.gameChannel) {
             try {
-                this.gameChannel.whisper('game-event', { type, data: payloadData });
+                await this.gameChannel.publish({ type, data: payloadData });
             } catch {
-                // Ignore whisper failure
+                // Ignore client publish error; HTTP relay still delivers
             }
         }
 
-        // 2. Stateless HTTP broadcast relay to ensure 100% delivery
+        // 2. Stateless HTTP broadcast relay via Centrifugo Server API to guarantee delivery
         try {
             await fetch(`/api/games/${encodeURIComponent(gameId)}/events`, {
                 method: 'POST',
@@ -245,66 +340,121 @@ export class OnlineGameClient {
         this.leaveLobby();
 
         const safeGameId = isValidGameId(gameId) ? gameId : '';
+        const client = this.ensureClient();
+        const channel = 'sudoku:lobby';
 
-        this.ensureEcho({
-            'X-Game-Id': safeGameId,
-            'X-Status': status,
-            'X-Game-Mode': gameMode,
-            'X-Difficulty': difficulty,
-            'X-Filled-Count': filledCount.toString(),
+        const sub = client.newSubscription(channel, {
+            getToken: (ctx) => this.fetchToken('/api/centrifugo/subscription-token', {
+                channel: ctx.channel,
+                game_id: safeGameId,
+                status,
+                game_mode: gameMode,
+                difficulty,
+                filled_count: filledCount,
+            }, {
+                'X-Game-Id': safeGameId,
+                'X-Status': status,
+                'X-Game-Mode': gameMode,
+                'X-Difficulty': difficulty,
+                'X-Filled-Count': filledCount.toString(),
+            }),
         });
-        this.setAuthHeaders({
-            'X-Game-Id': safeGameId,
-            'X-Status': status,
-            'X-Game-Mode': gameMode,
-            'X-Difficulty': difficulty,
-            'X-Filled-Count': filledCount.toString(),
+
+        this.lobbyChannel = sub;
+
+        sub.on('subscribed', async () => {
+            if (this.lobbyChannel !== sub) return;
+
+            try {
+                const res = await sub.presence();
+                if (this.lobbyChannel !== sub) return;
+
+                const membersById = new Map();
+                Object.values(res?.clients || {}).forEach((info) => {
+                    const member = extractMemberFromClientInfo(info);
+                    if (member) {
+                        membersById.set(member.id, member);
+                    }
+                });
+                onLobbyPresenceChange(Array.from(membersById.values()));
+            } catch {
+                if (this.lobbyChannel === sub) {
+                    onLobbyPresenceChange([]);
+                }
+            }
         });
 
-        this.lobbyChannel = this.echo.join('lobby');
+        sub.on('join', (ctx) => {
+            if (this.lobbyChannel !== sub) return;
+            const member = extractMemberFromClientInfo(ctx?.info);
+            if (member) {
+                onLobbyMemberJoin(member);
+            }
+        });
 
-        this.lobbyChannel
-            .here((members) => onLobbyPresenceChange(members))
-            .joining((member) => onLobbyMemberJoin(member))
-            .leaving((member) => onLobbyMemberLeave(member))
-            .listenForWhisper('lobby-update', (data) => onLobbyUpdate(data));
+        sub.on('leave', (ctx) => {
+            if (this.lobbyChannel !== sub) return;
+            const member = extractMemberFromClientInfo(ctx?.info);
+            if (member) {
+                onLobbyMemberLeave(member);
+            }
+        });
 
-        return this.lobbyChannel;
+        sub.on('publication', (ctx) => {
+            if (this.lobbyChannel !== sub) return;
+            if (this.isSelfClientPublication(ctx)) return;
+
+            const payload = ctx?.data;
+            if (payload && payload.type === 'lobby-update' && payload.data) {
+                onLobbyUpdate(payload.data);
+            }
+        });
+
+        sub.subscribe();
+
+        return sub;
     }
 
     broadcastLobbyUpdate(gameId, status, filledCount, difficulty = 'medium', gameMode = 'online') {
         if (this.lobbyChannel && isValidGameId(gameId)) {
             try {
-                this.lobbyChannel.whisper('lobby-update', {
-                    id: this.clientId,
-                    game_id: gameId,
-                    status,
-                    game_mode: gameMode,
-                    difficulty,
-                    filled_count: filledCount,
-                });
+                Promise.resolve(this.lobbyChannel.publish({
+                    type: 'lobby-update',
+                    data: {
+                        id: this.clientId,
+                        game_id: gameId,
+                        status,
+                        game_mode: gameMode,
+                        difficulty,
+                        filled_count: filledCount,
+                    },
+                })).catch(() => {});
             } catch {
-                // Ignore whisper error
+                // Ignore publish error
             }
         }
     }
 
     leaveGameChannel() {
-        if (this.gameChannel && this.currentGameId && this.echo) {
+        if (this.gameChannel) {
             try {
-                this.echo.leave(`games.${this.currentGameId}`);
+                this.gameChannel.unsubscribe?.();
+                this.client?.removeSubscription?.(this.gameChannel);
             } catch {
                 // Ignore
             }
             this.gameChannel = null;
             this.currentGameId = null;
+            this.gameMembers.clear();
+            this.gamePresenceReady = false;
         }
     }
 
     leaveLobby() {
-        if (this.lobbyChannel && this.echo) {
+        if (this.lobbyChannel) {
             try {
-                this.echo.leave('lobby');
+                this.lobbyChannel.unsubscribe?.();
+                this.client?.removeSubscription?.(this.lobbyChannel);
             } catch {
                 // Ignore
             }
@@ -315,13 +465,14 @@ export class OnlineGameClient {
     disconnect() {
         this.leaveGameChannel();
         this.leaveLobby();
-        if (this.echo) {
+        if (this.client) {
             try {
-                this.echo.disconnect();
+                this.client.disconnect();
             } catch {
                 // Ignore
             }
-            this.echo = null;
+            this.client = null;
+            this.serverClientId = null;
         }
     }
 }

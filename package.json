@@ -15,7 +15,6 @@
         "vitest": "^5.1.0"
     },
     "dependencies": {
-        "laravel-echo": "^2.6.3",
-        "pusher-js": "^8.6.0"
+        "centrifuge": "^5.8.0"
     }
 }

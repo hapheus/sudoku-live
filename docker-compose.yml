@@ -6,7 +6,7 @@ services:
     container_name: sudoku-live-app
     restart: unless-stopped
     depends_on:
-      reverb:
+      centrifugo:
         condition: service_healthy
     ports:
       - "8000:8000"
@@ -18,19 +18,16 @@ services:
       APP_URL: "http://localhost:8000"
       CACHE_STORE: file
       SESSION_DRIVER: cookie
-      BROADCAST_CONNECTION: reverb
+      BROADCAST_CONNECTION: null
       QUEUE_CONNECTION: sync
-      REVERB_APP_ID: "100001"
-      REVERB_APP_KEY: "sudokulivekey"
-      REVERB_APP_SECRET: "sudokulivesecret"
-      # Internal app -> reverb container communication
-      REVERB_HOST: "reverb"
-      REVERB_PORT: "8080"
-      REVERB_SCHEME: "http"
-      # Public browser Echo -> host-mapped Reverb port
-      REVERB_PUBLIC_HOST: "localhost"
-      REVERB_PUBLIC_PORT: "8081"
-      REVERB_PUBLIC_SCHEME: "http"
+      # Internal app -> centrifugo container communication
+      CENTRIFUGO_INTERNAL_URL: "http://centrifugo:8080"
+      CENTRIFUGO_API_KEY: "sudokulive-api-key"
+      CENTRIFUGO_HMAC_SECRET: "sudokulive-hmac-secret-change-me-32bytes"
+      # Public browser -> host-mapped Centrifugo port
+      CENTRIFUGO_PUBLIC_HOST: "localhost"
+      CENTRIFUGO_PUBLIC_PORT: "8081"
+      CENTRIFUGO_PUBLIC_SCHEME: "http"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/up"]
       interval: 10s
@@ -38,33 +35,22 @@ services:
       retries: 3
       start_period: 10s
 
-  reverb:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: sudoku-live-reverb
-    command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080"]
+  centrifugo:
+    image: centrifugo/centrifugo:v6
+    container_name: sudoku-live-centrifugo
+    command: ["centrifugo", "-c", "/centrifugo/config.json"]
     restart: unless-stopped
     ports:
       - "8081:8080"
+    volumes:
+      - ./docker/centrifugo/config.json:/centrifugo/config.json:ro
     environment:
-      APP_NAME: "Sudoku Live"
-      APP_ENV: local
-      APP_DEBUG: "true"
-      APP_KEY: "base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-      CACHE_STORE: file
-      SESSION_DRIVER: cookie
-      BROADCAST_CONNECTION: reverb
-      QUEUE_CONNECTION: sync
-      REVERB_APP_ID: "100001"
-      REVERB_APP_KEY: "sudokulivekey"
-      REVERB_APP_SECRET: "sudokulivesecret"
-      REVERB_SERVER_HOST: "0.0.0.0"
-      REVERB_SERVER_PORT: "8080"
-      REVERB_ALLOWED_ORIGINS: "*"
+      CENTRIFUGO_HTTP_API_KEY: "sudokulive-api-key"
+      CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY: "sudokulive-hmac-secret-change-me-32bytes"
+      CENTRIFUGO_CLIENT_ALLOWED_ORIGINS: "*"
     healthcheck:
-      test: ["CMD", "php", "-r", "exit(@fsockopen('127.0.0.1', 8080) ? 0 : 1);"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 5s

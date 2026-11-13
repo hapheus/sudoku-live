@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sudoku Live — Real-Time Co-op &amp; Spectator Puzzle</title>
-    <meta name="description" content="A fast, accessible Sudoku game with calibrated puzzle generation, real-time Laravel Reverb co-op solving, spectator hints, and live emoji reactions.">
+    <meta name="description" content="A fast, accessible Sudoku game with calibrated puzzle generation, real-time Centrifugo co-op solving, spectator hints, and live emoji reactions.">
     <meta name="theme-color" content="#0f172a">
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -14,10 +14,10 @@
          class="app-container"
          data-initial-mode="{{ $mode ?? 'solo' }}"
          data-game-id="{{ $gameId ?? '' }}"
-         data-reverb-key="{{ config('reverb.apps.apps.0.key') }}"
-         data-reverb-host="{{ config('reverb.apps.apps.0.public_options.host') ?: config('reverb.apps.apps.0.options.host') ?: 'localhost' }}"
-         data-reverb-port="{{ config('reverb.apps.apps.0.public_options.port') ?: config('reverb.apps.apps.0.options.port') ?: 8080 }}"
-         data-reverb-scheme="{{ config('reverb.apps.apps.0.public_options.scheme') ?: config('reverb.apps.apps.0.options.scheme') ?: 'http' }}">
+         data-ws-host="{{ config('centrifugo.public_host') ?: 'localhost' }}"
+         data-ws-port="{{ config('centrifugo.public_port') ?: 8081 }}"
+         data-ws-scheme="{{ config('centrifugo.public_scheme') ?: 'http' }}"
+         data-ws-url="{{ config('centrifugo.public_ws_url') ?: '' }}">
 
         <!-- Live Region for Screen Readers (WCAG 2.2 AA) -->
         <div id="game-announcements" class="sr-only" aria-live="polite" aria-atomic="true"></div>
@@ -223,7 +223,7 @@
         </div>
 
         <footer class="app-footer">
-            <p>Zero-DB Real-Time Sudoku &bull; Powered by Laravel Reverb &amp; Echo</p>
+            <p>Zero-DB Real-Time Sudoku &bull; Powered by Laravel &amp; Centrifugo</p>
         </footer>
     </div>
 </body>
