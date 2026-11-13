@@ -12,6 +12,7 @@ export function SudokuBoard({
     onCellSelect,
     myRole = null,
     partnerCursorIndex = null,
+    unitCelebration = null,
 }) {
     const variant = gameState.variant || inferVariantFromBoardLength(gameState.board?.length);
     const spec = getVariantSpec(variant);
@@ -24,6 +25,8 @@ export function SudokuBoard({
     const conflictSet = new Set(gameState.conflicts || []);
     const activeTabStop = selectedIndex !== null && selectedIndex < spec.totalCells ? selectedIndex : 0;
     const isSolved = gameState.status === 'solved';
+    const celebrationId = unitCelebration?.id || 0;
+    const celebrationDelays = unitCelebration?.cellDelays || null;
 
     const digitsList = Array.from({ length: maxDigit }, (_, i) => i + 1);
     const axisIndices = Array.from({ length: gridSize }, (_, i) => i + 1);
@@ -97,6 +100,8 @@ export function SudokuBoard({
 
                                     const isBoxRight = (c + 1) % boxCols === 0 && c < gridSize - 1;
                                     const isBoxBottom = (r + 1) % boxRows === 0 && r < gridSize - 1;
+                                    const celebrateDelay = celebrationDelays?.get(idx);
+                                    const isUnitCelebrating = celebrateDelay !== undefined;
 
                                     const classNames = [
                                         'sudoku-cell',
@@ -111,6 +116,7 @@ export function SudokuBoard({
                                         isSameDigit ? 'sudoku-cell--same-digit' : '',
                                         isConflict ? 'sudoku-cell--conflict' : '',
                                         hint ? 'sudoku-cell--hinted' : '',
+                                        isUnitCelebrating ? 'sudoku-cell--unit-complete' : '',
                                         isBoxRight ? 'sudoku-cell--box-right' : '',
                                         isBoxBottom ? 'sudoku-cell--box-bottom' : '',
                                     ].filter(Boolean).join(' ');
@@ -128,6 +134,7 @@ export function SudokuBoard({
                                             role="gridcell"
                                             tabIndex={idx === activeTabStop ? 0 : -1}
                                             data-index={idx}
+                                            style={isUnitCelebrating ? { '--complete-delay': `${celebrateDelay}ms` } : undefined}
                                             aria-selected={isSelected}
                                             aria-invalid={isConflict ? 'true' : undefined}
                                             aria-label={getSudokuCellAriaLabel(idx, value, {
@@ -141,6 +148,14 @@ export function SudokuBoard({
                                             })}
                                             onClick={() => onCellSelect(idx)}
                                         >
+                                            {isUnitCelebrating && (
+                                                <span
+                                                    key={`celebrate-${celebrationId}`}
+                                                    className="sudoku-cell__celebrate"
+                                                    style={{ '--complete-delay': `${celebrateDelay}ms` }}
+                                                    aria-hidden="true"
+                                                />
+                                            )}
                                             {value >= 1 && value <= maxDigit ? (
                                                 <span className="sudoku-cell__digit">{value}</span>
                                             ) : (

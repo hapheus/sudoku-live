@@ -68,5 +68,8 @@
   "puzzleCompletedTitle": "Spiel beendet",
   "finishedIn": "gelöst in",
   "helpTitle": "Anleitung & Tastaturkürzel",
-  "closeLabel": "Schließen"
+  "closeLabel": "Schließen",
+  "unitCompletedRow": "Reihe abgeschlossen",
+  "unitCompletedCol": "Spalte abgeschlossen",
+  "unitCompletedBox": "Block abgeschlossen"
 }

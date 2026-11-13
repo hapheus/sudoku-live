@@ -3,6 +3,7 @@ import {
     applyRemoteCellPatch,
     clearAllNotes,
     createSudokuGame,
+    detectNewlyCompletedUnits,
     fillCandidateNotes,
     findConflicts,
     getCandidateDigits,
@@ -174,6 +175,65 @@ describe('Sudoku Engine', () => {
         expect(hydrated.gridSize).toBe(6);
         expect(hydrated.totalCells).toBe(36);
         expect(hydrated.status).toBe('solved');
+    });
+
+    it('detects newly completed rows, columns, and boxes without re-triggering already completed or conflicted units', () => {
+        const puzzle = [...SAMPLE_SOLUTION];
+        puzzle[0] = 0; // row 0, col 0, box 0
+        puzzle[10] = 0; // row 1, col 1, box 0
+
+        const state0 = createSudokuGame({ difficulty: 'easy', puzzle, solution: SAMPLE_SOLUTION });
+
+        // Wrong digit in cell 0 creates conflicts in row 0, col 0, and box 0 -> must NOT celebrate
+        const conflicted = setCellValue(state0, 0, 3);
+        const conflictCheck = detectNewlyCompletedUnits(state0.board, conflicted.board, '3x3', 0);
+        expect(conflictCheck.hasAny).toBe(false);
+        expect(conflictCheck.cellDelays.size).toBe(0);
+
+        // Correct digit in cell 0 completes row 0 and col 0 (box 0 still missing idx 10)
+        const step1 = setCellValue(state0, 0, 5);
+        const res1 = detectNewlyCompletedUnits(state0.board, step1.board, '3x3', 0);
+        expect(res1.hasAny).toBe(true);
+        expect(res1.rows).toEqual([0]);
+        expect(res1.cols).toEqual([0]);
+        expect(res1.boxes).toEqual([]);
+        expect(res1.cellDelays.get(0)).toBe(0);
+        expect(res1.cellDelays.get(8)).toBe(8 * 28);
+        expect(res1.cellDelays.has(10)).toBe(false);
+
+        // Next move fills idx 10 -> completes row 1, col 1, box 0, does NOT re-trigger row 0 or col 0
+        const step2 = setCellValue(step1, 10, 7);
+        const res2 = detectNewlyCompletedUnits(step1.board, step2.board, '3x3', 10);
+        expect(res2.hasAny).toBe(true);
+        expect(res2.rows).toEqual([1]);
+        expect(res2.cols).toEqual([1]);
+        expect(res2.boxes).toEqual([0]);
+        expect(res2.cellDelays.get(10)).toBe(0);
+        expect(res2.cellDelays.has(8)).toBe(false);
+    });
+
+    it('detects newly completed 2x3 boxes properly', () => {
+        const solution2x3 = [
+            1, 2, 3, 4, 5, 6,
+            4, 5, 6, 1, 2, 3,
+            2, 3, 1, 6, 4, 5,
+            5, 6, 4, 2, 3, 1,
+            3, 1, 2, 5, 6, 4,
+            6, 4, 5, 3, 1, 2,
+        ];
+        const puzzle2x3 = [...solution2x3];
+        puzzle2x3[0] = 0; // box 0
+        puzzle2x3[5] = 0; // row 0 open
+        puzzle2x3[18] = 0; // col 0 open
+
+        const state0 = createSudokuGame({ difficulty: 'easy', variant: '2x3', puzzle: puzzle2x3, solution: solution2x3 });
+        const step1 = setCellValue(state0, 0, 1);
+        const res = detectNewlyCompletedUnits(state0.board, step1.board, '2x3', 0);
+
+        expect(res.rows).toEqual([]);
+        expect(res.cols).toEqual([]);
+        expect(res.boxes).toEqual([0]);
+        expect(Array.from(res.cellDelays.keys()).sort((a, b) => a - b)).toEqual([0, 1, 2, 6, 7, 8]);
     });
 });
 

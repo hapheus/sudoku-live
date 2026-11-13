@@ -106,6 +106,89 @@ export function isSolved(board, variant = null) {
     return countFilledCells(board, spec.id) === spec.totalCells && findConflicts(board, spec.id).length === 0;
 }
 
+function isUnitComplete(board, indices, maxDigit) {
+    if (!Array.isArray(board)) return false;
+    const seen = new Set();
+    for (const idx of indices) {
+        const val = board[idx];
+        if (!Number.isInteger(val) || val < 1 || val > maxDigit || seen.has(val)) {
+            return false;
+        }
+        seen.add(val);
+    }
+    return seen.size === indices.length;
+}
+
+export function detectNewlyCompletedUnits(prevBoard, nextBoard, variant = null, pivotIndex = null) {
+    const resolvedVariant = resolveVariantForState(nextBoard, variant);
+    const spec = getVariantSpec(resolvedVariant);
+    const rows = [];
+    const cols = [];
+    const boxes = [];
+    const cellDelays = new Map();
+
+    if (!Array.isArray(prevBoard) || !Array.isArray(nextBoard) || prevBoard.length !== spec.totalCells || nextBoard.length !== spec.totalCells) {
+        return { rows, cols, boxes, cellDelays, hasAny: false };
+    }
+
+    const hasPivot = Number.isInteger(pivotIndex) && pivotIndex >= 0 && pivotIndex < spec.totalCells;
+    const pivotCoords = hasPivot ? getCellCoords(pivotIndex, spec.id) : null;
+
+    const recordUnitCells = (indices) => {
+        indices.forEach((idx, posInUnit) => {
+            let delayMs = posInUnit * 28;
+            if (pivotCoords) {
+                const coords = getCellCoords(idx, spec.id);
+                const dist = Math.abs(coords.row - pivotCoords.row) + Math.abs(coords.col - pivotCoords.col);
+                delayMs = dist * 28;
+            }
+            const existing = cellDelays.get(idx);
+            if (existing === undefined || delayMs < existing) {
+                cellDelays.set(idx, delayMs);
+            }
+        });
+    };
+
+    for (let r = 0; r < spec.gridSize; r++) {
+        const indices = Array.from({ length: spec.gridSize }, (_, c) => r * spec.gridSize + c);
+        if (!isUnitComplete(prevBoard, indices, spec.maxDigit) && isUnitComplete(nextBoard, indices, spec.maxDigit)) {
+            rows.push(r);
+            recordUnitCells(indices);
+        }
+    }
+
+    for (let c = 0; c < spec.gridSize; c++) {
+        const indices = Array.from({ length: spec.gridSize }, (_, r) => r * spec.gridSize + c);
+        if (!isUnitComplete(prevBoard, indices, spec.maxDigit) && isUnitComplete(nextBoard, indices, spec.maxDigit)) {
+            cols.push(c);
+            recordUnitCells(indices);
+        }
+    }
+
+    for (let b = 0; b < spec.gridSize; b++) {
+        const br = Math.floor(b / spec.boxesPerRow) * spec.boxRows;
+        const bc = (b % spec.boxesPerRow) * spec.boxCols;
+        const indices = [];
+        for (let r = 0; r < spec.boxRows; r++) {
+            for (let c = 0; c < spec.boxCols; c++) {
+                indices.push((br + r) * spec.gridSize + (bc + c));
+            }
+        }
+        if (!isUnitComplete(prevBoard, indices, spec.maxDigit) && isUnitComplete(nextBoard, indices, spec.maxDigit)) {
+            boxes.push(b);
+            recordUnitCells(indices);
+        }
+    }
+
+    return {
+        rows,
+        cols,
+        boxes,
+        cellDelays,
+        hasAny: rows.length > 0 || cols.length > 0 || boxes.length > 0,
+    };
+}
+
 export function createSudokuGame({ difficulty = 'medium', variant = null, puzzle = null, solution = null } = {}) {
     const resolvedVariant = puzzle
         ? resolveVariantForState(puzzle, variant)

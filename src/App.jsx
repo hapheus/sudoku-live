@@ -9,6 +9,7 @@ import {
     applyRemoteCellPatch,
     clearAllNotes,
     createSudokuGame,
+    detectNewlyCompletedUnits,
     fillCandidateNotes,
     hydrateGameState,
     serializeGameState,
@@ -128,10 +129,12 @@ export function App() {
     const [pendingConfirm, setPendingConfirm] = useState(null);
     const [hintsMap, setHintsMap] = useState(() => new Map());
     const [floatingReactions, setFloatingReactions] = useState([]);
+    const [unitCelebration, setUnitCelebration] = useState(() => ({ id: 0, cellDelays: new Map() }));
 
     const cellRefs = useRef([]);
     const reactionSeq = useRef(0);
     const feedbackTimerRef = useRef(null);
+    const unitCelebrationTimerRef = useRef(null);
     const confirmCancelRef = useRef(null);
     const onlineClientRef = useRef(null);
 
@@ -152,6 +155,7 @@ export function App() {
         activeDigit,
         isHelpOpen,
         pendingConfirm,
+        messages,
     });
     stateRef.current = {
         navTab,
@@ -169,6 +173,7 @@ export function App() {
         activeDigit,
         isHelpOpen,
         pendingConfirm,
+        messages,
     };
 
     useEffect(() => {
@@ -181,6 +186,15 @@ export function App() {
         document.documentElement.lang = language;
         localStorage.setItem('sudoku_lang', language);
     }, [language]);
+
+    useEffect(() => () => {
+        if (unitCelebrationTimerRef.current) {
+            clearTimeout(unitCelebrationTimerRef.current);
+        }
+        if (feedbackTimerRef.current) {
+            clearTimeout(feedbackTimerRef.current);
+        }
+    }, []);
 
     const announce = useCallback((msg) => {
         if (msg) setAnnouncement(msg);
@@ -197,6 +211,41 @@ export function App() {
             setActionFeedback('');
         }, 3200);
     }, []);
+
+    const clearUnitCelebration = useCallback(() => {
+        if (unitCelebrationTimerRef.current) {
+            clearTimeout(unitCelebrationTimerRef.current);
+            unitCelebrationTimerRef.current = null;
+        }
+        setUnitCelebration((prev) => (prev.cellDelays.size > 0 ? { id: prev.id, cellDelays: new Map() } : prev));
+    }, []);
+
+    const triggerUnitCelebration = useCallback((prevBoard, nextState, pivotIndex = null) => {
+        if (!prevBoard || !nextState?.board) return;
+        const result = detectNewlyCompletedUnits(prevBoard, nextState.board, nextState.variant, pivotIndex);
+        if (!result.hasAny) return;
+
+        if (unitCelebrationTimerRef.current) {
+            clearTimeout(unitCelebrationTimerRef.current);
+        }
+        const maxDelay = Math.max(0, ...result.cellDelays.values());
+        setUnitCelebration((prev) => ({ id: prev.id + 1, cellDelays: result.cellDelays }));
+        unitCelebrationTimerRef.current = setTimeout(() => {
+            unitCelebrationTimerRef.current = null;
+            setUnitCelebration((prev) => ({ id: prev.id, cellDelays: new Map() }));
+        }, maxDelay + 760);
+
+        if (nextState.status !== 'solved') {
+            const m = stateRef.current.messages;
+            const parts = [];
+            if (result.rows.length > 0 && m?.unitCompletedRow) parts.push(m.unitCompletedRow);
+            if (result.cols.length > 0 && m?.unitCompletedCol) parts.push(m.unitCompletedCol);
+            if (result.boxes.length > 0 && m?.unitCompletedBox) parts.push(m.unitCompletedBox);
+            if (parts.length > 0) {
+                announce(parts.join(', '));
+            }
+        }
+    }, [announce]);
 
     const triggerFloatingReaction = useCallback((emoji) => {
         if (!ALLOWED_REACTIONS.has(emoji)) return;
@@ -290,6 +339,7 @@ export function App() {
         }
 
         if (type === 'cell-update') {
+            const prevBoard = cur.gameState.board;
             const patched = applyRemoteCellPatch(cur.gameState, {
                 ...data,
                 owner: data?.owner || null,
@@ -299,6 +349,7 @@ export function App() {
 
             if (typeof data.value === 'number' && data.value > 0) {
                 clearHintsForCell(data.index);
+                triggerUnitCelebration(prevBoard, patched, data.index);
             }
             persistSnapshotIfNeeded(patched);
             return;
@@ -369,6 +420,7 @@ export function App() {
                     stateRef.current.gameState = hydrated;
                 }
             }
+            clearUnitCelebration();
             setSelectedIndex(null);
             setActiveDigit(null);
             setPartnerCursorIndex(null);
@@ -414,7 +466,7 @@ export function App() {
                 }
             }
         }
-    }, [announce, clearHintsForCell, persistSnapshotIfNeeded, showFeedback, syncLobbyProgress, triggerFloatingReaction]);
+    }, [announce, clearHintsForCell, clearUnitCelebration, persistSnapshotIfNeeded, showFeedback, syncLobbyProgress, triggerFloatingReaction, triggerUnitCelebration]);
 
     const handleGamePresenceChange = useCallback((members) => {
         const resolved = onlineClientRef.current?.getGameMembers() || members || [];
@@ -530,6 +582,7 @@ export function App() {
     const spectateGame = useCallback((gameId) => {
         if (!isValidGameId(gameId)) return;
 
+        clearUnitCelebration();
         onlineClientRef.current?.leaveLobby();
         setCurrentMembers([]);
         setHintsMap(new Map());
@@ -557,7 +610,7 @@ export function App() {
             onMemberJoin: handleGameMemberJoin,
             onMemberLeave: handleGameMemberLeave,
         });
-    }, [enterSpectatorView, handleGameMemberJoin, handleGameMemberLeave, handleGamePresenceChange, handleRemoteGameEvent]);
+    }, [clearUnitCelebration, enterSpectatorView, handleGameMemberJoin, handleGameMemberLeave, handleGamePresenceChange, handleRemoteGameEvent]);
 
     const joinAsOnlinePlayer = useCallback((gameId, role, initialGameState = null) => {
         setNavTab('play');
@@ -615,6 +668,7 @@ export function App() {
     const joinWatchGame = useCallback((gameId) => {
         if (!isValidGameId(gameId)) return;
 
+        clearUnitCelebration();
         onlineClientRef.current?.leaveLobby();
         setSelectedIndex(null);
         setActiveDigit(null);
@@ -640,9 +694,10 @@ export function App() {
         stateRef.current.isPlayingGame = true;
         joinAsOnlinePlayer(gameId, 'guest', fromSpectatingSameRoom ? cur.gameState : snapshot?.gameState);
         showFeedback('Joined live match as co-op partner!');
-    }, [joinAsOnlinePlayer, showFeedback]);
+    }, [clearUnitCelebration, joinAsOnlinePlayer, showFeedback]);
 
     const startNewSoloGame = useCallback((overrideDifficulty = null, overrideVariant = null, { restoreSaved = false } = {}) => {
+        clearUnitCelebration();
         const saved = restoreSaved ? loadSoloGameSnapshot() : null;
         const diff = saved?.gameState?.status === 'in_progress'
             ? saved.gameState.difficulty
@@ -722,7 +777,7 @@ export function App() {
         announce(saved && saved.gameState.status !== 'solved'
             ? `Resumed ${specInfo.shortLabel} ${nextState.difficulty} Solo puzzle.`
             : `New ${specInfo.shortLabel} ${diff} Sudoku puzzle ready.`);
-    }, [announce, handleGameMemberJoin, handleGameMemberLeave, handleGamePresenceChange, handleRemoteGameEvent, syncLobbyProgress]);
+    }, [announce, clearUnitCelebration, handleGameMemberJoin, handleGameMemberLeave, handleGamePresenceChange, handleRemoteGameEvent, syncLobbyProgress]);
 
     const resumeOnlineGame = useCallback((gameId) => {
         let initialState = stateRef.current.gameState;
@@ -886,11 +941,13 @@ export function App() {
                 }
                 persistSnapshotIfNeeded(nextState);
             } else {
+                const prevBoard = cur.gameState.board;
                 const nextState = setCellValue(cur.gameState, targetIndex, digit, { owner });
                 setGameState(nextState);
                 stateRef.current.gameState = nextState;
                 if (digit !== 0) {
                     clearHintsForCell(targetIndex);
+                    triggerUnitCelebration(prevBoard, nextState, targetIndex);
                     const totalPlaced = nextState.board.filter((v) => v === digit).length;
                     if (totalPlaced >= specInfo.gridSize && cur.activeDigit === digit) {
                         setActiveDigit(null);
@@ -910,7 +967,7 @@ export function App() {
         } catch (err) {
             showFeedback(err.message);
         }
-    }, [clearHintsForCell, notesMode, persistSnapshotIfNeeded, showFeedback, syncLobbyProgress]);
+    }, [clearHintsForCell, notesMode, persistSnapshotIfNeeded, showFeedback, syncLobbyProgress, triggerUnitCelebration]);
 
     const applyPlayerDigit = useCallback((digit) => {
         const cur = stateRef.current;
@@ -1097,11 +1154,13 @@ export function App() {
         if (!correctDigit) return;
 
         const owner = (cur.myRole === 'host' || cur.myRole === 'guest') ? cur.myRole : null;
+        const prevBoard = cur.gameState.board;
         setSelectedIndex(targetIdx);
         const nextState = setCellValue(cur.gameState, targetIdx, correctDigit, { owner });
         setGameState(nextState);
         stateRef.current.gameState = nextState;
         clearHintsForCell(targetIdx);
+        triggerUnitCelebration(prevBoard, nextState, targetIdx);
 
         const isBroadcaster = (cur.mode === 'solo' || cur.mode === 'online') && Boolean(cur.onlineGameId) && !cur.isSpectating;
         if (isBroadcaster) {
@@ -1117,7 +1176,7 @@ export function App() {
         const { row, col } = getCellCoords(targetIdx, activeVariant);
         showFeedback(`Hint filled R${row + 1} C${col + 1} with ${correctDigit}.`);
         persistSnapshotIfNeeded(nextState);
-    }, [clearHintsForCell, persistSnapshotIfNeeded, selectedIndex, showFeedback, syncLobbyProgress]);
+    }, [clearHintsForCell, persistSnapshotIfNeeded, selectedIndex, showFeedback, syncLobbyProgress, triggerUnitCelebration]);
 
     const sendSpectatorHint = useCallback((value) => {
         const cur = stateRef.current;
@@ -1164,6 +1223,7 @@ export function App() {
     }, [announce, selectedIndex, showFeedback]);
 
     const executeSwitchMode = useCallback((newMode) => {
+        clearUnitCelebration();
         onlineClientRef.current?.disconnect();
         setPartnerCursorIndex(null);
         setActiveDigit(null);
@@ -1194,7 +1254,7 @@ export function App() {
         stateRef.current.isPlayingGame = false;
         updateBrowserUrl('/');
         startNewSoloGame(null, null, { restoreSaved: true });
-    }, [openWatchDirectory, startNewSoloGame]);
+    }, [clearUnitCelebration, openWatchDirectory, startNewSoloGame]);
 
     const switchMode = useCallback((newMode) => {
         const cur = stateRef.current;
@@ -1731,6 +1791,7 @@ export function App() {
                             onCellSelect={handleCellSelect}
                             myRole={myRole}
                             partnerCursorIndex={partnerCursorIndex}
+                            unitCelebration={unitCelebration}
                         />
 
                         {actionFeedback && (
@@ -1764,11 +1825,13 @@ export function App() {
                                 const cur = stateRef.current;
                                 if (cur.isSpectating || cur.mode === 'watch' || cur.gameState.status === 'solved') return;
                                 const owner = (cur.myRole === 'host' || cur.myRole === 'guest') ? cur.myRole : null;
+                                const prevBoard = cur.gameState.board;
                                 setSelectedIndex(idx);
                                 const nextState = setCellValue(cur.gameState, idx, digit, { owner });
                                 setGameState(nextState);
                                 stateRef.current.gameState = nextState;
                                 clearHintsForCell(idx);
+                                triggerUnitCelebration(prevBoard, nextState, idx);
                                 const isBroadcaster = (cur.mode === 'solo' || cur.mode === 'online') && Boolean(cur.onlineGameId) && !cur.isSpectating;
                                 if (isBroadcaster) {
                                     onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'cell-update', {
@@ -1866,6 +1929,7 @@ export function App() {
                             onCellSelect={handleCellSelect}
                             myRole={myRole}
                             partnerCursorIndex={partnerCursorIndex}
+                            unitCelebration={unitCelebration}
                         />
 
                         {actionFeedback && (

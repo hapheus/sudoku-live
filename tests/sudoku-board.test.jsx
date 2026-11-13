@@ -187,5 +187,31 @@ describe('SudokuBoard & SpectatorHintsFeed React components', () => {
         expect(document.querySelectorAll('.board-row-axes .board-axis-label')).toHaveLength(6);
         expect(screen.getByRole('button', { name: 'R3C3 → 1' })).toBeInTheDocument();
     });
+
+    it('renders unit completion reward overlay with staggered delay for celebrating cells', () => {
+        const puzzle = [...SAMPLE_SOLUTION];
+        puzzle[0] = 0;
+        const state = setCellValue(createSudokuGame({ difficulty: 'easy', puzzle, solution: SAMPLE_SOLUTION }), 0, 5);
+        const cellDelays = new Map([[0, 0], [1, 28], [2, 56]]);
+
+        render(
+            <SudokuBoard
+                gameState={state}
+                selectedIndex={0}
+                hintsByCell={new Map()}
+                floatingReactions={[]}
+                unitCelebration={{ id: 1, cellDelays }}
+                onCellSelect={vi.fn()}
+            />,
+        );
+
+        const cells = screen.getAllByRole('gridcell');
+        expect(cells[0]).toHaveClass('sudoku-cell--unit-complete');
+        expect(cells[1]).toHaveClass('sudoku-cell--unit-complete');
+        expect(cells[3]).not.toHaveClass('sudoku-cell--unit-complete');
+        const overlay = cells[2].querySelector('.sudoku-cell__celebrate');
+        expect(overlay).not.toBeNull();
+        expect(overlay.style.getPropertyValue('--complete-delay')).toBe('56ms');
+    });
 });
 

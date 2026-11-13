@@ -68,5 +68,8 @@
   "puzzleCompletedTitle": "Puzzle Completed",
   "finishedIn": "finished in",
   "helpTitle": "How to Play & Shortcuts",
-  "closeLabel": "Close"
+  "closeLabel": "Close",
+  "unitCompletedRow": "Row completed",
+  "unitCompletedCol": "Column completed",
+  "unitCompletedBox": "Box completed"
 }
