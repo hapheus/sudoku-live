@@ -46,6 +46,9 @@ export class BoardView {
             yourSymbol = null,
             mode = 'local',
             opponentName = 'Opponent',
+            votes = {},
+            myVote = null,
+            allowVote = false,
         } = options;
 
         const cells = this.boardElement.querySelectorAll('.cell');
@@ -54,24 +57,34 @@ export class BoardView {
         cells.forEach((cell, idx) => {
             const value = state.board[idx];
             const isWinning = winningSet.has(idx);
+            const voteCount = (!value && votes[idx]) ? votes[idx] : 0;
+            const isMyVote = !value && myVote === idx;
 
             // Update cell visual classes
             cell.classList.toggle('cell--x', value === 'X');
             cell.classList.toggle('cell--o', value === 'O');
             cell.classList.toggle('cell--winning', isWinning);
+            cell.classList.toggle('cell--voted', isMyVote);
 
-            // Update inner symbol markup with distinct shapes
-            cell.innerHTML = this.renderSymbolMarkup(value, isWinning);
+            // Update inner symbol markup with distinct shapes and optional vote badge
+            const voteBadge = voteCount > 0
+                ? `<span class="cell__votes" aria-hidden="true">👍 ${voteCount}</span>`
+                : '';
+            cell.innerHTML = this.renderSymbolMarkup(value, isWinning) + voteBadge;
 
             // Accessibility attributes
-            cell.setAttribute('aria-label', getCellAriaLabel(idx, value, isWinning));
+            let ariaLabel = getCellAriaLabel(idx, value, isWinning);
+            if (voteCount > 0) {
+                ariaLabel += `, ${voteCount} spectator vote${voteCount === 1 ? '' : 's'}`;
+            }
+            cell.setAttribute('aria-label', ariaLabel);
 
             // Cell disabled state
             const isFinished = state.status !== 'in_progress';
             const isOccupied = value !== null;
             const notYourTurn = yourSymbol !== null && state.currentTurn !== yourSymbol;
 
-            cell.disabled = locked || isFinished || isOccupied || notYourTurn;
+            cell.disabled = (allowVote ? false : locked) || isFinished || isOccupied || notYourTurn;
         });
 
         this.updateStatus(state, { mode, yourSymbol, opponentName, locked });
