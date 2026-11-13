@@ -146,7 +146,7 @@ body {
 /* Mode Tabs */
 .mode-tabs {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     background: var(--color-surface);
     padding: 0.25rem;
     border-radius: var(--radius-md);
@@ -184,11 +184,28 @@ body {
     color: #0f172a;
 }
 
-/* Difficulty Selector (Compact Segmented Pills) */
+/* Setup Controls (Variant + Difficulty Selectors) */
+.setup-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.variant-group,
 .difficulty-group {
     border: none;
     padding: 0;
     margin: 0;
+}
+
+.variant-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.25rem;
+    background: var(--color-surface);
+    padding: 0.25rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
 }
 
 .difficulty-options {
@@ -201,6 +218,7 @@ body {
     border: 1px solid var(--color-border);
 }
 
+.variant-label,
 .difficulty-label {
     position: relative;
     display: inline-flex;
@@ -217,11 +235,13 @@ body {
     transition: background-color 150ms ease, color 150ms ease;
 }
 
+.variant-label:hover,
 .difficulty-label:hover {
     color: var(--color-text);
     background: var(--color-surface-hover);
 }
 
+.variant-label--active,
 .difficulty-label--active {
     background: var(--color-surface-elevated);
     color: var(--color-text);
@@ -229,10 +249,12 @@ body {
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
 }
 
+.variant-label--active:hover,
 .difficulty-label--active:hover {
     background: var(--color-surface-elevated);
 }
 
+.variant-label input[type="radio"],
 .difficulty-label input[type="radio"] {
     position: absolute;
     opacity: 0;
@@ -242,6 +264,7 @@ body {
     pointer-events: none;
 }
 
+.variant-label:has(input[type="radio"]:focus-visible),
 .difficulty-label:has(input[type="radio"]:focus-visible) {
     outline: 3px solid var(--color-focus);
     outline-offset: 2px;
@@ -427,6 +450,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: 0.75rem;
     padding: 0.75rem;
     background: var(--color-bg);
@@ -438,6 +462,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 0.15rem;
+    min-width: 0;
 }
 
 .live-game-card__title {
@@ -449,6 +474,37 @@ body {
     font-size: 0.8125rem;
     color: var(--color-text-muted);
     font-variant-numeric: tabular-nums;
+}
+
+.live-game-card__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-left: auto;
+}
+
+.live-game-card__join-btn {
+    min-height: var(--touch-min);
+    padding: 0.5rem 0.875rem;
+    background: var(--color-partner);
+    color: #0f172a;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.live-game-card__join-btn:hover:not(:disabled) {
+    background: #c4b5fd;
+}
+
+.live-game-card__join-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    background: var(--color-surface-elevated);
+    color: var(--color-text-muted);
 }
 
 .live-game-card__action-btn {
@@ -474,13 +530,38 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.75rem;
+    flex-wrap: wrap;
+    gap: 0.625rem;
     padding: 0.5rem 0.875rem;
     background: var(--color-hint-bg);
     border: 1px solid rgba(251, 191, 36, 0.45);
     border-radius: var(--radius-md);
     font-size: 0.8125rem;
     color: var(--color-text);
+}
+
+.spectator-bar__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-left: auto;
+}
+
+.spectator-bar__join-btn {
+    min-height: var(--touch-min);
+    padding: 0.4rem 0.875rem;
+    background: var(--color-partner);
+    border: none;
+    border-radius: var(--radius-sm);
+    color: #0f172a;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.spectator-bar__join-btn:hover {
+    background: #c4b5fd;
 }
 
 .spectator-bar__back-btn {
@@ -735,6 +816,10 @@ body {
     padding-left: 1.5rem;
 }
 
+.board-col-axes--6x6 {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
 .board-main-row {
     display: flex;
     align-items: stretch;
@@ -746,6 +831,10 @@ body {
     flex-shrink: 0;
     display: grid;
     grid-template-rows: repeat(9, minmax(0, 1fr));
+}
+
+.board-row-axes--6x6 {
+    grid-template-rows: repeat(6, minmax(0, 1fr));
 }
 
 .board-axis-label {
@@ -773,6 +862,10 @@ body {
     transition: border-color 250ms ease;
 }
 
+.sudoku-board--6x6 {
+    grid-template-rows: repeat(6, minmax(0, 1fr));
+}
+
 .sudoku-board--solved {
     border-color: var(--color-success);
     animation: boardSolvedPop 520ms ease-out;
@@ -793,6 +886,10 @@ body {
 .sudoku-row {
     display: grid;
     grid-template-columns: repeat(9, minmax(0, 1fr));
+}
+
+.sudoku-row--6x6 {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .sudoku-cell {
@@ -916,6 +1013,10 @@ body {
     line-height: 1;
 }
 
+.sudoku-board--6x6 .sudoku-cell__digit {
+    font-size: clamp(1.25rem, 5.5vw, 1.75rem);
+}
+
 .sudoku-cell__notes {
     position: absolute;
     inset: 2px;
@@ -923,6 +1024,11 @@ body {
     grid-template-columns: repeat(3, 1fr);
     grid-template-rows: repeat(3, 1fr);
     pointer-events: none;
+}
+
+.sudoku-cell__notes--2x3 {
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(2, 1fr);
 }
 
 .sudoku-cell__note {
@@ -934,6 +1040,10 @@ body {
     color: var(--color-text-muted);
     line-height: 1;
     border-radius: 3px;
+}
+
+.sudoku-board--6x6 .sudoku-cell__note {
+    font-size: clamp(0.6rem, 2.2vw, 0.8rem);
 }
 
 .sudoku-cell__note--match {
@@ -1178,6 +1288,10 @@ body {
     gap: 0.3rem;
 }
 
+.numpad--6x6 {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
 .numpad-btn {
     min-height: 50px;
     padding: 0.25rem 0;
@@ -1264,6 +1378,10 @@ body {
     grid-template-columns: repeat(9, minmax(0, 1fr));
     gap: 0.3rem;
     width: 100%;
+}
+
+.spectator-pad__digits--6x6 {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .spectator-pad__actions {
@@ -1572,6 +1690,7 @@ input:focus-visible {
         outline-offset: -4px;
     }
     .mode-tab--active,
+    .variant-label--active,
     .difficulty-label--active,
     .numpad-btn--active {
         outline: 3px solid Highlight;

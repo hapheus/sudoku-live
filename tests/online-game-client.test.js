@@ -87,7 +87,7 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
         expect(client.rememberEvent(publishedPayload.data.eventId)).toBe(true);
     });
 
-    it('broadcasts game_mode in lobby updates for solo and online games', () => {
+    it('broadcasts variant, total_cells, has_guest, and game_mode in lobby updates', () => {
         const client = new OnlineGameClient({
             wsConfig: { host: 'localhost', port: 8081, scheme: 'http' },
         });
@@ -95,7 +95,11 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
         const publishSpy = vi.fn().mockResolvedValue({});
         client.lobbyChannel = { publish: publishSpy };
 
-        client.broadcastLobbyUpdate('solo-room-1', 'in_progress', 35, 'hard', 'solo');
+        client.broadcastLobbyUpdate('solo-room-1', 'in_progress', 16, 'hard', 'solo', {
+            variant: '2x3',
+            totalCells: 36,
+            hasGuest: true,
+        });
 
         expect(publishSpy).toHaveBeenCalledTimes(1);
         const payload = publishSpy.mock.calls[0][0];
@@ -106,7 +110,10 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
             status: 'in_progress',
             game_mode: 'solo',
             difficulty: 'hard',
-            filled_count: 35,
+            variant: '2x3',
+            total_cells: 36,
+            has_guest: true,
+            filled_count: 16,
         });
         expect(client.hostedLobbyMeta).toEqual({
             id: client.clientId,
@@ -114,7 +121,10 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
             status: 'in_progress',
             game_mode: 'solo',
             difficulty: 'hard',
-            filled_count: 35,
+            variant: '2x3',
+            total_cells: 36,
+            has_guest: true,
+            filled_count: 16,
         });
     });
 });

@@ -1,4 +1,5 @@
 import React from 'react';
+import { getVariantSpec, inferVariantFromBoardLength } from '../domain/sudoku-generator.js';
 import { isValidGameId } from '../services/online-game-client.js';
 
 const DIFFICULTY_LABELS = {
@@ -14,6 +15,7 @@ export function WatchDirectory({
     onReconnect = null,
     onRefresh,
     onWatchGame,
+    onJoinGame = null,
 }) {
     const seenGameIds = new Set();
     const liveGames = [];
@@ -74,20 +76,21 @@ export function WatchDirectory({
                                 : 'No live Sudoku matches right now.'}
                         </p>
                         <p className="watch-empty__sub">
-                            Start a Solo or Online Co-op game and it will appear here in real time.
+                            Start a Solo game and others can watch live or join you here in real time.
                         </p>
                     </div>
                 ) : (
                     liveGames.map((game) => {
+                        const inferredVariant = game.variant || inferVariantFromBoardLength(game.total_cells);
+                        const spec = getVariantSpec(inferredVariant);
+                        const totalCells = spec.totalCells;
                         const filledCount = Math.max(
                             0,
-                            Math.min(81, parseInt(game.filled_count ?? game.moves_count ?? 0, 10) || 0),
+                            Math.min(totalCells, parseInt(game.filled_count ?? game.moves_count ?? 0, 10) || 0),
                         );
                         const diffLabel = DIFFICULTY_LABELS[game.difficulty] || 'Medium';
-                        const modeLabel = game.game_mode === 'solo' ? 'Solo' : 'Co-op';
-                        const statusLabel = game.status === 'waiting' && game.game_mode !== 'solo'
-                            ? 'Waiting for partner'
-                            : 'Solving live';
+                        const hasGuest = Boolean(game.has_guest);
+                        const statusLabel = hasGuest ? 'Co-op live' : 'Open to join';
 
                         return (
                             <div key={game.game_id} className="live-game-card">
@@ -96,17 +99,30 @@ export function WatchDirectory({
                                         {`Room #${game.game_id.slice(0, 8)}`}
                                     </span>
                                     <span className="live-game-card__meta">
-                                        {`${modeLabel} • ${diffLabel} • ${statusLabel} • ${filledCount}/81`}
+                                        {`${spec.shortLabel} • ${diffLabel} • ${statusLabel} • ${filledCount}/${totalCells}`}
                                     </span>
                                 </div>
-                                <button
-                                    type="button"
-                                    className="live-game-card__action-btn"
-                                    data-watch-id={game.game_id}
-                                    onClick={() => onWatchGame(game.game_id)}
-                                >
-                                    Watch Live
-                                </button>
+                                <div className="live-game-card__actions">
+                                    {onJoinGame && (
+                                        <button
+                                            type="button"
+                                            className="live-game-card__join-btn"
+                                            data-join-id={game.game_id}
+                                            disabled={hasGuest}
+                                            onClick={() => onJoinGame(game.game_id)}
+                                        >
+                                            {hasGuest ? 'Full' : 'Join'}
+                                        </button>
+                                    )}
+                                    <button
+                                        type="button"
+                                        className="live-game-card__action-btn"
+                                        data-watch-id={game.game_id}
+                                        onClick={() => onWatchGame(game.game_id)}
+                                    >
+                                        Watch Live
+                                    </button>
+                                </div>
                             </div>
                         );
                     })

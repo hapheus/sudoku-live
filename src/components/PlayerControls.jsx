@@ -1,8 +1,10 @@
 import React from 'react';
 import { getDigitCounts } from '../domain/sudoku-engine.js';
+import { getVariantSpec, inferVariantFromBoardLength } from '../domain/sudoku-generator.js';
 
 export function PlayerControls({
     board,
+    variant = null,
     notesMode,
     canUndo,
     activeDigit = null,
@@ -16,7 +18,10 @@ export function PlayerControls({
     onLocalHint,
     onDigit,
 }) {
-    const counts = getDigitCounts(board);
+    const resolvedVariant = variant || inferVariantFromBoardLength(board?.length);
+    const { maxDigit, gridSize } = getVariantSpec(resolvedVariant);
+    const counts = getDigitCounts(board, resolvedVariant);
+    const digits = Array.from({ length: maxDigit }, (_, i) => i + 1);
 
     return (
         <section id="player-controls" className="player-controls" aria-label="Puzzle Controls">
@@ -105,9 +110,13 @@ export function PlayerControls({
                 </div>
             )}
 
-            <div className="numpad" role="group" aria-label="Number pad 1 to 9">
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => {
-                    const remaining = Math.max(0, 9 - (counts[d] || 0));
+            <div
+                className={`numpad ${maxDigit === 6 ? 'numpad--6x6' : ''}`}
+                role="group"
+                aria-label={`Number pad 1 to ${maxDigit}`}
+            >
+                {digits.map((d) => {
+                    const remaining = Math.max(0, gridSize - (counts[d] || 0));
                     const isComplete = remaining === 0;
                     const isDisabled = isSolved || (isComplete && !notesMode);
                     const isActiveDigit = activeDigit === d;
@@ -126,7 +135,7 @@ export function PlayerControls({
                             data-digit={d}
                             disabled={isDisabled}
                             aria-pressed={activeDigit !== null ? isActiveDigit : undefined}
-                            aria-label={isComplete ? `${d}, all 9 placed` : `Enter ${d}, ${remaining} remaining`}
+                            aria-label={isComplete ? `${d}, all ${gridSize} placed` : `Enter ${d}, ${remaining} remaining`}
                             onClick={() => onDigit(d)}
                         >
                             <span className="numpad-btn__digit">{d}</span>

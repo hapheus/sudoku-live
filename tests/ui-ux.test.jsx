@@ -2,8 +2,8 @@ import React from 'react';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { ModeTabs } from '../src/components/ModeTabs.jsx';
+import { VariantSelector } from '../src/components/VariantSelector.jsx';
 import { DifficultySelector } from '../src/components/DifficultySelector.jsx';
-import { OnlineInviteBox } from '../src/components/OnlineInviteBox.jsx';
 import { StatusBanner } from '../src/components/StatusBanner.jsx';
 import { PlayerControls } from '../src/components/PlayerControls.jsx';
 import { WatcherInteractions } from '../src/components/WatcherInteractions.jsx';
@@ -28,52 +28,56 @@ const SAMPLE_SOLUTION = [
     3, 4, 5, 2, 8, 6, 1, 7, 9,
 ];
 
+const SAMPLE_2X3_SOLUTION = [
+    1, 2, 3, 4, 5, 6,
+    4, 5, 6, 1, 2, 3,
+    2, 3, 1, 6, 4, 5,
+    5, 6, 4, 2, 3, 1,
+    3, 1, 2, 5, 6, 4,
+    6, 4, 5, 3, 1, 2,
+];
+
 describe('UI/UX components & Solo persistence', () => {
     beforeEach(() => {
         localStorage.clear();
     });
 
-    it('supports WAI-ARIA arrow-key navigation and roving tabIndex in ModeTabs', () => {
+    it('supports WAI-ARIA arrow-key navigation in 2-tab ModeTabs (Solo and Watch Live)', () => {
         const onSelectMode = vi.fn();
         render(<ModeTabs mode="solo" onSelectMode={onSelectMode} />);
 
         const soloTab = screen.getByRole('tab', { name: 'Solo' });
-        const onlineTab = screen.getByRole('tab', { name: 'Online Co-op' });
         const watchTab = screen.getByRole('tab', { name: 'Watch Live' });
+        expect(screen.queryByRole('tab', { name: 'Online Co-op' })).not.toBeInTheDocument();
 
         expect(soloTab).toHaveAttribute('tabindex', '0');
-        expect(onlineTab).toHaveAttribute('tabindex', '-1');
         expect(watchTab).toHaveAttribute('tabindex', '-1');
 
         fireEvent.keyDown(soloTab, { key: 'ArrowRight' });
-        expect(onSelectMode).toHaveBeenCalledWith('online');
-
-        fireEvent.keyDown(soloTab, { key: 'End' });
         expect(onSelectMode).toHaveBeenCalledWith('watch');
+
+        fireEvent.keyDown(watchTab, { key: 'Home' });
+        expect(onSelectMode).toHaveBeenCalledWith('solo');
     });
 
-    it('renders DifficultySelector as segmented pills and emits changes', () => {
-        const onChange = vi.fn();
-        render(<DifficultySelector difficulty="medium" onChange={onChange} />);
+    it('renders VariantSelector and DifficultySelector as segmented pills and emits changes', () => {
+        const onVariantChange = vi.fn();
+        const onDiffChange = vi.fn();
+        render(
+            <>
+                <VariantSelector variant="3x3" onChange={onVariantChange} />
+                <DifficultySelector difficulty="medium" onChange={onDiffChange} />
+            </>,
+        );
 
-        const hardRadio = screen.getByRole('radio', { name: 'Hard' });
-        fireEvent.click(hardRadio);
-        expect(onChange).toHaveBeenCalledWith('hard');
+        fireEvent.click(screen.getByRole('radio', { name: '2×3 (6×6)' }));
+        expect(onVariantChange).toHaveBeenCalledWith('2x3');
+
+        fireEvent.click(screen.getByRole('radio', { name: 'Hard' }));
+        expect(onDiffChange).toHaveBeenCalledWith('hard');
     });
 
-    it('collapses OnlineInviteBox once a co-op partner connects and toggles URL visibility', () => {
-        const { rerender } = render(<OnlineInviteBox inviteUrl="https://example.com/games/abc" partnerOnline={false} />);
-        expect(screen.getByLabelText('Invitation link')).toBeInTheDocument();
-
-        rerender(<OnlineInviteBox inviteUrl="https://example.com/games/abc" partnerOnline />);
-        expect(screen.queryByLabelText('Invitation link')).not.toBeInTheDocument();
-        expect(screen.getByText('Partner connected')).toBeInTheDocument();
-
-        fireEvent.click(screen.getByRole('button', { name: 'Show URL' }));
-        expect(screen.getByLabelText('Invitation link')).toBeInTheDocument();
-    });
-
-    it('hides connection/Live Watch Ready chrome in Solo mode and avoids duplicate filledCount', () => {
+    it('hides connection/Live Watch Ready chrome in Solo mode and shows variant progress', () => {
         const puzzle = [...SAMPLE_SOLUTION];
         puzzle[0] = 0;
         const gameState = createSudokuGame({ difficulty: 'easy', puzzle, solution: SAMPLE_SOLUTION });
@@ -93,29 +97,40 @@ describe('UI/UX components & Solo persistence', () => {
 
         expect(screen.queryByText('Live Watch Ready')).not.toBeInTheDocument();
         expect(document.getElementById('connection-status')).toBeNull();
-        expect(document.getElementById('game-status-text')).toHaveTextContent('Easy • Solo');
+        expect(document.getElementById('game-status-text')).toHaveTextContent('3×3 Easy • Solo');
         expect(document.getElementById('sudoku-progress')).toHaveTextContent('80/81');
     });
 
-    it('renders Reconnect button and You/Partner legend in disconnected Online Co-op mode', () => {
-        const puzzle = [...SAMPLE_SOLUTION];
+    it('transitions StatusBanner to Co-op with Reconnect and You/Partner legend when a partner joins', () => {
+        const puzzle = [...SAMPLE_2X3_SOLUTION];
         puzzle[0] = 0;
-        const gameState = createSudokuGame({ difficulty: 'medium', puzzle, solution: SAMPLE_SOLUTION });
+        const gameState = createSudokuGame({
+            difficulty: 'medium',
+            variant: '2x3',
+            puzzle,
+            solution: SAMPLE_2X3_SOLUTION,
+        });
         const onReconnect = vi.fn();
 
         render(
             <StatusBanner
                 connectionStatus="failed"
-                mode="online"
+                mode="solo"
                 isSpectating={false}
                 myRole="host"
-                currentMembers={[{ id: '1', role: 'host' }]}
+                currentMembers={[
+                    { id: '1', role: 'host' },
+                    { id: '2', role: 'guest' },
+                ]}
                 spectatedGameMode={null}
                 gameState={gameState}
                 onReconnect={onReconnect}
             />,
         );
 
+        expect(document.getElementById('game-status-text')).toHaveTextContent('Co-op • 2×3 Medium');
+        expect(document.getElementById('sudoku-progress')).toHaveTextContent('35/36');
+        expect(screen.getByText('Partner online')).toBeInTheDocument();
         expect(screen.getByText('You')).toBeInTheDocument();
         expect(screen.getByText('Partner')).toBeInTheDocument();
         const retryBtn = screen.getByRole('button', { name: 'Reconnect' });
@@ -123,11 +138,11 @@ describe('UI/UX components & Solo persistence', () => {
         expect(onReconnect).toHaveBeenCalledTimes(1);
     });
 
-    it('disables completed digits outside notes mode and highlights activeDigit in PlayerControls', () => {
+    it('disables completed digits outside notes mode and renders 6 digits for 2x3 in PlayerControls', () => {
         const puzzle = [...SAMPLE_SOLUTION];
         puzzle[0] = 0; // Digit 5 has 8 remaining; all other digits 1..4,6..9 have 9 placed (complete)
 
-        render(
+        const { rerender } = render(
             <PlayerControls
                 board={puzzle}
                 notesMode={false}
@@ -149,9 +164,31 @@ describe('UI/UX components & Solo persistence', () => {
         expect(btn5).not.toBeDisabled();
         expect(btn5).toHaveClass('numpad-btn--active');
         expect(btn5).toHaveAttribute('aria-pressed', 'true');
+
+        const puzzle2x3 = [...SAMPLE_2X3_SOLUTION];
+        puzzle2x3[0] = 0;
+        rerender(
+            <PlayerControls
+                board={puzzle2x3}
+                variant="2x3"
+                notesMode={false}
+                canUndo={false}
+                activeDigit={1}
+                isSolved={false}
+                onUndo={vi.fn()}
+                onErase={vi.fn()}
+                onToggleNotes={vi.fn()}
+                onLocalHint={vi.fn()}
+                onDigit={vi.fn()}
+            />,
+        );
+
+        expect(document.querySelectorAll('.numpad .numpad-btn')).toHaveLength(6);
+        expect(screen.getByRole('button', { name: 'Enter 1, 1 remaining' })).not.toBeDisabled();
+        expect(screen.getByRole('button', { name: '2, all 6 placed' })).toBeDisabled();
     });
 
-    it('uses a 9-column spectator pad and disables digits when a filled cell is selected', () => {
+    it('supports 9-digit and 6-digit spectator pads and disables digits when a filled cell is selected', () => {
         const puzzle = [...SAMPLE_SOLUTION];
         puzzle[0] = 0;
 
@@ -176,6 +213,19 @@ describe('UI/UX components & Solo persistence', () => {
             />,
         );
         expect(screen.getByRole('button', { name: 'Suggest digit 5' })).toBeDisabled();
+
+        const puzzle2x3 = [...SAMPLE_2X3_SOLUTION];
+        puzzle2x3[0] = 0;
+        rerender(
+            <WatcherInteractions
+                selectedIndex={0}
+                board={puzzle2x3}
+                variant="2x3"
+                onSendHint={vi.fn()}
+                onSendReaction={vi.fn()}
+            />,
+        );
+        expect(document.querySelectorAll('.spectator-pad__digits .spectator-pad__btn')).toHaveLength(6);
     });
 
     it('opens HelpDialog and closes on Escape key, and renders SolveSummary CTA', () => {

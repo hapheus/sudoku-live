@@ -1,4 +1,5 @@
 import React from 'react';
+import { getVariantSpec, inferVariantFromBoardLength } from '../domain/sudoku-generator.js';
 
 function formatTime(seconds) {
     const mins = Math.floor(seconds / 60);
@@ -16,31 +17,38 @@ export function StatusBanner({
     gameState,
     onReconnect,
 }) {
+    const variant = gameState.variant || inferVariantFromBoardLength(gameState.board?.length);
+    const spec = getVariantSpec(variant);
     const diffLabel = gameState.difficulty
         ? gameState.difficulty.charAt(0).toUpperCase() + gameState.difficulty.slice(1)
         : 'Medium';
 
-    let statusText = `${diffLabel} • Solo`;
+    const partnerOnline = currentMembers.some(
+        (m) => m.role !== myRole && (m.role === 'host' || m.role === 'guest'),
+    );
+    const isCoopActive = !isSpectating && (mode === 'online' || partnerOnline || myRole === 'guest');
+
+    let statusText = `${spec.shortLabel} ${diffLabel} • Solo`;
     let badgeType = 'active-turn';
 
     if (gameState.status === 'solved') {
-        statusText = mode === 'online' || isSpectating
-            ? `Puzzle solved • ${diffLabel}`
-            : `Solved • ${diffLabel}`;
+        statusText = isCoopActive || isSpectating
+            ? `Puzzle solved • ${spec.shortLabel} ${diffLabel}`
+            : `Solved • ${spec.shortLabel} ${diffLabel}`;
         badgeType = 'success';
     } else if (gameState.conflicts && gameState.conflicts.length > 0) {
         statusText = `${gameState.conflicts.length} conflicting cell${gameState.conflicts.length === 1 ? '' : 's'}`;
         badgeType = 'alert';
     } else if (isSpectating) {
-        statusText = `Watching Live • ${diffLabel}`;
+        statusText = `Watching Live • ${spec.shortLabel} ${diffLabel}`;
         badgeType = 'waiting';
-    } else if (mode === 'online') {
-        statusText = `Co-op • ${diffLabel}`;
+    } else if (isCoopActive) {
+        statusText = `Co-op • ${spec.shortLabel} ${diffLabel}`;
     }
 
-    // Connection badge (shown only for multiplayer or live spectating)
+    // Connection badge (shown when playing co-op or spectating)
     let connectionBadge = null;
-    const isRealtimeMode = mode === 'online' || isSpectating;
+    const isRealtimeMode = isCoopActive || isSpectating;
     const canRetryConnection = isRealtimeMode
         && (connectionStatus === 'failed' || connectionStatus === 'disconnected' || connectionStatus === 'unavailable');
 
@@ -69,17 +77,15 @@ export function StatusBanner({
     let coopLegend = null;
     const spectatorCount = currentMembers.filter((m) => m.role === 'spectator').length;
 
-    if ((mode === 'online' || mode === 'solo') && !isSpectating) {
-        if (mode === 'online' && (myRole === 'host' || myRole === 'guest')) {
-            const partnerRole = myRole === 'host' ? 'guest' : 'host';
-            const partnerOnline = currentMembers.some((m) => m.role === partnerRole);
+    if (!isSpectating) {
+        if (isCoopActive && (myRole === 'host' || myRole === 'guest')) {
             opponentBadge = (
                 <span
                     id="opponent-status"
                     className={`presence-badge ${partnerOnline ? 'presence-badge--online' : 'presence-badge--offline'}`}
                     aria-live="polite"
                 >
-                    {partnerOnline ? 'Partner online' : 'Waiting for partner'}
+                    {partnerOnline ? 'Partner online' : 'Partner disconnected'}
                 </span>
             );
 
@@ -104,15 +110,15 @@ export function StatusBanner({
                 </span>
             );
         }
-    } else if (isSpectating) {
+    } else {
         const hostMember = currentMembers.find((m) => m.role === 'host');
         const hostOnline = Boolean(hostMember);
         const guestOnline = currentMembers.some((m) => m.role === 'guest');
-        const resolvedMode = hostMember?.game_mode || spectatedGameMode;
+        const resolvedMode = guestOnline ? 'online' : (hostMember?.game_mode || spectatedGameMode);
 
         opponentBadge = (
             <span id="opponent-status" className="presence-badge" aria-live="polite">
-                {resolvedMode === 'solo'
+                {resolvedMode === 'solo' && !guestOnline
                     ? `Solo Player: ${hostOnline ? 'Online' : 'Offline'}`
                     : `Host: ${hostOnline ? 'Online' : 'Offline'} | Partner: ${guestOnline ? 'Online' : 'Offline'}`}
             </span>
@@ -154,7 +160,7 @@ export function StatusBanner({
                 </div>
                 <div className="telemetry-pills">
                     <span id="sudoku-progress" className="telemetry-pill" aria-label="Filled cells">
-                        {`${gameState.filledCount}/81`}
+                        {`${gameState.filledCount}/${spec.totalCells}`}
                     </span>
                     <span id="sudoku-timer" className="telemetry-pill" aria-label="Elapsed time">
                         {formatTime(gameState.elapsedSeconds || 0)}

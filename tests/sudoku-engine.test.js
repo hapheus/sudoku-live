@@ -132,5 +132,48 @@ describe('Sudoku Engine', () => {
         state = undoLastMove(state);
         expect(state.notes[0]).toEqual([5]);
     });
+
+    it('supports 2x3 (6x6) Sudoku boards, box conflicts, 36-cell completion, and serialization', () => {
+        const solution2x3 = [
+            1, 2, 3, 4, 5, 6,
+            4, 5, 6, 1, 2, 3,
+            2, 3, 1, 6, 4, 5,
+            5, 6, 4, 2, 3, 1,
+            3, 1, 2, 5, 6, 4,
+            6, 4, 5, 3, 1, 2,
+        ];
+        const puzzle2x3 = [...solution2x3];
+        puzzle2x3[0] = 0; // solution 1
+        puzzle2x3[8] = 0; // solution 6
+
+        let state = createSudokuGame({
+            difficulty: 'easy',
+            variant: '2x3',
+            puzzle: puzzle2x3,
+            solution: solution2x3,
+        });
+        expect(state.variant).toBe('2x3');
+        expect(state.gridSize).toBe(6);
+        expect(state.totalCells).toBe(36);
+        expect(state.maxDigit).toBe(6);
+        expect(getCandidateDigits(state.board, 0, '2x3')).toEqual([1]);
+
+        expect(() => setCellValue(state, 0, 7)).toThrow('Invalid digit 7. Must be 0..6.');
+
+        // Placing 5 in cell 0 conflicts in row 0 (idx 4), box 0 (idx 7), and col 0 (idx 18)
+        const conflicted = setCellValue(state, 0, 5);
+        expect(conflicted.conflicts).toEqual([0, 4, 7, 18]);
+
+        state = setCellValue(state, 0, 1);
+        state = setCellValue(state, 8, 6);
+        expect(state.filledCount).toBe(36);
+        expect(state.status).toBe('solved');
+
+        const hydrated = hydrateGameState(serializeGameState(state));
+        expect(hydrated.variant).toBe('2x3');
+        expect(hydrated.gridSize).toBe(6);
+        expect(hydrated.totalCells).toBe(36);
+        expect(hydrated.status).toBe('solved');
+    });
 });
 

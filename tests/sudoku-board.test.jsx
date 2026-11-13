@@ -143,5 +143,49 @@ describe('SudokuBoard & SpectatorHintsFeed React components', () => {
         expect(matchedNotes).toHaveLength(1);
         expect(matchedNotes[0]).toHaveTextContent('5');
     });
+
+    it('renders 2x3 (6x6) grid with 36 cells, R1-R6/C1-C6 axes, and 2x3 box borders', () => {
+        const solution2x3 = [
+            1, 2, 3, 4, 5, 6,
+            4, 5, 6, 1, 2, 3,
+            2, 3, 1, 6, 4, 5,
+            5, 6, 4, 2, 3, 1,
+            3, 1, 2, 5, 6, 4,
+            6, 4, 5, 3, 1, 2,
+        ];
+        const puzzle2x3 = [...solution2x3];
+        puzzle2x3[0] = 0;
+
+        let state = createSudokuGame({ difficulty: 'medium', variant: '2x3', puzzle: puzzle2x3, solution: solution2x3 });
+        state = toggleCellNote(state, 0, 1);
+
+        render(
+            <>
+                <SudokuBoard
+                    gameState={state}
+                    selectedIndex={0}
+                    hintsByCell={new Map()}
+                    floatingReactions={[]}
+                    onCellSelect={vi.fn()}
+                />
+                <SpectatorHintsFeed
+                    hintsByCell={new Map([[14, { index: 14, topValue: 1, count: 1 }]])}
+                    variant="2x3"
+                    canApply={false}
+                    onSelectHint={vi.fn()}
+                    onApplyHint={vi.fn()}
+                />
+            </>,
+        );
+
+        const cells = screen.getAllByRole('gridcell');
+        expect(cells).toHaveLength(36);
+        expect(cells[2]).toHaveClass('sudoku-cell--box-right');
+        expect(cells[6]).toHaveClass('sudoku-cell--box-bottom');
+        expect(cells[0].querySelectorAll('.sudoku-cell__notes--2x3 .sudoku-cell__note')).toHaveLength(6);
+        expect(document.querySelectorAll('.board-col-axes .board-axis-label')).toHaveLength(6);
+        expect(document.querySelectorAll('.board-row-axes .board-axis-label')).toHaveLength(6);
+        expect(screen.getByRole('button', { name: 'R3C3 → 1' })).toBeInTheDocument();
+    });
 });
 

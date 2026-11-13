@@ -10,30 +10,38 @@ describe('WatchDirectory React component', () => {
         expect(screen.getByText('No live Sudoku matches right now.')).toBeInTheDocument();
     });
 
-    it('safely renders valid Solo and Co-op rooms and filters solved or invalid rooms', () => {
+    it('safely renders valid 3x3 and 2x3 rooms with Join and Watch Live actions and filters solved/invalid rooms', () => {
         const onWatch = vi.fn();
+        const onJoin = vi.fn();
         render(
             <WatchDirectory
                 rooms={[
-                    { id: '1', game_id: 'solo-room-1', game_mode: 'solo', status: 'waiting', difficulty: 'medium', filled_count: 34 },
-                    { id: '2', game_id: 'coop-room-1', game_mode: 'online', status: 'waiting', difficulty: 'easy', filled_count: 40 },
+                    { id: '1', game_id: 'solo-room-1', game_mode: 'solo', status: 'in_progress', difficulty: 'medium', variant: '3x3', filled_count: 34, has_guest: false },
+                    { id: '2', game_id: 'coop-room-1', game_mode: 'online', status: 'in_progress', difficulty: 'easy', variant: '2x3', total_cells: 36, filled_count: 16, has_guest: true },
                     { id: '3', game_id: '"><img src=x onerror=alert(1)>', status: 'in_progress', difficulty: 'easy', filled_count: 30 },
                     { id: '4', game_id: 'solved-room', status: 'solved', difficulty: 'expert', filled_count: 81 },
                 ]}
                 onRefresh={vi.fn()}
                 onWatchGame={onWatch}
+                onJoinGame={onJoin}
             />,
         );
 
         expect(document.querySelector('img')).toBeNull();
         expect(screen.getByText('Room #solo-roo')).toBeInTheDocument();
-        expect(screen.getByText('Solo • Medium • Solving live • 34/81')).toBeInTheDocument();
-        expect(screen.getByText('Co-op • Easy • Waiting for partner • 40/81')).toBeInTheDocument();
+        expect(screen.getByText('3×3 • Medium • Open to join • 34/81')).toBeInTheDocument();
+        expect(screen.getByText('2×3 • Easy • Co-op live • 16/36')).toBeInTheDocument();
 
         const watchButtons = screen.getAllByRole('button', { name: 'Watch Live' });
         expect(watchButtons).toHaveLength(2);
         fireEvent.click(watchButtons[0]);
         expect(onWatch).toHaveBeenCalledWith('solo-room-1');
+
+        const joinBtn = screen.getByRole('button', { name: 'Join' });
+        const fullBtn = screen.getByRole('button', { name: 'Full' });
+        expect(fullBtn).toBeDisabled();
+        fireEvent.click(joinBtn);
+        expect(onJoin).toHaveBeenCalledWith('solo-room-1');
     });
 
     it('renders offline notice and Reconnect button when disconnected', () => {

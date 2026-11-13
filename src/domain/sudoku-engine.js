@@ -1,12 +1,33 @@
-import { generateSudoku, getCellCoords } from './sudoku-generator.js';
+import {
+    generateSudoku,
+    getCellCoords,
+    getVariantSpec,
+    inferVariantFromBoardLength,
+    normalizeVariant,
+} from './sudoku-generator.js';
 
-export function getPeerIndices(index) {
-    const { row, col, box } = getCellCoords(index);
+function resolveVariantForState(stateOrBoard, explicitVariant = null) {
+    if (explicitVariant) return normalizeVariant(explicitVariant);
+    if (Array.isArray(stateOrBoard)) {
+        return inferVariantFromBoardLength(stateOrBoard.length);
+    }
+    if (stateOrBoard?.variant) {
+        return normalizeVariant(stateOrBoard.variant);
+    }
+    if (Array.isArray(stateOrBoard?.board)) {
+        return inferVariantFromBoardLength(stateOrBoard.board.length);
+    }
+    return '3x3';
+}
+
+export function getPeerIndices(index, variant = '3x3') {
+    const spec = getVariantSpec(variant);
+    const { row, col, box } = getCellCoords(index, spec.id);
     const peers = new Set();
 
-    for (let i = 0; i < 81; i++) {
+    for (let i = 0; i < spec.totalCells; i++) {
         if (i === index) continue;
-        const coords = getCellCoords(i);
+        const coords = getCellCoords(i, spec.id);
         if (coords.row === row || coords.col === col || coords.box === box) {
             peers.add(i);
         }
@@ -15,7 +36,8 @@ export function getPeerIndices(index) {
     return Array.from(peers);
 }
 
-export function findConflicts(board) {
+export function findConflicts(board, variant = null) {
+    const spec = getVariantSpec(resolveVariantForState(board, variant));
     const conflicts = new Set();
 
     const checkUnit = (indices) => {
@@ -32,21 +54,21 @@ export function findConflicts(board) {
         }
     };
 
-    for (let r = 0; r < 9; r++) {
-        checkUnit(Array.from({ length: 9 }, (_, c) => r * 9 + c));
+    for (let r = 0; r < spec.gridSize; r++) {
+        checkUnit(Array.from({ length: spec.gridSize }, (_, c) => r * spec.gridSize + c));
     }
 
-    for (let c = 0; c < 9; c++) {
-        checkUnit(Array.from({ length: 9 }, (_, r) => r * 9 + c));
+    for (let c = 0; c < spec.gridSize; c++) {
+        checkUnit(Array.from({ length: spec.gridSize }, (_, r) => r * spec.gridSize + c));
     }
 
-    for (let b = 0; b < 9; b++) {
-        const br = Math.floor(b / 3) * 3;
-        const bc = (b % 3) * 3;
+    for (let b = 0; b < spec.gridSize; b++) {
+        const br = Math.floor(b / spec.boxesPerRow) * spec.boxRows;
+        const bc = (b % spec.boxesPerRow) * spec.boxCols;
         const boxIndices = [];
-        for (let r = 0; r < 3; r++) {
-            for (let c = 0; c < 3; c++) {
-                boxIndices.push((br + r) * 9 + (bc + c));
+        for (let r = 0; r < spec.boxRows; r++) {
+            for (let c = 0; c < spec.boxCols; c++) {
+                boxIndices.push((br + r) * spec.gridSize + (bc + c));
             }
         }
         checkUnit(boxIndices);
@@ -55,49 +77,66 @@ export function findConflicts(board) {
     return Array.from(conflicts).sort((a, b) => a - b);
 }
 
-export function countFilledCells(board) {
+export function countFilledCells(board, variant = null) {
+    const spec = getVariantSpec(resolveVariantForState(board, variant));
     let count = 0;
-    for (let i = 0; i < 81; i++) {
-        if (board[i] >= 1 && board[i] <= 9) count++;
+    for (let i = 0; i < spec.totalCells; i++) {
+        if (board[i] >= 1 && board[i] <= spec.maxDigit) count++;
     }
     return count;
 }
 
-export function getDigitCounts(board) {
-    const counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 };
-    for (let i = 0; i < 81; i++) {
+export function getDigitCounts(board, variant = null) {
+    const spec = getVariantSpec(resolveVariantForState(board, variant));
+    const counts = {};
+    for (let d = 1; d <= spec.maxDigit; d++) {
+        counts[d] = 0;
+    }
+    for (let i = 0; i < spec.totalCells; i++) {
         const v = board[i];
-        if (v >= 1 && v <= 9) {
+        if (v >= 1 && v <= spec.maxDigit) {
             counts[v]++;
         }
     }
     return counts;
 }
 
-export function isSolved(board) {
-    return countFilledCells(board) === 81 && findConflicts(board).length === 0;
+export function isSolved(board, variant = null) {
+    const spec = getVariantSpec(resolveVariantForState(board, variant));
+    return countFilledCells(board, spec.id) === spec.totalCells && findConflicts(board, spec.id).length === 0;
 }
 
-export function createSudokuGame({ difficulty = 'medium', puzzle = null, solution = null } = {}) {
+export function createSudokuGame({ difficulty = 'medium', variant = null, puzzle = null, solution = null } = {}) {
+    const resolvedVariant = puzzle
+        ? resolveVariantForState(puzzle, variant)
+        : normalizeVariant(variant || '3x3');
+    const spec = getVariantSpec(resolvedVariant);
+
     const generated = puzzle && solution
-        ? { puzzle: [...puzzle], solution: [...solution], difficulty }
-        : generateSudoku(difficulty);
+        ? { puzzle: [...puzzle], solution: [...solution], difficulty, variant: spec.id }
+        : generateSudoku(difficulty, Math.random, spec.id);
 
     const board = [...generated.puzzle];
     const givens = generated.puzzle.map((v) => v !== 0);
-    const notes = Array.from({ length: 81 }, () => []);
-    const cellOwners = Array(81).fill(null);
+    const notes = Array.from({ length: spec.totalCells }, () => []);
+    const cellOwners = Array(spec.totalCells).fill(null);
 
     return {
+        variant: spec.id,
+        gridSize: spec.gridSize,
+        totalCells: spec.totalCells,
+        boxRows: spec.boxRows,
+        boxCols: spec.boxCols,
+        maxDigit: spec.maxDigit,
         difficulty: generated.difficulty,
         board,
         givens,
         solution: [...generated.solution],
         notes,
         cellOwners,
-        conflicts: findConflicts(board),
-        filledCount: countFilledCells(board),
-        status: isSolved(board) ? 'solved' : 'in_progress',
+        conflicts: findConflicts(board, spec.id),
+        filledCount: countFilledCells(board, spec.id),
+        status: isSolved(board, spec.id) ? 'solved' : 'in_progress',
         history: [],
         elapsedSeconds: 0,
     };
@@ -107,16 +146,17 @@ export function cloneNotes(notes) {
     return notes.map((arr) => [...arr]);
 }
 
-function cloneOwners(owners) {
-    return Array.isArray(owners) && owners.length === 81 ? [...owners] : Array(81).fill(null);
+function cloneOwners(owners, totalCells = 81) {
+    return Array.isArray(owners) && owners.length === totalCells ? [...owners] : Array(totalCells).fill(null);
 }
 
 export function setCellValue(state, index, value, { recordHistory = true, owner = null } = {}) {
-    if (index < 0 || index >= 81) {
+    const spec = getVariantSpec(resolveVariantForState(state));
+    if (index < 0 || index >= spec.totalCells) {
         throw new Error(`Invalid cell index ${index}.`);
     }
-    if (value < 0 || value > 9 || !Number.isInteger(value)) {
-        throw new Error(`Invalid digit ${value}. Must be 0..9.`);
+    if (value < 0 || value > spec.maxDigit || !Number.isInteger(value)) {
+        throw new Error(`Invalid digit ${value}. Must be 0..${spec.maxDigit}.`);
     }
     if (state.givens[index]) {
         throw new Error('Cannot modify a given clue cell.');
@@ -131,14 +171,14 @@ export function setCellValue(state, index, value, { recordHistory = true, owner 
 
     const nextBoard = [...state.board];
     const nextNotes = cloneNotes(state.notes);
-    const nextOwners = cloneOwners(state.cellOwners);
+    const nextOwners = cloneOwners(state.cellOwners, spec.totalCells);
     const nextHistory = recordHistory
         ? [
             ...state.history.slice(-49),
             {
                 board: [...state.board],
                 notes: cloneNotes(state.notes),
-                cellOwners: cloneOwners(state.cellOwners),
+                cellOwners: cloneOwners(state.cellOwners, spec.totalCells),
             },
         ]
         : state.history;
@@ -148,17 +188,17 @@ export function setCellValue(state, index, value, { recordHistory = true, owner 
 
     if (value !== 0) {
         nextNotes[index] = [];
-        // Tidy pencil marks in row, column, and 3x3 box peers
-        for (const peerIdx of getPeerIndices(index)) {
+        // Tidy pencil marks in row, column, and box peers
+        for (const peerIdx of getPeerIndices(index, spec.id)) {
             if (nextNotes[peerIdx].length > 0) {
                 nextNotes[peerIdx] = nextNotes[peerIdx].filter((n) => n !== value);
             }
         }
     }
 
-    const conflicts = findConflicts(nextBoard);
-    const filledCount = countFilledCells(nextBoard);
-    const solved = filledCount === 81 && conflicts.length === 0;
+    const conflicts = findConflicts(nextBoard, spec.id);
+    const filledCount = countFilledCells(nextBoard, spec.id);
+    const solved = filledCount === spec.totalCells && conflicts.length === 0;
 
     return {
         ...state,
@@ -173,11 +213,12 @@ export function setCellValue(state, index, value, { recordHistory = true, owner 
 }
 
 export function toggleCellNote(state, index, digit, { recordHistory = true } = {}) {
-    if (index < 0 || index >= 81) {
+    const spec = getVariantSpec(resolveVariantForState(state));
+    if (index < 0 || index >= spec.totalCells) {
         throw new Error(`Invalid cell index ${index}.`);
     }
-    if (digit < 1 || digit > 9 || !Number.isInteger(digit)) {
-        throw new Error(`Invalid note digit ${digit}. Must be 1..9.`);
+    if (digit < 1 || digit > spec.maxDigit || !Number.isInteger(digit)) {
+        throw new Error(`Invalid note digit ${digit}. Must be 1..${spec.maxDigit}.`);
     }
     if (state.givens[index]) {
         throw new Error('Cannot add notes to a given clue cell.');
@@ -196,7 +237,7 @@ export function toggleCellNote(state, index, digit, { recordHistory = true } = {
             {
                 board: [...state.board],
                 notes: cloneNotes(state.notes),
-                cellOwners: cloneOwners(state.cellOwners),
+                cellOwners: cloneOwners(state.cellOwners, spec.totalCells),
             },
         ]
         : state.history;
@@ -215,19 +256,20 @@ export function toggleCellNote(state, index, digit, { recordHistory = true } = {
     };
 }
 
-export function getCandidateDigits(board, index) {
-    if (index < 0 || index >= 81 || board[index] !== 0) {
+export function getCandidateDigits(board, index, variant = null) {
+    const spec = getVariantSpec(resolveVariantForState(board, variant));
+    if (index < 0 || index >= spec.totalCells || board[index] !== 0) {
         return [];
     }
     const used = new Set();
-    for (const peerIdx of getPeerIndices(index)) {
+    for (const peerIdx of getPeerIndices(index, spec.id)) {
         const val = board[peerIdx];
-        if (val >= 1 && val <= 9) {
+        if (val >= 1 && val <= spec.maxDigit) {
             used.add(val);
         }
     }
     const candidates = [];
-    for (let d = 1; d <= 9; d++) {
+    for (let d = 1; d <= spec.maxDigit; d++) {
         if (!used.has(d)) candidates.push(d);
     }
     return candidates;
@@ -235,8 +277,9 @@ export function getCandidateDigits(board, index) {
 
 export function fillCandidateNotes(state) {
     if (state.status === 'solved') return state;
+    const spec = getVariantSpec(resolveVariantForState(state));
     const nextNotes = state.board.map((val, idx) => (
-        val === 0 && !state.givens[idx] ? getCandidateDigits(state.board, idx) : []
+        val === 0 && !state.givens[idx] ? getCandidateDigits(state.board, idx, spec.id) : []
     ));
 
     const unchanged = nextNotes.every((arr, idx) => (
@@ -252,7 +295,7 @@ export function fillCandidateNotes(state) {
             {
                 board: [...state.board],
                 notes: cloneNotes(state.notes),
-                cellOwners: cloneOwners(state.cellOwners),
+                cellOwners: cloneOwners(state.cellOwners, spec.totalCells),
             },
         ],
     };
@@ -260,40 +303,42 @@ export function fillCandidateNotes(state) {
 
 export function clearAllNotes(state) {
     if (state.status === 'solved') return state;
+    const spec = getVariantSpec(resolveVariantForState(state));
     const hasAnyNotes = state.notes.some((arr) => arr.length > 0);
     if (!hasAnyNotes) return state;
 
     return {
         ...state,
-        notes: Array.from({ length: 81 }, () => []),
+        notes: Array.from({ length: spec.totalCells }, () => []),
         history: [
             ...state.history.slice(-49),
             {
                 board: [...state.board],
                 notes: cloneNotes(state.notes),
-                cellOwners: cloneOwners(state.cellOwners),
+                cellOwners: cloneOwners(state.cellOwners, spec.totalCells),
             },
         ],
     };
 }
 
 export function applyRemoteCellPatch(state, { index, value, notes = null, owner = null }) {
-    if (index < 0 || index >= 81 || state.givens[index]) {
+    const spec = getVariantSpec(resolveVariantForState(state));
+    if (index < 0 || index >= spec.totalCells || state.givens[index]) {
         return state;
     }
 
     const nextBoard = [...state.board];
     const nextNotes = cloneNotes(state.notes);
-    const nextOwners = cloneOwners(state.cellOwners);
+    const nextOwners = cloneOwners(state.cellOwners, spec.totalCells);
 
-    if (typeof value === 'number' && value >= 0 && value <= 9) {
+    if (typeof value === 'number' && value >= 0 && value <= spec.maxDigit) {
         nextBoard[index] = value;
         if (value === 0) {
             nextOwners[index] = null;
         } else {
             nextOwners[index] = owner === 'host' || owner === 'guest' ? owner : (nextOwners[index] || null);
             nextNotes[index] = [];
-            for (const peerIdx of getPeerIndices(index)) {
+            for (const peerIdx of getPeerIndices(index, spec.id)) {
                 if (nextNotes[peerIdx].length > 0) {
                     nextNotes[peerIdx] = nextNotes[peerIdx].filter((n) => n !== value);
                 }
@@ -303,13 +348,13 @@ export function applyRemoteCellPatch(state, { index, value, notes = null, owner 
 
     if (Array.isArray(notes) && nextBoard[index] === 0) {
         nextNotes[index] = notes
-            .filter((n) => Number.isInteger(n) && n >= 1 && n <= 9)
+            .filter((n) => Number.isInteger(n) && n >= 1 && n <= spec.maxDigit)
             .sort((a, b) => a - b);
     }
 
-    const conflicts = findConflicts(nextBoard);
-    const filledCount = countFilledCells(nextBoard);
-    const solved = filledCount === 81 && conflicts.length === 0;
+    const conflicts = findConflicts(nextBoard, spec.id);
+    const filledCount = countFilledCells(nextBoard, spec.id);
+    const solved = filledCount === spec.totalCells && conflicts.length === 0;
 
     return {
         ...state,
@@ -327,16 +372,17 @@ export function undoLastMove(state) {
         return state;
     }
 
+    const spec = getVariantSpec(resolveVariantForState(state));
     const previous = state.history[state.history.length - 1];
     const nextHistory = state.history.slice(0, -1);
-    const conflicts = findConflicts(previous.board);
-    const filledCount = countFilledCells(previous.board);
+    const conflicts = findConflicts(previous.board, spec.id);
+    const filledCount = countFilledCells(previous.board, spec.id);
 
     return {
         ...state,
         board: [...previous.board],
         notes: cloneNotes(previous.notes),
-        cellOwners: cloneOwners(previous.cellOwners),
+        cellOwners: cloneOwners(previous.cellOwners, spec.totalCells),
         conflicts,
         filledCount,
         status: 'in_progress',
@@ -345,40 +391,57 @@ export function undoLastMove(state) {
 }
 
 export function serializeGameState(state) {
+    const spec = getVariantSpec(resolveVariantForState(state));
     return {
+        variant: spec.id,
         difficulty: state.difficulty,
         board: state.board,
         givens: state.givens,
         solution: state.solution,
         notes: state.notes,
-        cellOwners: cloneOwners(state.cellOwners),
+        cellOwners: cloneOwners(state.cellOwners, spec.totalCells),
         status: state.status,
         elapsedSeconds: state.elapsedSeconds || 0,
     };
 }
 
 export function hydrateGameState(raw) {
-    if (!raw || !Array.isArray(raw.board) || raw.board.length !== 81 || !Array.isArray(raw.givens)) {
+    if (!raw || !Array.isArray(raw.board) || !Array.isArray(raw.givens)) {
+        return null;
+    }
+    const len = raw.board.length;
+    if ((len !== 81 && len !== 36) || raw.givens.length !== len) {
         return null;
     }
 
-    const board = raw.board.map((v) => (Number.isInteger(v) && v >= 0 && v <= 9 ? v : 0));
-    const givens = raw.givens.map(Boolean);
-    const notes = Array.isArray(raw.notes) && raw.notes.length === 81
-        ? raw.notes.map((arr) => (Array.isArray(arr) ? arr.filter((n) => Number.isInteger(n) && n >= 1 && n <= 9) : []))
-        : Array.from({ length: 81 }, () => []);
-    const cellOwners = Array.isArray(raw.cellOwners) && raw.cellOwners.length === 81
-        ? raw.cellOwners.map((owner, idx) => (board[idx] !== 0 && !givens[idx] && (owner === 'host' || owner === 'guest') ? owner : null))
-        : Array(81).fill(null);
-    const solution = Array.isArray(raw.solution) && raw.solution.length === 81
-        ? raw.solution.map((v) => (Number.isInteger(v) && v >= 1 && v <= 9 ? v : 0))
-        : Array(81).fill(0);
+    const spec = getVariantSpec(raw.variant || inferVariantFromBoardLength(len));
+    if (len !== spec.totalCells) {
+        return null;
+    }
 
-    const conflicts = findConflicts(board);
-    const filledCount = countFilledCells(board);
-    const solved = filledCount === 81 && conflicts.length === 0;
+    const board = raw.board.map((v) => (Number.isInteger(v) && v >= 0 && v <= spec.maxDigit ? v : 0));
+    const givens = raw.givens.map(Boolean);
+    const notes = Array.isArray(raw.notes) && raw.notes.length === spec.totalCells
+        ? raw.notes.map((arr) => (Array.isArray(arr) ? arr.filter((n) => Number.isInteger(n) && n >= 1 && n <= spec.maxDigit) : []))
+        : Array.from({ length: spec.totalCells }, () => []);
+    const cellOwners = Array.isArray(raw.cellOwners) && raw.cellOwners.length === spec.totalCells
+        ? raw.cellOwners.map((owner, idx) => (board[idx] !== 0 && !givens[idx] && (owner === 'host' || owner === 'guest') ? owner : null))
+        : Array(spec.totalCells).fill(null);
+    const solution = Array.isArray(raw.solution) && raw.solution.length === spec.totalCells
+        ? raw.solution.map((v) => (Number.isInteger(v) && v >= 1 && v <= spec.maxDigit ? v : 0))
+        : Array(spec.totalCells).fill(0);
+
+    const conflicts = findConflicts(board, spec.id);
+    const filledCount = countFilledCells(board, spec.id);
+    const solved = filledCount === spec.totalCells && conflicts.length === 0;
 
     return {
+        variant: spec.id,
+        gridSize: spec.gridSize,
+        totalCells: spec.totalCells,
+        boxRows: spec.boxRows,
+        boxCols: spec.boxCols,
+        maxDigit: spec.maxDigit,
         difficulty: raw.difficulty || 'medium',
         board,
         givens,

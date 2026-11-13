@@ -1,5 +1,5 @@
 import React from 'react';
-import { getCellCoords } from '../domain/sudoku-generator.js';
+import { getCellCoords, getVariantSpec, inferVariantFromBoardLength } from '../domain/sudoku-generator.js';
 import { REACTION_LIST } from '../utils/watcher-helpers.js';
 
 const EMOJI_LABELS = {
@@ -14,13 +14,18 @@ const EMOJI_LABELS = {
 export function WatcherInteractions({
     selectedIndex,
     board,
+    variant = null,
     onSendHint,
     onSendReaction,
 }) {
+    const resolvedVariant = variant || inferVariantFromBoardLength(board?.length);
+    const { maxDigit } = getVariantSpec(resolvedVariant);
+    const digits = Array.from({ length: maxDigit }, (_, i) => i + 1);
+
     const canHintSelected = selectedIndex !== null && board[selectedIndex] === 0;
-    let hintStatus = 'Tap an empty cell on the board, then suggest 1–9 or nudge players to inspect it:';
+    let hintStatus = `Tap an empty cell on the board, then suggest 1–${maxDigit} or nudge players to inspect it:`;
     if (selectedIndex !== null) {
-        const { row, col } = getCellCoords(selectedIndex);
+        const { row, col } = getCellCoords(selectedIndex, resolvedVariant);
         hintStatus = board[selectedIndex] !== 0
             ? `R${row + 1} C${col + 1} already has a digit. Select an empty cell to suggest a hint.`
             : `Selected R${row + 1} C${col + 1} — suggest a digit or nudge players to look here:`;
@@ -33,8 +38,8 @@ export function WatcherInteractions({
             </p>
 
             <div className="spectator-pad" role="group" aria-label="Suggest a digit hint">
-                <div className="spectator-pad__digits">
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => (
+                <div className={`spectator-pad__digits ${maxDigit === 6 ? 'spectator-pad__digits--6x6' : ''}`}>
+                    {digits.map((d) => (
                         <button
                             key={d}
                             type="button"

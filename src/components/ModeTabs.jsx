@@ -2,12 +2,12 @@ import React, { useRef } from 'react';
 
 const TABS = [
     { id: 'solo', label: 'Solo', controls: 'game-panel' },
-    { id: 'online', label: 'Online Co-op', controls: 'game-panel' },
     { id: 'watch', label: 'Watch Live', controls: 'watch-directory' },
 ];
 
 export function ModeTabs({ mode, onSelectMode }) {
     const tabRefs = useRef([]);
+    const hasActiveTab = TABS.some((tab) => tab.id === mode);
 
     const handleKeyDown = (e, currentIndex) => {
         let nextIndex = null;
@@ -45,7 +45,7 @@ export function ModeTabs({ mode, onSelectMode }) {
                             id={`tab-${tab.id}`}
                             aria-selected={isActive}
                             aria-controls={tab.controls}
-                            tabIndex={isActive ? 0 : -1}
+                            tabIndex={isActive || (!hasActiveTab && index === 0) ? 0 : -1}
                             className={`mode-tab ${isActive ? 'mode-tab--active' : ''}`}
                             data-mode-btn={tab.id}
                             onClick={() => onSelectMode(tab.id)}

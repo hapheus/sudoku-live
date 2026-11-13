@@ -1,5 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getCellCoords } from './domain/sudoku-generator.js';
+import {
+    getCellCoords,
+    getVariantSpec,
+    inferVariantFromBoardLength,
+    normalizeVariant,
+} from './domain/sudoku-generator.js';
 import {
     applyRemoteCellPatch,
     clearAllNotes,
@@ -22,8 +27,8 @@ import {
 } from './services/online-state-storage.js';
 import { ALLOWED_REACTIONS, aggregateHintsByCell } from './utils/watcher-helpers.js';
 import { ModeTabs } from './components/ModeTabs.jsx';
+import { VariantSelector } from './components/VariantSelector.jsx';
 import { DifficultySelector } from './components/DifficultySelector.jsx';
-import { OnlineInviteBox } from './components/OnlineInviteBox.jsx';
 import { WatchDirectory } from './components/WatchDirectory.jsx';
 import { StatusBanner } from './components/StatusBanner.jsx';
 import { SudokuBoard } from './components/SudokuBoard.jsx';
@@ -79,29 +84,20 @@ function replaceBrowserUrl(path) {
     window.history.replaceState({}, '', path);
 }
 
-const DEFAULT_PUBLIC_APP_URL = 'https://sudoku.fraha.dev';
-
-function buildInviteUrl(gameId) {
-    if (!gameId || typeof window === 'undefined') return '';
-    const isNative = Boolean(window.Capacitor?.isNativePlatform?.());
-    if (window.location.protocol.startsWith('http') && !isNative) {
-        return `${window.location.origin}/games/${gameId}`;
-    }
-    const envPublicUrl = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_PUBLIC_APP_URL : '';
-    const base = window.__APP_CONFIG__?.publicAppUrl || envPublicUrl || (isNative ? DEFAULT_PUBLIC_APP_URL : window.location.origin);
-    return `${base.replace(/\/$/, '')}/games/${gameId}`;
-}
-
 export function App() {
     const initialRoute = useMemo(() => parseInitialRoute(), []);
 
     const [difficulty, setDifficulty] = useState(() => localStorage.getItem('sudoku_difficulty') || 'medium');
+    const [variant, setVariant] = useState(() => normalizeVariant(localStorage.getItem('sudoku_variant') || '3x3'));
     const [mode, setMode] = useState(initialRoute.initialMode);
     const [isSpectating, setIsSpectating] = useState(initialRoute.initialWatch);
     const [onlineGameId, setOnlineGameId] = useState(initialRoute.initialGameId);
     const [myRole, setMyRole] = useState(null);
     const [spectatedGameMode, setSpectatedGameMode] = useState(null);
-    const [gameState, setGameState] = useState(() => createSudokuGame({ difficulty: localStorage.getItem('sudoku_difficulty') || 'medium' }));
+    const [gameState, setGameState] = useState(() => createSudokuGame({
+        difficulty: localStorage.getItem('sudoku_difficulty') || 'medium',
+        variant: normalizeVariant(localStorage.getItem('sudoku_variant') || '3x3'),
+    }));
     const [selectedIndex, setSelectedIndex] = useState(null);
     const [activeDigit, setActiveDigit] = useState(null);
     const [partnerCursorIndex, setPartnerCursorIndex] = useState(null);
@@ -117,7 +113,7 @@ export function App() {
     const [hintsMap, setHintsMap] = useState(() => new Map());
     const [floatingReactions, setFloatingReactions] = useState([]);
 
-    const cellRefs = useRef(Array(81).fill(null));
+    const cellRefs = useRef([]);
     const reactionSeq = useRef(0);
     const feedbackTimerRef = useRef(null);
     const confirmCancelRef = useRef(null);
@@ -127,6 +123,7 @@ export function App() {
     const stateRef = useRef({
         mode,
         difficulty,
+        variant,
         isSpectating,
         onlineGameId,
         myRole,
@@ -141,6 +138,7 @@ export function App() {
     stateRef.current = {
         mode,
         difficulty,
+        variant,
         isSpectating,
         onlineGameId,
         myRole,
@@ -180,27 +178,30 @@ export function App() {
     }, []);
 
     const persistSnapshotIfNeeded = useCallback((nextGameState, nextRematch = stateRef.current.rematchRequestedBy) => {
-        const { onlineGameId: gId, mode: m, isSpectating: spec } = stateRef.current;
+        const { onlineGameId: gId, mode: m, isSpectating: spec, currentMembers: members } = stateRef.current;
+        const hasGuest = members.some((member) => member.role === 'guest');
         if (m === 'solo' && !spec) {
             saveSoloGameSnapshot(nextGameState, gId);
         }
-        if (gId && (m === 'online' || spec)) {
+        if (gId && (m === 'online' || spec || hasGuest)) {
             saveOnlineGameSnapshot(gId, nextGameState, nextRematch);
         }
     }, []);
 
     const syncLobbyProgress = useCallback((overrideState = null, overrideMode = null) => {
-        const { myRole: role, onlineGameId: gId, mode: curMode, currentMembers: members, gameState: curState } = stateRef.current;
+        const { myRole: role, onlineGameId: gId, mode: curMode, currentMembers: members, gameState: curState, isSpectating: spec } = stateRef.current;
         const targetState = overrideState || curState;
         const targetMode = overrideMode || curMode;
-        if (role !== 'host' || !gId || (targetMode !== 'solo' && targetMode !== 'online')) return;
+        if (role !== 'host' || !gId || spec || (targetMode !== 'solo' && targetMode !== 'online')) return;
 
         const guestOnline = members.some((m) => m.role === 'guest');
-        let status = targetMode === 'solo' ? 'in_progress' : 'waiting';
+        const effectiveMode = guestOnline ? 'online' : targetMode;
+        const resolvedVariant = targetState.variant || inferVariantFromBoardLength(targetState.board?.length);
+        const specInfo = getVariantSpec(resolvedVariant);
+
+        let status = 'in_progress';
         if (targetState.status === 'solved') {
             status = 'solved';
-        } else if (targetMode === 'solo' || guestOnline || targetState.filledCount > 0) {
-            status = 'in_progress';
         }
 
         onlineClientRef.current?.broadcastLobbyUpdate(
@@ -208,7 +209,12 @@ export function App() {
             status,
             targetState.filledCount,
             targetState.difficulty,
-            targetMode,
+            effectiveMode,
+            {
+                variant: specInfo.id,
+                totalCells: specInfo.totalCells,
+                hasGuest: guestOnline,
+            },
         );
     }, []);
 
@@ -236,6 +242,7 @@ export function App() {
 
             setGameState(hydrated);
             stateRef.current.gameState = hydrated;
+            setSelectedIndex((prev) => (prev !== null && prev < hydrated.board.length ? prev : null));
 
             if (data.rematchRequestedBy !== undefined) {
                 setRematchRequestedBy(data.rematchRequestedBy);
@@ -270,7 +277,8 @@ export function App() {
             const myClientId = onlineClientRef.current?.clientId;
             if (!data || data.senderId === myClientId) return;
             if (data.role === 'host' || data.role === 'guest') {
-                const nextIdx = Number.isInteger(data.index) && data.index >= 0 && data.index < 81 ? data.index : null;
+                const totalCells = cur.gameState.board?.length || 81;
+                const nextIdx = Number.isInteger(data.index) && data.index >= 0 && data.index < totalCells ? data.index : null;
                 setPartnerCursorIndex(nextIdx);
             }
             return;
@@ -347,10 +355,12 @@ export function App() {
                 const localFilled = cur.gameState.filledCount || 0;
                 const remoteInitial = data.gameState.givens?.filter(Boolean).length || 0;
                 const localInitial = cur.gameState.givens?.filter(Boolean).length || 0;
+                const variantDiffers = Array.isArray(data.gameState.board)
+                    && (data.gameState.board.length !== cur.gameState.board.length || data.gameState.variant !== cur.gameState.variant);
                 const boardsDiffer = Array.isArray(data.gameState.board)
-                    && data.gameState.board.some((v, idx) => v !== cur.gameState.board[idx]);
+                    && (variantDiffers || data.gameState.board.some((v, idx) => v !== cur.gameState.board[idx]));
 
-                const shouldRecoverHost = cur.myRole === 'host' && localFilled <= localInitial && remoteFilled > localFilled;
+                const shouldRecoverHost = cur.myRole === 'host' && localFilled <= localInitial && remoteFilled > localFilled && !variantDiffers;
                 const shouldAdoptRemote = cur.myRole !== 'host' && (
                     boardsDiffer
                     || remoteFilled !== localFilled
@@ -364,6 +374,7 @@ export function App() {
                     if (hydrated) {
                         setGameState(hydrated);
                         stateRef.current.gameState = hydrated;
+                        setSelectedIndex((prev) => (prev !== null && prev < hydrated.board.length ? prev : null));
                         persistSnapshotIfNeeded(hydrated, data.rematchRequestedBy);
                     }
                     if (data.rematchRequestedBy !== undefined) {
@@ -386,19 +397,21 @@ export function App() {
                 rematchRequestedBy: cur.rematchRequestedBy,
                 hints: Array.from(cur.hintsMap.entries()),
             });
+            syncLobbyProgress();
         }
-    }, []);
+    }, [syncLobbyProgress]);
 
     const handleGameMemberJoin = useCallback((member) => {
+        const prevMembers = stateRef.current.currentMembers;
         const authoritative = onlineClientRef.current?.getGameMembers();
-        if (authoritative) {
-            setCurrentMembers(authoritative);
-            stateRef.current.currentMembers = authoritative;
-        } else {
-            setCurrentMembers((prev) => (prev.some((m) => m.id === member.id) ? prev : [...prev, member]));
-        }
+        const nextMembers = authoritative || (prevMembers.some((m) => m.id === member.id) ? prevMembers : [...prevMembers, member]);
+        setCurrentMembers(nextMembers);
+        stateRef.current.currentMembers = nextMembers;
 
         const cur = stateRef.current;
+        if (member?.role === 'guest' && cur.myRole === 'host') {
+            showFeedback('A partner joined your game!');
+        }
         if (cur.myRole === 'host') {
             onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'sync', {
                 gameState: serializeGameState(cur.gameState),
@@ -407,7 +420,7 @@ export function App() {
             });
             syncLobbyProgress();
         }
-    }, [syncLobbyProgress]);
+    }, [showFeedback, syncLobbyProgress]);
 
     const handleGameMemberLeave = useCallback((member) => {
         const authoritative = onlineClientRef.current?.getGameMembers();
@@ -430,7 +443,12 @@ export function App() {
                 return next;
             });
         }
-    }, []);
+
+        const cur = stateRef.current;
+        if (cur.myRole === 'host') {
+            syncLobbyProgress();
+        }
+    }, [syncLobbyProgress]);
 
     const openWatchDirectory = useCallback(() => {
         setActiveLobbyRooms([]);
@@ -484,6 +502,12 @@ export function App() {
         setHintsMap(new Map());
         setRematchRequestedBy(null);
 
+        const snapshot = loadOnlineGameSnapshot(gameId);
+        if (snapshot?.gameState) {
+            setGameState(snapshot.gameState);
+            stateRef.current.gameState = snapshot.gameState;
+        }
+
         enterSpectatorView(gameId, 'Connecting to live Sudoku match...');
         updateBrowserUrl(`/games/${gameId}?watch=1`);
 
@@ -514,6 +538,8 @@ export function App() {
         stateRef.current.onlineGameId = gameId;
 
         const targetState = initialGameState || stateRef.current.gameState;
+        const resolvedVariant = targetState.variant || inferVariantFromBoardLength(targetState.board?.length);
+        const specInfo = getVariantSpec(resolvedVariant);
 
         onlineClientRef.current?.joinGameChannel(gameId, {
             role,
@@ -526,6 +552,7 @@ export function App() {
                 );
                 if (otherGuestPresent) {
                     enterSpectatorView(gameId, 'Room already has two co-op players. Joined as spectator.');
+                    replaceBrowserUrl(`/games/${gameId}?watch=1`);
                     return;
                 }
                 handleGamePresenceChange(members);
@@ -540,28 +567,66 @@ export function App() {
                 status: targetState.status === 'solved' ? 'solved' : 'in_progress',
                 gameMode: 'online',
                 difficulty: targetState.difficulty,
+                variant: specInfo.id,
+                totalCells: specInfo.totalCells,
+                hasGuest: false,
                 filledCount: targetState.filledCount,
             });
         }
     }, [enterSpectatorView, handleGameMemberJoin, handleGameMemberLeave, handleGamePresenceChange, handleRemoteGameEvent]);
 
-    const startNewSoloGame = useCallback((overrideDifficulty = null, { restoreSaved = false } = {}) => {
+    const joinWatchGame = useCallback((gameId) => {
+        if (!isValidGameId(gameId)) return;
+
+        onlineClientRef.current?.leaveLobby();
+        setSelectedIndex(null);
+        setActiveDigit(null);
+        setPartnerCursorIndex(null);
+        setNotesMode(false);
+        setHintsMap(new Map());
+        setRematchRequestedBy(null);
+
+        const cur = stateRef.current;
+        const fromSpectatingSameRoom = cur.isSpectating && cur.onlineGameId === gameId;
+        const snapshot = !fromSpectatingSameRoom ? loadOnlineGameSnapshot(gameId) : null;
+        if (snapshot?.gameState) {
+            setGameState(snapshot.gameState);
+            setRematchRequestedBy(snapshot.rematchRequestedBy);
+            stateRef.current.gameState = snapshot.gameState;
+        }
+
+        saveParticipantSession(gameId, 'guest');
+        updateBrowserUrl(`/games/${gameId}`);
+        joinAsOnlinePlayer(gameId, 'guest', fromSpectatingSameRoom ? cur.gameState : snapshot?.gameState);
+        showFeedback('Joined live match as co-op partner!');
+    }, [joinAsOnlinePlayer, showFeedback]);
+
+    const startNewSoloGame = useCallback((overrideDifficulty = null, overrideVariant = null, { restoreSaved = false } = {}) => {
         const saved = restoreSaved ? loadSoloGameSnapshot() : null;
         const diff = saved?.gameState?.status === 'in_progress'
             ? saved.gameState.difficulty
             : (overrideDifficulty || stateRef.current.difficulty);
+        const varId = saved?.gameState?.status === 'in_progress'
+            ? normalizeVariant(saved.gameState.variant || inferVariantFromBoardLength(saved.gameState.board?.length))
+            : normalizeVariant(overrideVariant || stateRef.current.variant);
 
         const hadExistingSoloRoom = Boolean(stateRef.current.onlineGameId) && stateRef.current.myRole === 'host' && stateRef.current.mode === 'solo';
         const roomId = saved?.roomId || (hadExistingSoloRoom ? stateRef.current.onlineGameId : generateGameId());
 
         const nextState = (saved && saved.gameState.status !== 'solved')
             ? saved.gameState
-            : createSudokuGame({ difficulty: diff });
+            : createSudokuGame({ difficulty: diff, variant: varId });
 
         if (saved && saved.gameState.status !== 'solved') {
             setDifficulty(nextState.difficulty);
             localStorage.setItem('sudoku_difficulty', nextState.difficulty);
+            const restoredVar = normalizeVariant(nextState.variant || inferVariantFromBoardLength(nextState.board?.length));
+            setVariant(restoredVar);
+            localStorage.setItem('sudoku_variant', restoredVar);
         }
+
+        const resolvedVar = normalizeVariant(nextState.variant || inferVariantFromBoardLength(nextState.board?.length));
+        const specInfo = getVariantSpec(resolvedVar);
 
         setMode('solo');
         setIsSpectating(false);
@@ -601,6 +666,9 @@ export function App() {
                 status: 'in_progress',
                 gameMode: 'solo',
                 difficulty: nextState.difficulty,
+                variant: specInfo.id,
+                totalCells: specInfo.totalCells,
+                hasGuest: false,
                 filledCount: nextState.filledCount,
             });
         } else {
@@ -611,56 +679,9 @@ export function App() {
         }
 
         announce(saved && saved.gameState.status !== 'solved'
-            ? `Resumed ${nextState.difficulty} Solo puzzle.`
-            : `New ${diff} Sudoku puzzle ready.`);
+            ? `Resumed ${specInfo.shortLabel} ${nextState.difficulty} Solo puzzle.`
+            : `New ${specInfo.shortLabel} ${diff} Sudoku puzzle ready.`);
     }, [announce, handleGameMemberJoin, handleGameMemberLeave, handleGamePresenceChange, handleRemoteGameEvent, syncLobbyProgress]);
-
-    const startNewOnlineGame = useCallback((overrideDifficulty = null) => {
-        const diff = overrideDifficulty || stateRef.current.difficulty;
-        const roomId = generateGameId();
-        const nextState = createSudokuGame({ difficulty: diff });
-
-        setMode('online');
-        setIsSpectating(false);
-        setOnlineGameId(roomId);
-        setMyRole('host');
-        setSelectedIndex(null);
-        setActiveDigit(null);
-        setPartnerCursorIndex(null);
-        setNotesMode(false);
-        setHintsMap(new Map());
-        setRematchRequestedBy(null);
-        setCurrentMembers([]);
-        setGameState(nextState);
-
-        stateRef.current.mode = 'online';
-        stateRef.current.isSpectating = false;
-        stateRef.current.onlineGameId = roomId;
-        stateRef.current.myRole = 'host';
-        stateRef.current.gameState = nextState;
-
-        saveParticipantSession(roomId, 'host');
-        saveOnlineGameSnapshot(roomId, nextState, null);
-        updateBrowserUrl(`/games/${roomId}`);
-        announce('Online Sudoku room created. Share the invite link with your partner or spectators.');
-
-        onlineClientRef.current?.joinGameChannel(roomId, {
-            role: 'host',
-            gameMode: 'online',
-            onEvent: handleRemoteGameEvent,
-            onPresenceChange: handleGamePresenceChange,
-            onMemberJoin: handleGameMemberJoin,
-            onMemberLeave: handleGameMemberLeave,
-        });
-
-        onlineClientRef.current?.joinLobby({
-            gameId: roomId,
-            status: 'waiting',
-            gameMode: 'online',
-            difficulty: nextState.difficulty,
-            filledCount: nextState.filledCount,
-        });
-    }, [announce, handleGameMemberJoin, handleGameMemberLeave, handleGamePresenceChange, handleRemoteGameEvent]);
 
     const resumeOnlineGame = useCallback((gameId) => {
         let initialState = stateRef.current.gameState;
@@ -690,15 +711,7 @@ export function App() {
                 setCurrentMembers(resolved);
                 stateRef.current.currentMembers = resolved;
 
-                const hostMember = resolved.find((m) => m.role === 'host');
                 const hasGuest = resolved.some((m) => m.role === 'guest');
-
-                if (hostMember?.game_mode === 'solo') {
-                    setSpectatedGameMode('solo');
-                    enterSpectatorView(gameId, 'This is a live Solo match. Joined as spectator.');
-                    replaceBrowserUrl(`/games/${gameId}?watch=1`);
-                    return;
-                }
 
                 if (!hasGuest) {
                     saveParticipantSession(gameId, 'guest');
@@ -727,7 +740,7 @@ export function App() {
         } else if (initialRoute.initialMode === 'watch') {
             openWatchDirectory();
         } else {
-            startNewSoloGame(null, { restoreSaved: true });
+            startNewSoloGame(null, null, { restoreSaved: true });
         }
 
         const cleanup = () => client.disconnect();
@@ -810,8 +823,13 @@ export function App() {
             return;
         }
 
+        const specInfo = getVariantSpec(cur.gameState.variant || inferVariantFromBoardLength(cur.gameState.board?.length));
+        if (digit !== 0 && (digit < 1 || digit > specInfo.maxDigit)) {
+            return;
+        }
+
         const isBroadcaster = (cur.mode === 'solo' || cur.mode === 'online') && Boolean(cur.onlineGameId) && !cur.isSpectating;
-        const owner = cur.mode === 'online' && (cur.myRole === 'host' || cur.myRole === 'guest') ? cur.myRole : null;
+        const owner = (cur.myRole === 'host' || cur.myRole === 'guest') ? cur.myRole : null;
 
         try {
             if (notesMode && digit !== 0) {
@@ -833,7 +851,7 @@ export function App() {
                 if (digit !== 0) {
                     clearHintsForCell(targetIndex);
                     const totalPlaced = nextState.board.filter((v) => v === digit).length;
-                    if (totalPlaced >= 9 && cur.activeDigit === digit) {
+                    if (totalPlaced >= specInfo.gridSize && cur.activeDigit === digit) {
                         setActiveDigit(null);
                     }
                 }
@@ -856,6 +874,11 @@ export function App() {
     const applyPlayerDigit = useCallback((digit) => {
         const cur = stateRef.current;
         if (cur.isSpectating || cur.mode === 'watch' || cur.gameState.status === 'solved') {
+            return;
+        }
+
+        const specInfo = getVariantSpec(cur.gameState.variant || inferVariantFromBoardLength(cur.gameState.board?.length));
+        if (digit !== 0 && (digit < 1 || digit > specInfo.maxDigit)) {
             return;
         }
 
@@ -895,7 +918,10 @@ export function App() {
 
     const broadcastCursor = useCallback((idx) => {
         const cur = stateRef.current;
-        if (cur.mode === 'online' && !cur.isSpectating && (cur.myRole === 'host' || cur.myRole === 'guest') && cur.onlineGameId) {
+        const hasPartner = cur.currentMembers.some(
+            (m) => m.role !== cur.myRole && (m.role === 'host' || m.role === 'guest'),
+        );
+        if ((cur.mode === 'online' || hasPartner) && !cur.isSpectating && (cur.myRole === 'host' || cur.myRole === 'guest') && cur.onlineGameId) {
             onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'cursor', {
                 senderId: onlineClientRef.current?.clientId,
                 role: cur.myRole,
@@ -928,7 +954,8 @@ export function App() {
         const cur = stateRef.current;
         const isBroadcaster = (cur.mode === 'solo' || cur.mode === 'online') && Boolean(cur.onlineGameId) && !cur.isSpectating;
         if (!isBroadcaster) return;
-        for (let i = 0; i < 81; i++) {
+        const totalCells = nextState.board.length;
+        for (let i = 0; i < totalCells; i++) {
             if (prevNotes[i].join(',') !== nextState.notes[i].join(',')) {
                 onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'cell-update', {
                     index: i,
@@ -983,7 +1010,8 @@ export function App() {
 
         const isBroadcaster = (cur.mode === 'solo' || cur.mode === 'online') && Boolean(cur.onlineGameId) && !cur.isSpectating;
         if (isBroadcaster) {
-            for (let i = 0; i < 81; i++) {
+            const totalCells = nextState.board.length;
+            for (let i = 0; i < totalCells; i++) {
                 const boardChanged = prevBoard[i] !== nextState.board[i];
                 const notesChanged = prevNotes[i].join(',') !== nextState.notes[i].join(',');
                 if (boardChanged || notesChanged) {
@@ -1005,14 +1033,17 @@ export function App() {
         const cur = stateRef.current;
         if (cur.isSpectating || cur.mode === 'watch' || cur.gameState.status === 'solved') return;
 
+        const totalCells = cur.gameState.board.length;
+        const activeVariant = cur.gameState.variant || inferVariantFromBoardLength(totalCells);
         let targetIdx = selectedIndex;
         if (
             targetIdx === null
+            || targetIdx >= totalCells
             || cur.gameState.givens[targetIdx]
             || (cur.gameState.board[targetIdx] !== 0 && cur.gameState.board[targetIdx] === cur.gameState.solution[targetIdx])
         ) {
             const candidateIndices = [];
-            for (let i = 0; i < 81; i++) {
+            for (let i = 0; i < totalCells; i++) {
                 if (!cur.gameState.givens[i] && cur.gameState.board[i] !== cur.gameState.solution[i]) {
                     candidateIndices.push(i);
                 }
@@ -1024,7 +1055,7 @@ export function App() {
         const correctDigit = cur.gameState.solution[targetIdx];
         if (!correctDigit) return;
 
-        const owner = cur.mode === 'online' && (cur.myRole === 'host' || cur.myRole === 'guest') ? cur.myRole : null;
+        const owner = (cur.myRole === 'host' || cur.myRole === 'guest') ? cur.myRole : null;
         setSelectedIndex(targetIdx);
         const nextState = setCellValue(cur.gameState, targetIdx, correctDigit, { owner });
         setGameState(nextState);
@@ -1042,7 +1073,7 @@ export function App() {
             syncLobbyProgress(nextState);
         }
 
-        const { row, col } = getCellCoords(targetIdx);
+        const { row, col } = getCellCoords(targetIdx, activeVariant);
         showFeedback(`Hint filled R${row + 1} C${col + 1} with ${correctDigit}.`);
         persistSnapshotIfNeeded(nextState);
     }, [clearHintsForCell, persistSnapshotIfNeeded, selectedIndex, showFeedback, syncLobbyProgress]);
@@ -1057,6 +1088,12 @@ export function App() {
         }
         if (cur.gameState.board[selectedIndex] !== 0) {
             showFeedback('That cell already has a digit — pick an empty cell.');
+            return;
+        }
+
+        const activeVariant = cur.gameState.variant || inferVariantFromBoardLength(cur.gameState.board?.length);
+        const specInfo = getVariantSpec(activeVariant);
+        if (typeof value === 'number' && (value < 1 || value > specInfo.maxDigit)) {
             return;
         }
 
@@ -1078,7 +1115,7 @@ export function App() {
                 return next;
             });
             client.sendWhisperEvent('hint', { senderId, index: selectedIndex, value });
-            const { row, col } = getCellCoords(selectedIndex);
+            const { row, col } = getCellCoords(selectedIndex, activeVariant);
             announce(value
                 ? `Suggested ${value} at Row ${row + 1}, Column ${col + 1}.`
                 : `Nudged players to check Row ${row + 1}, Column ${col + 1}.`);
@@ -1086,7 +1123,6 @@ export function App() {
     }, [announce, selectedIndex, showFeedback]);
 
     const executeSwitchMode = useCallback((newMode) => {
-        const cur = stateRef.current;
         onlineClientRef.current?.disconnect();
         setPartnerCursorIndex(null);
         setActiveDigit(null);
@@ -1105,30 +1141,23 @@ export function App() {
 
         setIsSpectating(false);
         setHintsMap(new Map());
-
-        if (newMode === 'online') {
-            if (!cur.onlineGameId || cur.myRole === 'host') {
-                startNewOnlineGame();
-            } else {
-                resumeOnlineGame(cur.onlineGameId);
-            }
-        } else {
-            setOnlineGameId(null);
-            setMyRole(null);
-            setCurrentMembers([]);
-            updateBrowserUrl('/');
-            startNewSoloGame(null, { restoreSaved: true });
-        }
-    }, [openWatchDirectory, resumeOnlineGame, startNewOnlineGame, startNewSoloGame]);
+        setOnlineGameId(null);
+        setMyRole(null);
+        setCurrentMembers([]);
+        updateBrowserUrl('/');
+        startNewSoloGame(null, null, { restoreSaved: true });
+    }, [openWatchDirectory, startNewSoloGame]);
 
     const switchMode = useCallback((newMode) => {
         const cur = stateRef.current;
         if (cur.mode === newMode && !cur.isSpectating) return;
 
-        if (!cur.isSpectating && cur.mode === 'online' && hasUnsavedProgress(cur.gameState)) {
+        const hasPartner = cur.currentMembers.some(
+            (m) => m.role !== cur.myRole && (m.role === 'host' || m.role === 'guest'),
+        );
+        if (!cur.isSpectating && (cur.mode === 'online' || hasPartner) && hasUnsavedProgress(cur.gameState)) {
             const targetNames = {
                 solo: 'Solo',
-                online: 'Online Co-op',
                 watch: 'Watch Live',
             };
             setPendingConfirm({
@@ -1158,7 +1187,7 @@ export function App() {
 
     const handleCancelRematch = useCallback(() => {
         const cur = stateRef.current;
-        if (cur.mode !== 'online' || !cur.onlineGameId) return;
+        if (!cur.onlineGameId) return;
         setRematchRequestedBy(null);
         persistSnapshotIfNeeded(cur.gameState, null);
         onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'new-puzzle-cancel', { role: cur.myRole });
@@ -1167,17 +1196,21 @@ export function App() {
 
     const startNewPuzzleConfirmed = useCallback(() => {
         const cur = stateRef.current;
-        if (cur.mode !== 'online') {
+        const partnerOnline = cur.currentMembers.some(
+            (m) => m.role !== cur.myRole && (m.role === 'host' || m.role === 'guest'),
+        );
+        const isCoopSession = cur.mode === 'online' || partnerOnline;
+
+        if (!isCoopSession) {
             startNewSoloGame();
             return;
         }
 
-        const partnerOnline = cur.currentMembers.some(
-            (m) => m.role !== cur.myRole && (m.role === 'host' || m.role === 'guest'),
-        );
-
         if (!partnerOnline || (cur.rematchRequestedBy && cur.rematchRequestedBy !== cur.myRole)) {
-            const nextState = createSudokuGame({ difficulty: cur.difficulty });
+            const targetVariant = normalizeVariant(
+                cur.gameState.variant || inferVariantFromBoardLength(cur.gameState.board?.length),
+            );
+            const nextState = createSudokuGame({ difficulty: cur.difficulty, variant: targetVariant });
             setGameState(nextState);
             stateRef.current.gameState = nextState;
             setSelectedIndex(null);
@@ -1206,7 +1239,7 @@ export function App() {
             (m) => m.role !== cur.myRole && (m.role === 'host' || m.role === 'guest'),
         );
 
-        if (cur.mode === 'online' && partnerOnline) {
+        if ((cur.mode === 'online' || partnerOnline) && partnerOnline) {
             startNewPuzzleConfirmed();
             return;
         }
@@ -1229,19 +1262,25 @@ export function App() {
         const cur = stateRef.current;
         if (nextDiff === cur.difficulty) return;
 
+        const partnerOnline = cur.currentMembers.some(
+            (m) => m.role !== cur.myRole && (m.role === 'host' || m.role === 'guest'),
+        );
+
         const applyDifficulty = () => {
             setDifficulty(nextDiff);
             localStorage.setItem('sudoku_difficulty', nextDiff);
-            if (cur.mode === 'solo') {
-                startNewSoloGame(nextDiff);
+            if (cur.mode === 'solo' && !cur.isSpectating) {
+                startNewSoloGame(nextDiff, cur.variant);
             }
         };
 
-        if (cur.mode === 'solo' && hasUnsavedProgress(cur.gameState)) {
+        if (cur.mode === 'solo' && (hasUnsavedProgress(cur.gameState) || partnerOnline)) {
             const label = nextDiff.charAt(0).toUpperCase() + nextDiff.slice(1);
             setPendingConfirm({
                 title: `Switch to ${label}?`,
-                message: 'Changing difficulty in Solo mode starts a new board and clears your current progress.',
+                message: partnerOnline
+                    ? 'Changing difficulty starts a new board for you and your partner.'
+                    : 'Changing difficulty starts a new board and clears your current progress.',
                 confirmLabel: `Start ${label} Puzzle`,
                 cancelLabel: 'Keep Current Puzzle',
                 onConfirm: applyDifficulty,
@@ -1252,17 +1291,55 @@ export function App() {
         applyDifficulty();
     }, [startNewSoloGame]);
 
+    const handleVariantChange = useCallback((nextVariantRaw) => {
+        const cur = stateRef.current;
+        const nextVariant = normalizeVariant(nextVariantRaw);
+        if (nextVariant === cur.variant) return;
+
+        const partnerOnline = cur.currentMembers.some(
+            (m) => m.role !== cur.myRole && (m.role === 'host' || m.role === 'guest'),
+        );
+
+        const applyVariant = () => {
+            setVariant(nextVariant);
+            localStorage.setItem('sudoku_variant', nextVariant);
+            if (cur.mode === 'solo' && !cur.isSpectating) {
+                startNewSoloGame(cur.difficulty, nextVariant);
+            }
+        };
+
+        if (cur.mode === 'solo' && (hasUnsavedProgress(cur.gameState) || partnerOnline)) {
+            const specInfo = getVariantSpec(nextVariant);
+            setPendingConfirm({
+                title: `Switch to ${specInfo.label}?`,
+                message: partnerOnline
+                    ? 'Changing grid size starts a new board for you and your partner.'
+                    : 'Changing grid size starts a new board and clears your current progress.',
+                confirmLabel: `Play ${specInfo.shortLabel}`,
+                cancelLabel: 'Keep Current Puzzle',
+                onConfirm: applyVariant,
+            });
+            return;
+        }
+
+        applyVariant();
+    }, [startNewSoloGame]);
+
     const handleReconnect = useCallback(() => {
         onlineClientRef.current?.client?.connect();
         showFeedback('Reconnecting to live server...');
     }, [showFeedback]);
 
-    // Keyboard shortcuts & 9x9 arrow navigation
+    // Keyboard shortcuts & grid arrow navigation (both 9x9 and 6x6)
     useEffect(() => {
         const handleKeyDown = (e) => {
             if (isHelpOpen || pendingConfirm) return;
             if (mode === 'watch' && !isSpectating) return;
             if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+
+            const curState = stateRef.current.gameState;
+            const activeVariant = curState.variant || inferVariantFromBoardLength(curState.board?.length);
+            const specInfo = getVariantSpec(activeVariant);
 
             if (e.key === 'Escape') {
                 if (selectedIndex !== null || stateRef.current.activeDigit !== null) {
@@ -1279,7 +1356,7 @@ export function App() {
                 return;
             }
 
-            if (e.key >= '1' && e.key <= '9') {
+            if (e.key >= '1' && e.key <= String(specInfo.maxDigit)) {
                 const digit = parseInt(e.key, 10);
                 if (isSpectating) {
                     sendSpectatorHint(digit);
@@ -1309,16 +1386,17 @@ export function App() {
                 return;
             }
 
-            if (selectedIndex === null) return;
-            const { row, col } = getCellCoords(selectedIndex);
+            if (selectedIndex === null || selectedIndex >= specInfo.totalCells) return;
+            const { row, col } = getCellCoords(selectedIndex, specInfo.id);
+            const maxIdx = specInfo.gridSize - 1;
             let nextIndex = null;
 
-            if (e.key === 'ArrowUp' && row > 0) nextIndex = (row - 1) * 9 + col;
-            if (e.key === 'ArrowDown' && row < 8) nextIndex = (row + 1) * 9 + col;
-            if (e.key === 'ArrowLeft' && col > 0) nextIndex = row * 9 + (col - 1);
-            if (e.key === 'ArrowRight' && col < 8) nextIndex = row * 9 + (col + 1);
-            if (e.key === 'Home') nextIndex = row * 9;
-            if (e.key === 'End') nextIndex = row * 9 + 8;
+            if (e.key === 'ArrowUp' && row > 0) nextIndex = (row - 1) * specInfo.gridSize + col;
+            if (e.key === 'ArrowDown' && row < maxIdx) nextIndex = (row + 1) * specInfo.gridSize + col;
+            if (e.key === 'ArrowLeft' && col > 0) nextIndex = row * specInfo.gridSize + (col - 1);
+            if (e.key === 'ArrowRight' && col < maxIdx) nextIndex = row * specInfo.gridSize + (col + 1);
+            if (e.key === 'Home') nextIndex = row * specInfo.gridSize;
+            if (e.key === 'End') nextIndex = row * specInfo.gridSize + maxIdx;
 
             if (nextIndex !== null) {
                 e.preventDefault();
@@ -1344,11 +1422,17 @@ export function App() {
     const partnerOnline = currentMembers.some(
         (m) => m.role !== myRole && (m.role === 'host' || m.role === 'guest'),
     );
+    const isCoopSession = !isSpectating && (mode === 'online' || partnerOnline || myRole === 'guest');
+    const hostOnline = currentMembers.some((m) => m.role === 'host');
+    const guestOnline = currentMembers.some((m) => m.role === 'guest');
+    const canJoinSpectated = isSpectating && hostOnline && !guestOnline && gameState.status !== 'solved' && Boolean(onlineGameId);
+
+    const activeBoardVariant = gameState.variant || inferVariantFromBoardLength(gameState.board?.length);
 
     let restartLabel = 'New Puzzle';
     let restartDisabled = false;
-    const isWaitingForRematch = mode === 'online' && Boolean(rematchRequestedBy && rematchRequestedBy === myRole);
-    if (mode === 'online') {
+    const isWaitingForRematch = isCoopSession && Boolean(rematchRequestedBy && rematchRequestedBy === myRole);
+    if (isCoopSession) {
         if (!partnerOnline && gameState.status !== 'solved') {
             restartLabel = 'New Puzzle';
         } else if (isWaitingForRematch) {
@@ -1391,18 +1475,17 @@ export function App() {
 
             <ModeTabs mode={mode} onSelectMode={switchMode} />
 
-            {!isSpectating && mode !== 'watch' && (myRole !== 'guest' || mode === 'solo') && (
-                <DifficultySelector
-                    difficulty={difficulty}
-                    onChange={handleDifficultyChange}
-                />
-            )}
-
-            {mode === 'online' && !isSpectating && onlineGameId && (
-                <OnlineInviteBox
-                    inviteUrl={buildInviteUrl(onlineGameId)}
-                    partnerOnline={partnerOnline}
-                />
+            {!isSpectating && mode !== 'watch' && myRole !== 'guest' && (
+                <div className="setup-controls">
+                    <VariantSelector
+                        variant={variant}
+                        onChange={handleVariantChange}
+                    />
+                    <DifficultySelector
+                        difficulty={difficulty}
+                        onChange={handleDifficultyChange}
+                    />
+                </div>
             )}
 
             {mode === 'watch' && !isSpectating && (
@@ -1412,6 +1495,7 @@ export function App() {
                     onReconnect={handleReconnect}
                     onRefresh={openWatchDirectory}
                     onWatchGame={spectateGame}
+                    onJoinGame={joinWatchGame}
                 />
             )}
 
@@ -1420,14 +1504,26 @@ export function App() {
                     <span>
                         <strong>Spectating Live Match</strong> — Read-only board
                     </span>
-                    <button
-                        type="button"
-                        id="exit-watch-btn"
-                        className="spectator-bar__back-btn"
-                        onClick={exitSpectating}
-                    >
-                        Back to Lobby
-                    </button>
+                    <div className="spectator-bar__actions">
+                        {canJoinSpectated && (
+                            <button
+                                type="button"
+                                id="join-from-watch-btn"
+                                className="spectator-bar__join-btn"
+                                onClick={() => joinWatchGame(onlineGameId)}
+                            >
+                                Join Game
+                            </button>
+                        )}
+                        <button
+                            type="button"
+                            id="exit-watch-btn"
+                            className="spectator-bar__back-btn"
+                            onClick={exitSpectating}
+                        >
+                            Back to Lobby
+                        </button>
+                    </div>
                 </div>
             )}
 
@@ -1504,7 +1600,7 @@ export function App() {
                 <SolveSummary
                     difficulty={gameState.difficulty}
                     elapsedSeconds={gameState.elapsedSeconds}
-                    mode={mode}
+                    mode={isCoopSession ? 'online' : 'solo'}
                     isSpectating={isSpectating}
                     restartLabel={restartLabel}
                     restartDisabled={restartDisabled}
@@ -1515,6 +1611,7 @@ export function App() {
             {showHints && (
                 <SpectatorHintsFeed
                     hintsByCell={hintsByCell}
+                    variant={activeBoardVariant}
                     canApply={(mode === 'solo' || mode === 'online') && !isSpectating && gameState.status !== 'solved'}
                     onSelectHint={(idx) => {
                         focusCell(idx);
@@ -1523,7 +1620,7 @@ export function App() {
                     onApplyHint={(idx, digit) => {
                         const cur = stateRef.current;
                         if (cur.isSpectating || cur.mode === 'watch' || cur.gameState.status === 'solved') return;
-                        const owner = cur.mode === 'online' && (cur.myRole === 'host' || cur.myRole === 'guest') ? cur.myRole : null;
+                        const owner = (cur.myRole === 'host' || cur.myRole === 'guest') ? cur.myRole : null;
                         setSelectedIndex(idx);
                         const nextState = setCellValue(cur.gameState, idx, digit, { owner });
                         setGameState(nextState);
@@ -1547,6 +1644,7 @@ export function App() {
             {!isSpectating && mode !== 'watch' && (
                 <PlayerControls
                     board={gameState.board}
+                    variant={activeBoardVariant}
                     notesMode={notesMode}
                     canUndo={Boolean(gameState.history?.length) && gameState.status !== 'solved'}
                     activeDigit={activeDigit}
@@ -1566,6 +1664,7 @@ export function App() {
                 <WatcherInteractions
                     selectedIndex={selectedIndex}
                     board={gameState.board}
+                    variant={activeBoardVariant}
                     onSendHint={sendSpectatorHint}
                     onSendReaction={(emoji) => {
                         if (!onlineGameId) return;

@@ -397,8 +397,11 @@ export class OnlineGameClient {
     joinLobby({
         gameId = null,
         status = 'waiting',
-        gameMode = 'online',
+        gameMode = 'solo',
         difficulty = 'medium',
+        variant = '3x3',
+        totalCells = null,
+        hasGuest = false,
         filledCount = 0,
         onLobbyPresenceChange = () => {},
         onLobbyMemberJoin = () => {},
@@ -411,6 +414,9 @@ export class OnlineGameClient {
         this.lobbyActiveServerClients.clear();
         this.lobbyRoomsByGameId.clear();
 
+        const resolvedVariant = variant === '2x3' || variant === '6x6' ? '2x3' : '3x3';
+        const resolvedTotalCells = totalCells || (resolvedVariant === '2x3' ? 36 : 81);
+
         this.hostedLobbyMeta = safeGameId
             ? {
                 id: this.clientId,
@@ -418,6 +424,9 @@ export class OnlineGameClient {
                 status,
                 game_mode: normalizeGameMode(gameMode),
                 difficulty,
+                variant: resolvedVariant,
+                total_cells: resolvedTotalCells,
+                has_guest: Boolean(hasGuest),
                 filled_count: filledCount,
             }
             : null;
@@ -555,8 +564,18 @@ export class OnlineGameClient {
         return sub;
     }
 
-    broadcastLobbyUpdate(gameId, status, filledCount, difficulty = 'medium', gameMode = 'online') {
+    broadcastLobbyUpdate(
+        gameId,
+        status,
+        filledCount,
+        difficulty = 'medium',
+        gameMode = 'solo',
+        { variant = '3x3', totalCells = null, hasGuest = false } = {},
+    ) {
         if (!isValidGameId(gameId)) return;
+
+        const resolvedVariant = variant === '2x3' || variant === '6x6' ? '2x3' : '3x3';
+        const resolvedTotalCells = totalCells || (resolvedVariant === '2x3' ? 36 : 81);
 
         const payload = {
             id: this.clientId,
@@ -565,6 +584,9 @@ export class OnlineGameClient {
             status,
             game_mode: normalizeGameMode(gameMode),
             difficulty,
+            variant: resolvedVariant,
+            total_cells: resolvedTotalCells,
+            has_guest: Boolean(hasGuest),
             filled_count: filledCount,
             updated_at: Date.now(),
         };
@@ -575,6 +597,9 @@ export class OnlineGameClient {
             status,
             game_mode: normalizeGameMode(gameMode),
             difficulty,
+            variant: resolvedVariant,
+            total_cells: resolvedTotalCells,
+            has_guest: Boolean(hasGuest),
             filled_count: filledCount,
         };
 

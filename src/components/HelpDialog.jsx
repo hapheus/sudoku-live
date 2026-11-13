@@ -51,10 +51,10 @@ export function HelpDialog({ isOpen, onClose }) {
                     <div className="help-section">
                         <h3 className="help-section__heading">Two Ways to Enter Digits</h3>
                         <p className="help-section__text">
-                            <strong>Cell first:</strong> Select any empty cell, then tap a number 1–9.
+                            <strong>Cell first:</strong> Select any empty cell, then tap a number (1–9 in 3×3, or 1–6 in 2×3).
                         </p>
                         <p className="help-section__text">
-                            <strong>Digit first:</strong> With no cell selected, tap 1–9 on the number pad to lock that digit, then tap empty cells to place it.
+                            <strong>Digit first:</strong> With no cell selected, tap a digit on the number pad to lock it, then tap empty cells to place it.
                         </p>
                     </div>
 
@@ -62,7 +62,7 @@ export function HelpDialog({ isOpen, onClose }) {
                         <h3 className="help-section__heading">Keyboard Shortcuts</h3>
                         <ul className="shortcut-list">
                             <li><span>Move across grid</span><kbd>Arrow keys</kbd></li>
-                            <li><span>Enter digit</span><kbd>1 – 9</kbd></li>
+                            <li><span>Enter digit</span><kbd>1 – 9 (or 1 – 6)</kbd></li>
                             <li><span>Clear cell</span><kbd>Backspace / Del / 0</kbd></li>
                             <li><span>Toggle pencil notes</span><kbd>N</kbd></li>
                             <li><span>Undo last move</span><kbd>Ctrl / ⌘ + Z</kbd></li>
@@ -72,12 +72,12 @@ export function HelpDialog({ isOpen, onClose }) {
                     </div>
 
                     <div className="help-section">
-                        <h3 className="help-section__heading">Online Co-op &amp; Spectators</h3>
+                        <h3 className="help-section__heading">Watch Live &amp; Co-op Join</h3>
                         <p className="help-section__text">
-                            In <strong>Co-op</strong>, your digits appear in blue and your partner&rsquo;s digits and live cursor appear in violet.
+                            In <strong>Watch Live</strong>, you can spectate any live game, send hints (e.g. <code>R3C4 → 5</code>) or <strong>Nudge cell</strong>, or tap <strong>Join</strong> to jump in as a co-op partner.
                         </p>
                         <p className="help-section__text">
-                            In <strong>Watch Live</strong>, spectators can suggest a digit (e.g. <code>R3C7 → 5</code>) or <strong>Nudge cell</strong> to highlight a square without giving away the answer.
+                            When a partner joins, your digits appear in blue and your partner&rsquo;s digits and live cursor appear in violet.
                         </p>
                     </div>
                 </div>

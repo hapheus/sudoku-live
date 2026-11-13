@@ -1,5 +1,5 @@
 import React from 'react';
-import { getCellCoords } from '../domain/sudoku-generator.js';
+import { getCellCoords, getVariantSpec, inferVariantFromBoardLength } from '../domain/sudoku-generator.js';
 import { getSudokuCellAriaLabel } from '../utils/aria-helpers.js';
 
 export function SudokuBoard({
@@ -13,12 +13,20 @@ export function SudokuBoard({
     myRole = null,
     partnerCursorIndex = null,
 }) {
-    const selectedCoords = selectedIndex !== null ? getCellCoords(selectedIndex) : null;
+    const variant = gameState.variant || inferVariantFromBoardLength(gameState.board?.length);
+    const spec = getVariantSpec(variant);
+    const { gridSize, boxRows, boxCols, maxDigit } = spec;
+    const is6x6 = gridSize === 6;
+
+    const selectedCoords = selectedIndex !== null ? getCellCoords(selectedIndex, spec.id) : null;
     const selectedValue = selectedIndex !== null ? gameState.board[selectedIndex] : 0;
     const highlightedDigit = selectedValue > 0 ? selectedValue : (activeDigit || 0);
     const conflictSet = new Set(gameState.conflicts || []);
-    const activeTabStop = selectedIndex !== null ? selectedIndex : 0;
+    const activeTabStop = selectedIndex !== null && selectedIndex < spec.totalCells ? selectedIndex : 0;
     const isSolved = gameState.status === 'solved';
+
+    const digitsList = Array.from({ length: maxDigit }, (_, i) => i + 1);
+    const axisIndices = Array.from({ length: gridSize }, (_, i) => i + 1);
 
     return (
         <main id="game-panel" className="board-wrapper" role="tabpanel">
@@ -36,35 +44,39 @@ export function SudokuBoard({
             </div>
 
             <div className="board-frame">
-                <div className="board-col-axes" aria-hidden="true">
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((col) => (
+                <div className={`board-col-axes ${is6x6 ? 'board-col-axes--6x6' : ''}`} aria-hidden="true">
+                    {axisIndices.map((col) => (
                         <span key={col} className="board-axis-label">{`C${col}`}</span>
                     ))}
                 </div>
 
                 <div className="board-main-row">
-                    <div className="board-row-axes" aria-hidden="true">
-                        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((row) => (
+                    <div className={`board-row-axes ${is6x6 ? 'board-row-axes--6x6' : ''}`} aria-hidden="true">
+                        {axisIndices.map((row) => (
                             <span key={row} className="board-axis-label">{`R${row}`}</span>
                         ))}
                     </div>
 
                     <div
                         id="sudoku-board"
-                        className={`sudoku-board ${isSolved ? 'sudoku-board--solved' : ''}`}
+                        className={[
+                            'sudoku-board',
+                            is6x6 ? 'sudoku-board--6x6' : '',
+                            isSolved ? 'sudoku-board--solved' : '',
+                        ].filter(Boolean).join(' ')}
                         role="grid"
-                        aria-label="9 by 9 Sudoku grid"
+                        aria-label={`${gridSize} by ${gridSize} Sudoku grid`}
                     >
-                        {Array.from({ length: 9 }, (_, r) => (
-                            <div key={r} className="sudoku-row" role="row">
-                                {Array.from({ length: 9 }, (_, c) => {
-                                    const idx = r * 9 + c;
+                        {Array.from({ length: gridSize }, (_, r) => (
+                            <div key={r} className={`sudoku-row ${is6x6 ? 'sudoku-row--6x6' : ''}`} role="row">
+                                {Array.from({ length: gridSize }, (_, c) => {
+                                    const idx = r * gridSize + c;
                                     const value = gameState.board[idx];
                                     const isGiven = Boolean(gameState.givens[idx]);
                                     const isSelected = idx === selectedIndex;
                                     const isConflict = conflictSet.has(idx);
                                     const cellNotes = gameState.notes[idx] || [];
-                                    const coords = getCellCoords(idx);
+                                    const coords = getCellCoords(idx, spec.id);
                                     const hint = value === 0 ? (hintsByCell.get(idx) || null) : null;
 
                                     const owner = gameState.cellOwners?.[idx] || null;
@@ -83,6 +95,9 @@ export function SudokuBoard({
                                     );
                                     const isSameDigit = highlightedDigit > 0 && value === highlightedDigit && !isSelected;
 
+                                    const isBoxRight = (c + 1) % boxCols === 0 && c < gridSize - 1;
+                                    const isBoxBottom = (r + 1) % boxRows === 0 && r < gridSize - 1;
+
                                     const classNames = [
                                         'sudoku-cell',
                                         isGiven
@@ -96,8 +111,8 @@ export function SudokuBoard({
                                         isSameDigit ? 'sudoku-cell--same-digit' : '',
                                         isConflict ? 'sudoku-cell--conflict' : '',
                                         hint ? 'sudoku-cell--hinted' : '',
-                                        c === 2 || c === 5 ? 'sudoku-cell--box-right' : '',
-                                        r === 2 || r === 5 ? 'sudoku-cell--box-bottom' : '',
+                                        isBoxRight ? 'sudoku-cell--box-right' : '',
+                                        isBoxBottom ? 'sudoku-cell--box-bottom' : '',
                                     ].filter(Boolean).join(' ');
 
                                     return (
@@ -116,6 +131,7 @@ export function SudokuBoard({
                                             aria-selected={isSelected}
                                             aria-invalid={isConflict ? 'true' : undefined}
                                             aria-label={getSudokuCellAriaLabel(idx, value, {
+                                                variant: spec.id,
                                                 isGiven,
                                                 isConflict,
                                                 notes: cellNotes,
@@ -125,13 +141,16 @@ export function SudokuBoard({
                                             })}
                                             onClick={() => onCellSelect(idx)}
                                         >
-                                            {value >= 1 && value <= 9 ? (
+                                            {value >= 1 && value <= maxDigit ? (
                                                 <span className="sudoku-cell__digit">{value}</span>
                                             ) : (
                                                 <>
                                                     {cellNotes.length > 0 && (
-                                                        <span className="sudoku-cell__notes" aria-hidden="true">
-                                                            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => {
+                                                        <span
+                                                            className={`sudoku-cell__notes ${is6x6 ? 'sudoku-cell__notes--2x3' : ''}`}
+                                                            aria-hidden="true"
+                                                        >
+                                                            {digitsList.map((d) => {
                                                                 const hasNote = cellNotes.includes(d);
                                                                 const isMatchedNote = hasNote && highlightedDigit === d;
                                                                 return (

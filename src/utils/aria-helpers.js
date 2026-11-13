@@ -1,6 +1,7 @@
 import { getCellCoords } from '../domain/sudoku-generator.js';
 
 export function getSudokuCellAriaLabel(index, value, {
+    variant = '3x3',
     isGiven = false,
     isConflict = false,
     notes = [],
@@ -8,7 +9,7 @@ export function getSudokuCellAriaLabel(index, value, {
     isPartnerOwned = false,
     isPartnerFocused = false,
 } = {}) {
-    const { row, col } = getCellCoords(index);
+    const { row, col } = getCellCoords(index, variant);
     const parts = [`Row ${row + 1}, Column ${col + 1}`];
 
     if (value >= 1 && value <= 9) {
