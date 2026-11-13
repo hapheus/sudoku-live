@@ -1,8 +1,10 @@
 {
   "http_server": {
     "address": "0.0.0.0",
-    "port": 8080,
-    "health": true
+    "port": 8080
+  },
+  "health": {
+    "enabled": true
   },
   "client": {
     "allow_anonymous_connect_without_token": true
