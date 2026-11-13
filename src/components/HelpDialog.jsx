@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
+import enMessages from '../locales/en.json';
 
-export function HelpDialog({ isOpen, onClose }) {
+export function HelpDialog({ isOpen, onClose, messages = enMessages }) {
     const closeBtnRef = useRef(null);
 
     useEffect(() => {
@@ -35,15 +36,15 @@ export function HelpDialog({ isOpen, onClose }) {
                 aria-labelledby="help-dialog-title"
             >
                 <div className="dialog-card__header">
-                    <h2 id="help-dialog-title" className="dialog-card__title">How to Play &amp; Shortcuts</h2>
+                    <h2 id="help-dialog-title" className="dialog-card__title">{messages.helpTitle}</h2>
                     <button
                         ref={closeBtnRef}
                         type="button"
                         className="dialog-card__close"
-                        aria-label="Close help"
+                        aria-label={messages.closeLabel}
                         onClick={onClose}
                     >
-                        Close
+                        {messages.closeLabel}
                     </button>
                 </div>
 

@@ -1,13 +1,7 @@
 import React from 'react';
 import { getVariantSpec, inferVariantFromBoardLength } from '../domain/sudoku-generator.js';
 import { isValidGameId } from '../services/online-game-client.js';
-
-const DIFFICULTY_LABELS = {
-    easy: 'Easy',
-    medium: 'Medium',
-    hard: 'Hard',
-    expert: 'Expert',
-};
+import enMessages from '../locales/en.json';
 
 export function WatchDirectory({
     rooms,
@@ -16,7 +10,15 @@ export function WatchDirectory({
     onRefresh,
     onWatchGame,
     onJoinGame = null,
+    messages = enMessages,
 }) {
+    const difficultyLabels = {
+        easy: messages.diffEasy,
+        medium: messages.diffMedium,
+        hard: messages.diffHard,
+        expert: messages.diffExpert,
+    };
+
     const seenGameIds = new Set();
     const liveGames = [];
 
@@ -41,9 +43,9 @@ export function WatchDirectory({
     };
 
     return (
-        <section id="watch-directory" className="watch-box" aria-label="Live Games Directory">
+        <section id="watch-directory" className="watch-box" aria-label={messages.watchTitle}>
             <div className="watch-box__header">
-                <h2 className="watch-box__title">Live Sudoku Matches</h2>
+                <h2 className="watch-box__title">{messages.watchTitle}</h2>
                 <div className="watch-box__actions">
                     <span className={`connection-badge connection-badge--${connectionStatus}`} aria-live="polite">
                         {connectionLabels[connectionStatus] || connectionStatus}
@@ -63,7 +65,7 @@ export function WatchDirectory({
                         className="watch-box__refresh-btn"
                         onClick={onRefresh}
                     >
-                        Refresh
+                        {messages.watchRefresh}
                     </button>
                 </div>
             </div>
@@ -73,10 +75,10 @@ export function WatchDirectory({
                         <p className="live-game-card__meta">
                             {canReconnect
                                 ? 'Not connected to the live server right now.'
-                                : 'No live Sudoku matches right now.'}
+                                : messages.watchEmpty}
                         </p>
                         <p className="watch-empty__sub">
-                            Start a Solo game and others can watch live or join you here in real time.
+                            {messages.watchEmptySub}
                         </p>
                     </div>
                 ) : (
@@ -88,9 +90,9 @@ export function WatchDirectory({
                             0,
                             Math.min(totalCells, parseInt(game.filled_count ?? game.moves_count ?? 0, 10) || 0),
                         );
-                        const diffLabel = DIFFICULTY_LABELS[game.difficulty] || 'Medium';
+                        const diffLabel = difficultyLabels[game.difficulty] || messages.diffMedium;
                         const hasGuest = Boolean(game.has_guest);
-                        const statusLabel = hasGuest ? 'Co-op live' : 'Open to join';
+                        const statusLabel = hasGuest ? messages.watchCoop : messages.watchOpen;
 
                         return (
                             <div key={game.game_id} className="live-game-card">
@@ -111,7 +113,7 @@ export function WatchDirectory({
                                             disabled={hasGuest}
                                             onClick={() => onJoinGame(game.game_id)}
                                         >
-                                            {hasGuest ? 'Full' : 'Join'}
+                                            {hasGuest ? messages.watchFull : messages.watchJoin}
                                         </button>
                                     )}
                                     <button
@@ -120,7 +122,7 @@ export function WatchDirectory({
                                         data-watch-id={game.game_id}
                                         onClick={() => onWatchGame(game.game_id)}
                                     >
-                                        Watch Live
+                                        {messages.watchLiveBtn}
                                     </button>
                                 </div>
                             </div>

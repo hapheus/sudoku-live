@@ -1,18 +1,19 @@
 import React from 'react';
+import enMessages from '../locales/en.json';
 
-const DIFFICULTIES = [
-    { value: 'easy', label: 'Easy' },
-    { value: 'medium', label: 'Medium' },
-    { value: 'hard', label: 'Hard' },
-    { value: 'expert', label: 'Expert' },
-];
+export function DifficultySelector({ difficulty, onChange, messages = enMessages }) {
+    const difficulties = [
+        { value: 'easy', label: messages.diffEasy },
+        { value: 'medium', label: messages.diffMedium },
+        { value: 'hard', label: messages.diffHard },
+        { value: 'expert', label: messages.diffExpert },
+    ];
 
-export function DifficultySelector({ difficulty, onChange }) {
     return (
         <fieldset id="difficulty-group" className="difficulty-group">
-            <legend className="sr-only">Difficulty</legend>
+            <legend className="difficulty-group__legend">{messages.difficultyLegend}</legend>
             <div className="difficulty-options">
-                {DIFFICULTIES.map((item) => {
+                {difficulties.map((item) => {
                     const isChecked = difficulty === item.value;
                     return (
                         <label

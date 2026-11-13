@@ -1,4 +1,5 @@
 import React from 'react';
+import enMessages from '../locales/en.json';
 
 function formatDuration(seconds) {
     const mins = Math.floor(seconds / 60);
@@ -14,20 +15,28 @@ export function SolveSummary({
     restartLabel,
     restartDisabled,
     onPlayAgain,
+    messages = enMessages,
 }) {
-    const diffLabel = difficulty
+    const diffMap = {
+        easy: messages.diffEasy,
+        medium: messages.diffMedium,
+        hard: messages.diffHard,
+        expert: messages.diffExpert,
+    };
+    const diffLabel = diffMap[difficulty] || (difficulty
         ? difficulty.charAt(0).toUpperCase() + difficulty.slice(1)
-        : 'Medium';
-    const modeLabel = mode === 'online' ? 'Co-op' : 'Solo';
+        : messages.diffMedium);
+    const modeLabel = mode === 'online' ? messages.coopLabel : messages.soloLabel;
+    const isDefaultNewPuzzle = restartLabel === 'New Puzzle' || restartLabel === messages.newPuzzle;
 
     return (
-        <section id="solve-summary" className="solve-summary" aria-label="Puzzle Completed">
+        <section id="solve-summary" className="solve-summary" aria-label={messages.puzzleCompletedTitle}>
             <div className="solve-summary__info">
                 <h2 className="solve-summary__title">
-                    {isSpectating ? 'Puzzle Completed' : 'Puzzle Solved'}
+                    {isSpectating ? messages.puzzleCompletedTitle : messages.puzzleSolvedTitle}
                 </h2>
                 <p className="solve-summary__meta">
-                    {`${diffLabel} ${modeLabel} finished in ${formatDuration(elapsedSeconds || 0)}`}
+                    {`${diffLabel} ${modeLabel} ${messages.finishedIn} ${formatDuration(elapsedSeconds || 0)}`}
                 </p>
             </div>
             {!isSpectating && (
@@ -37,7 +46,7 @@ export function SolveSummary({
                     disabled={restartDisabled}
                     onClick={onPlayAgain}
                 >
-                    {restartLabel === 'New Puzzle' ? 'Play Again' : restartLabel}
+                    {isDefaultNewPuzzle ? messages.playAgain : restartLabel}
                 </button>
             )}
         </section>

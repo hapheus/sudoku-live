@@ -1,14 +1,15 @@
 import React from 'react';
 import { getCellCoords } from '../domain/sudoku-generator.js';
+import enMessages from '../locales/en.json';
 
-export function SpectatorHintsFeed({ hintsByCell, variant = '3x3', canApply, onSelectHint, onApplyHint }) {
+export function SpectatorHintsFeed({ hintsByCell, variant = '3x3', canApply, onSelectHint, onApplyHint, messages = enMessages }) {
     if (!hintsByCell || hintsByCell.size === 0) {
         return null;
     }
 
     return (
         <section id="spectator-hints-feed" className="hints-feed" aria-label="Spectator Hints">
-            <span className="hints-feed__label">Spectator hints:</span>
+            <span className="hints-feed__label">{messages.hintsFeedLabel}</span>
             {Array.from(hintsByCell.values()).map((hint) => {
                 const { row, col } = getCellCoords(hint.index, variant);
                 const digitPart = hint.topValue ? ` → ${hint.topValue}` : ' (check cell)';

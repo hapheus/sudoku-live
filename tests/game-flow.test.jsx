@@ -6,40 +6,74 @@ import { App } from '../src/App.jsx';
 beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
+    document.documentElement.removeAttribute('data-theme');
+    document.documentElement.lang = 'en';
     window.history.replaceState({}, '', '/');
 });
 afterEach(cleanup);
 
-it('opens on a splash and enters a playable puzzle with Watch Live, Hints, and 3x3/2x3 preserved', () => {
+it('renders classic BottomNav and flows cleanly from Play Setup (3x3/2x3 + difficulty) to the clean Game Screen', () => {
     render(<App />);
-    expect(screen.getByRole('heading', { name: 'Sudoku Live' })).toBeVisible();
-    expect(screen.queryByRole('grid')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Watch Live/i })).toBeVisible();
 
+    // Classic bottom bar with Play, Watch, Settings
+    expect(screen.getByRole('tab', { name: 'Play' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Watch' })).toBeVisible();
+    expect(screen.getByRole('tab', { name: 'Settings' })).toBeVisible();
+
+    // Setup screen: pick 2x3 and Hard, board not rendered yet
+    expect(screen.queryByRole('grid')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: '2×3 (6×6)' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Hard' }));
     fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+
+    // Clean active game screen without Variant/Difficulty clutter
     expect(screen.getByRole('grid')).toBeVisible();
-    expect(screen.getByRole('tab', { name: 'Solo' })).toBeVisible();
-    expect(screen.getByRole('tab', { name: 'Watch Live' })).toBeVisible();
-    expect(screen.getByRole('radio', { name: '2×3 (6×6)' })).toBeVisible();
+    expect(screen.queryByRole('radio', { name: '2×3 (6×6)' })).not.toBeInTheDocument();
+    expect(document.getElementById('game-status-text')).toHaveTextContent('2×3 Hard • Solo');
     expect(screen.getByRole('button', { name: 'Hint' })).toBeVisible();
-    expect(screen.getByRole('button', { name: /Enter 1,/ })).toBeVisible();
+    expect(document.getElementById('back-to-setup-btn')).toBeVisible();
 
     fireEvent.click(screen.getByRole('button', { name: 'Notes' }));
     expect(screen.getByRole('button', { name: 'Notes On' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Fill Candidates' })).toBeVisible();
-
-    fireEvent.click(screen.getByRole('tab', { name: 'Watch Live' }));
-    expect(screen.getByRole('heading', { name: 'Live Sudoku Matches' })).toBeVisible();
 });
 
-it('can open Watch Live directly from splash and bypasses splash on /games/:id?watch=1', () => {
+it('switches cleanly between Watch lobby, Spectator view, and Settings (Light mode & Deutsch)', () => {
     render(<App />);
-    fireEvent.click(screen.getByRole('button', { name: /Watch Live/i }));
-    expect(screen.getByRole('heading', { name: 'Live Sudoku Matches' })).toBeVisible();
 
+    // Start a game first
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    expect(screen.getByRole('grid')).toBeVisible();
+
+    // Switch to Settings -> Light mode + Deutsch
+    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+    expect(screen.getByRole('heading', { name: 'Settings' })).toBeVisible();
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Light' }));
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(localStorage.getItem('sudoku_theme')).toBe('light');
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Deutsch' }));
+    expect(document.documentElement.lang).toBe('de');
+    expect(screen.getByRole('heading', { name: 'Einstellungen' })).toBeVisible();
+    expect(screen.getByRole('tab', { name: 'Spielen' })).toBeVisible();
+    expect(screen.getByRole('tab', { name: 'Zuschauen' })).toBeVisible();
+
+    // Returning to Play keeps active game screen intact (in German!)
+    fireEvent.click(screen.getByRole('tab', { name: 'Spielen' }));
+    expect(screen.getByRole('grid')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Hinweis' })).toBeVisible();
+
+    // Switch to Watch tab
+    fireEvent.click(screen.getByRole('tab', { name: 'Zuschauen' }));
+    expect(screen.getByRole('heading', { name: 'Aktive Live-Spiele' })).toBeVisible();
+
+    // Direct /games/:id?watch=1 opens Watch Spectator screen with interaction buttons
     cleanup();
+    localStorage.clear();
     window.history.replaceState({}, '', '/games/room123?watch=1');
     render(<App />);
+    expect(screen.getByRole('tab', { name: 'Watch' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByText(/Spectating Live Match/i)).toBeVisible();
     expect(screen.getByRole('region', { name: 'Spectator Interactions' })).toBeVisible();
 });

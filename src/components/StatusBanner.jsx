@@ -1,5 +1,6 @@
 import React from 'react';
 import { getVariantSpec, inferVariantFromBoardLength } from '../domain/sudoku-generator.js';
+import enMessages from '../locales/en.json';
 
 function formatTime(seconds) {
     const mins = Math.floor(seconds / 60);
@@ -16,19 +17,24 @@ export function StatusBanner({
     spectatedGameMode,
     gameState,
     onReconnect,
+    messages = enMessages,
 }) {
     const variant = gameState.variant || inferVariantFromBoardLength(gameState.board?.length);
     const spec = getVariantSpec(variant);
-    const diffLabel = gameState.difficulty
-        ? gameState.difficulty.charAt(0).toUpperCase() + gameState.difficulty.slice(1)
-        : 'Medium';
+    const diffLabels = {
+        easy: messages.diffEasy,
+        medium: messages.diffMedium,
+        hard: messages.diffHard,
+        expert: messages.diffExpert,
+    };
+    const diffLabel = diffLabels[gameState.difficulty] || messages.diffMedium;
 
     const partnerOnline = currentMembers.some(
         (m) => m.role !== myRole && (m.role === 'host' || m.role === 'guest'),
     );
     const isCoopActive = !isSpectating && (mode === 'online' || partnerOnline || myRole === 'guest');
 
-    let statusText = `${spec.shortLabel} ${diffLabel} • Solo`;
+    let statusText = `${spec.shortLabel} ${diffLabel} • ${messages.soloLabel}`;
     let badgeType = 'active-turn';
 
     if (gameState.status === 'solved') {
@@ -40,10 +46,10 @@ export function StatusBanner({
         statusText = `${gameState.conflicts.length} conflicting cell${gameState.conflicts.length === 1 ? '' : 's'}`;
         badgeType = 'alert';
     } else if (isSpectating) {
-        statusText = `Watching Live • ${spec.shortLabel} ${diffLabel}`;
+        statusText = `${messages.watchingLabel} • ${spec.shortLabel} ${diffLabel}`;
         badgeType = 'waiting';
     } else if (isCoopActive) {
-        statusText = `Co-op • ${spec.shortLabel} ${diffLabel}`;
+        statusText = `${messages.coopLabel} • ${spec.shortLabel} ${diffLabel}`;
     }
 
     // Connection badge (shown when playing co-op or spectating)
@@ -85,7 +91,7 @@ export function StatusBanner({
                     className={`presence-badge ${partnerOnline ? 'presence-badge--online' : 'presence-badge--offline'}`}
                     aria-live="polite"
                 >
-                    {partnerOnline ? 'Partner online' : 'Partner disconnected'}
+                    {partnerOnline ? messages.partnerOnline : messages.partnerDisconnected}
                 </span>
             );
 
@@ -93,11 +99,11 @@ export function StatusBanner({
                 <span className="coop-legend" aria-label="Cell ownership colors">
                     <span className="coop-legend__item coop-legend__item--self">
                         <span className="coop-legend__swatch" aria-hidden="true" />
-                        You
+                        {messages.youLabel}
                     </span>
                     <span className="coop-legend__item coop-legend__item--partner">
                         <span className="coop-legend__swatch" aria-hidden="true" />
-                        Partner
+                        {messages.partnerLabel}
                     </span>
                 </span>
             );

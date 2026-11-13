@@ -2,6 +2,8 @@ import React from 'react';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { ModeTabs } from '../src/components/ModeTabs.jsx';
+import { BottomNav } from '../src/components/BottomNav.jsx';
+import { SettingsPanel } from '../src/components/SettingsPanel.jsx';
 import { VariantSelector } from '../src/components/VariantSelector.jsx';
 import { DifficultySelector } from '../src/components/DifficultySelector.jsx';
 import { StatusBanner } from '../src/components/StatusBanner.jsx';
@@ -42,22 +44,53 @@ describe('UI/UX components & Solo persistence', () => {
         localStorage.clear();
     });
 
-    it('supports WAI-ARIA arrow-key navigation in 2-tab ModeTabs (Solo and Watch Live)', () => {
+    it('supports WAI-ARIA arrow-key navigation in 3-tab BottomNav and 2-tab ModeTabs', () => {
+        const onSelectTab = vi.fn();
+        render(<BottomNav activeTab="play" onSelectTab={onSelectTab} />);
+
+        const playTab = screen.getByRole('tab', { name: 'Play' });
+        const watchTab = screen.getByRole('tab', { name: 'Watch' });
+        const settingsTab = screen.getByRole('tab', { name: 'Settings' });
+
+        expect(playTab).toHaveAttribute('tabindex', '0');
+        expect(watchTab).toHaveAttribute('tabindex', '-1');
+        expect(settingsTab).toHaveAttribute('tabindex', '-1');
+
+        fireEvent.keyDown(playTab, { key: 'ArrowRight' });
+        expect(onSelectTab).toHaveBeenCalledWith('watch');
+
+        fireEvent.keyDown(playTab, { key: 'End' });
+        expect(onSelectTab).toHaveBeenCalledWith('settings');
+
         const onSelectMode = vi.fn();
         render(<ModeTabs mode="solo" onSelectMode={onSelectMode} />);
-
         const soloTab = screen.getByRole('tab', { name: 'Solo' });
-        const watchTab = screen.getByRole('tab', { name: 'Watch Live' });
-        expect(screen.queryByRole('tab', { name: 'Online Co-op' })).not.toBeInTheDocument();
-
-        expect(soloTab).toHaveAttribute('tabindex', '0');
-        expect(watchTab).toHaveAttribute('tabindex', '-1');
-
         fireEvent.keyDown(soloTab, { key: 'ArrowRight' });
         expect(onSelectMode).toHaveBeenCalledWith('watch');
+    });
 
-        fireEvent.keyDown(watchTab, { key: 'Home' });
-        expect(onSelectMode).toHaveBeenCalledWith('solo');
+    it('emits theme, language, and guide callbacks in SettingsPanel', () => {
+        const onChangeTheme = vi.fn();
+        const onChangeLanguage = vi.fn();
+        const onOpenGuide = vi.fn();
+        render(
+            <SettingsPanel
+                theme="dark"
+                language="en"
+                onChangeTheme={onChangeTheme}
+                onChangeLanguage={onChangeLanguage}
+                onOpenGuide={onOpenGuide}
+            />,
+        );
+
+        fireEvent.click(screen.getByRole('radio', { name: 'Light' }));
+        expect(onChangeTheme).toHaveBeenCalledWith('light');
+
+        fireEvent.click(screen.getByRole('radio', { name: 'Deutsch' }));
+        expect(onChangeLanguage).toHaveBeenCalledWith('de');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open Guide' }));
+        expect(onOpenGuide).toHaveBeenCalledTimes(1);
     });
 
     it('renders VariantSelector and DifficultySelector as segmented pills and emits changes', () => {

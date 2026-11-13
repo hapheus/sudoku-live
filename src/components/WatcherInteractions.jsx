@@ -1,6 +1,7 @@
 import React from 'react';
 import { getCellCoords, getVariantSpec, inferVariantFromBoardLength } from '../domain/sudoku-generator.js';
 import { REACTION_LIST } from '../utils/watcher-helpers.js';
+import enMessages from '../locales/en.json';
 
 const EMOJI_LABELS = {
     '👏': 'Send applause reaction',
@@ -17,6 +18,7 @@ export function WatcherInteractions({
     variant = null,
     onSendHint,
     onSendReaction,
+    messages = enMessages,
 }) {
     const resolvedVariant = variant || inferVariantFromBoardLength(board?.length);
     const { maxDigit } = getVariantSpec(resolvedVariant);
@@ -61,7 +63,7 @@ export function WatcherInteractions({
                         title="Draw attention to the selected cell without naming a digit"
                         onClick={() => onSendHint(null)}
                     >
-                        Nudge cell
+                        {messages.nudgeCell}
                     </button>
                     <button
                         type="button"
@@ -69,7 +71,7 @@ export function WatcherInteractions({
                         className="spectator-pad__action spectator-pad__action--muted"
                         onClick={() => onSendHint(undefined)}
                     >
-                        Clear hint
+                        {messages.clearHint}
                     </button>
                 </div>
             </div>

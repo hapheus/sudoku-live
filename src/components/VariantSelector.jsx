@@ -1,16 +1,17 @@
 import React from 'react';
+import enMessages from '../locales/en.json';
 
-const VARIANTS = [
-    { value: '3x3', label: '3×3 (9×9)' },
-    { value: '2x3', label: '2×3 (6×6)' },
-];
+export function VariantSelector({ variant, onChange, messages = enMessages }) {
+    const variants = [
+        { value: '3x3', label: messages.variant3x3 },
+        { value: '2x3', label: messages.variant2x3 },
+    ];
 
-export function VariantSelector({ variant, onChange }) {
     return (
         <fieldset id="variant-group" className="variant-group">
-            <legend className="sr-only">Grid Size</legend>
+            <legend className="variant-group__legend">{messages.variantLegend}</legend>
             <div className="variant-options">
-                {VARIANTS.map((item) => {
+                {variants.map((item) => {
                     const isChecked = variant === item.value;
                     return (
                         <label
