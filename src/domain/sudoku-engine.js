@@ -86,6 +86,7 @@ export function createSudokuGame({ difficulty = 'medium', puzzle = null, solutio
     const board = [...generated.puzzle];
     const givens = generated.puzzle.map((v) => v !== 0);
     const notes = Array.from({ length: 81 }, () => []);
+    const cellOwners = Array(81).fill(null);
 
     return {
         difficulty: generated.difficulty,
@@ -93,6 +94,7 @@ export function createSudokuGame({ difficulty = 'medium', puzzle = null, solutio
         givens,
         solution: [...generated.solution],
         notes,
+        cellOwners,
         conflicts: findConflicts(board),
         filledCount: countFilledCells(board),
         status: isSolved(board) ? 'solved' : 'in_progress',
@@ -105,7 +107,11 @@ export function cloneNotes(notes) {
     return notes.map((arr) => [...arr]);
 }
 
-export function setCellValue(state, index, value, { recordHistory = true } = {}) {
+function cloneOwners(owners) {
+    return Array.isArray(owners) && owners.length === 81 ? [...owners] : Array(81).fill(null);
+}
+
+export function setCellValue(state, index, value, { recordHistory = true, owner = null } = {}) {
     if (index < 0 || index >= 81) {
         throw new Error(`Invalid cell index ${index}.`);
     }
@@ -125,11 +131,20 @@ export function setCellValue(state, index, value, { recordHistory = true } = {})
 
     const nextBoard = [...state.board];
     const nextNotes = cloneNotes(state.notes);
+    const nextOwners = cloneOwners(state.cellOwners);
     const nextHistory = recordHistory
-        ? [...state.history.slice(-49), { board: [...state.board], notes: cloneNotes(state.notes) }]
+        ? [
+            ...state.history.slice(-49),
+            {
+                board: [...state.board],
+                notes: cloneNotes(state.notes),
+                cellOwners: cloneOwners(state.cellOwners),
+            },
+        ]
         : state.history;
 
     nextBoard[index] = value;
+    nextOwners[index] = value === 0 ? null : owner;
 
     if (value !== 0) {
         nextNotes[index] = [];
@@ -149,6 +164,7 @@ export function setCellValue(state, index, value, { recordHistory = true } = {})
         ...state,
         board: nextBoard,
         notes: nextNotes,
+        cellOwners: nextOwners,
         conflicts,
         filledCount,
         status: solved ? 'solved' : 'in_progress',
@@ -175,7 +191,14 @@ export function toggleCellNote(state, index, digit, { recordHistory = true } = {
 
     const nextNotes = cloneNotes(state.notes);
     const nextHistory = recordHistory
-        ? [...state.history.slice(-49), { board: [...state.board], notes: cloneNotes(state.notes) }]
+        ? [
+            ...state.history.slice(-49),
+            {
+                board: [...state.board],
+                notes: cloneNotes(state.notes),
+                cellOwners: cloneOwners(state.cellOwners),
+            },
+        ]
         : state.history;
 
     const current = nextNotes[index];
@@ -192,17 +215,21 @@ export function toggleCellNote(state, index, digit, { recordHistory = true } = {
     };
 }
 
-export function applyRemoteCellPatch(state, { index, value, notes = null }) {
+export function applyRemoteCellPatch(state, { index, value, notes = null, owner = null }) {
     if (index < 0 || index >= 81 || state.givens[index]) {
         return state;
     }
 
     const nextBoard = [...state.board];
     const nextNotes = cloneNotes(state.notes);
+    const nextOwners = cloneOwners(state.cellOwners);
 
     if (typeof value === 'number' && value >= 0 && value <= 9) {
         nextBoard[index] = value;
-        if (value !== 0) {
+        if (value === 0) {
+            nextOwners[index] = null;
+        } else {
+            nextOwners[index] = owner === 'host' || owner === 'guest' ? owner : (nextOwners[index] || null);
             nextNotes[index] = [];
             for (const peerIdx of getPeerIndices(index)) {
                 if (nextNotes[peerIdx].length > 0) {
@@ -226,6 +253,7 @@ export function applyRemoteCellPatch(state, { index, value, notes = null }) {
         ...state,
         board: nextBoard,
         notes: nextNotes,
+        cellOwners: nextOwners,
         conflicts,
         filledCount,
         status: solved ? 'solved' : 'in_progress',
@@ -246,6 +274,7 @@ export function undoLastMove(state) {
         ...state,
         board: [...previous.board],
         notes: cloneNotes(previous.notes),
+        cellOwners: cloneOwners(previous.cellOwners),
         conflicts,
         filledCount,
         status: 'in_progress',
@@ -260,6 +289,7 @@ export function serializeGameState(state) {
         givens: state.givens,
         solution: state.solution,
         notes: state.notes,
+        cellOwners: cloneOwners(state.cellOwners),
         status: state.status,
         elapsedSeconds: state.elapsedSeconds || 0,
     };
@@ -275,6 +305,9 @@ export function hydrateGameState(raw) {
     const notes = Array.isArray(raw.notes) && raw.notes.length === 81
         ? raw.notes.map((arr) => (Array.isArray(arr) ? arr.filter((n) => Number.isInteger(n) && n >= 1 && n <= 9) : []))
         : Array.from({ length: 81 }, () => []);
+    const cellOwners = Array.isArray(raw.cellOwners) && raw.cellOwners.length === 81
+        ? raw.cellOwners.map((owner, idx) => (board[idx] !== 0 && !givens[idx] && (owner === 'host' || owner === 'guest') ? owner : null))
+        : Array(81).fill(null);
     const solution = Array.isArray(raw.solution) && raw.solution.length === 81
         ? raw.solution.map((v) => (Number.isInteger(v) && v >= 1 && v <= 9 ? v : 0))
         : Array(81).fill(0);
@@ -289,6 +322,7 @@ export function hydrateGameState(raw) {
         givens,
         solution,
         notes,
+        cellOwners,
         conflicts,
         filledCount,
         status: solved ? 'solved' : 'in_progress',

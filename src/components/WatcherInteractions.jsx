@@ -17,12 +17,13 @@ export function WatcherInteractions({
     onSendHint,
     onSendReaction,
 }) {
-    let hintStatus = 'Select an empty cell on the board, then suggest a digit or nudge the players:';
+    const canHintSelected = selectedIndex !== null && board[selectedIndex] === 0;
+    let hintStatus = 'Tap an empty cell on the board, then suggest 1–9 or nudge players to inspect it:';
     if (selectedIndex !== null) {
         const { row, col } = getCellCoords(selectedIndex);
         hintStatus = board[selectedIndex] !== 0
-            ? `Row ${row + 1}, Column ${col + 1} is already filled. Select an empty cell to suggest a hint.`
-            : `Selected Row ${row + 1}, Column ${col + 1} — choose 1-9 or Nudge to send a hint:`;
+            ? `R${row + 1} C${col + 1} already has a digit. Select an empty cell to suggest a hint.`
+            : `Selected R${row + 1} C${col + 1} — suggest a digit or nudge players to look here:`;
     }
 
     return (
@@ -32,34 +33,40 @@ export function WatcherInteractions({
             </p>
 
             <div className="spectator-pad" role="group" aria-label="Suggest a digit hint">
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => (
+                <div className="spectator-pad__digits">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => (
+                        <button
+                            key={d}
+                            type="button"
+                            className="spectator-pad__btn"
+                            data-hint-digit={d}
+                            aria-label={`Suggest digit ${d}`}
+                            disabled={selectedIndex !== null && !canHintSelected}
+                            onClick={() => onSendHint(d)}
+                        >
+                            {d}
+                        </button>
+                    ))}
+                </div>
+                <div className="spectator-pad__actions">
                     <button
-                        key={d}
                         type="button"
-                        className="spectator-pad__btn"
-                        data-hint-digit={d}
-                        aria-label={`Suggest digit ${d}`}
-                        onClick={() => onSendHint(d)}
+                        id="spectator-nudge-btn"
+                        className="spectator-pad__action"
+                        title="Draw attention to the selected cell without naming a digit"
+                        onClick={() => onSendHint(null)}
                     >
-                        {d}
+                        Nudge cell
                     </button>
-                ))}
-                <button
-                    type="button"
-                    id="spectator-nudge-btn"
-                    className="spectator-pad__action"
-                    onClick={() => onSendHint(null)}
-                >
-                    Nudge
-                </button>
-                <button
-                    type="button"
-                    id="spectator-clear-hint-btn"
-                    className="spectator-pad__action spectator-pad__action--muted"
-                    onClick={() => onSendHint(undefined)}
-                >
-                    Clear
-                </button>
+                    <button
+                        type="button"
+                        id="spectator-clear-hint-btn"
+                        className="spectator-pad__action spectator-pad__action--muted"
+                        onClick={() => onSendHint(undefined)}
+                    >
+                        Clear hint
+                    </button>
+                </div>
             </div>
 
             <div className="emoji-bar" role="group" aria-label="Send emoji reaction">

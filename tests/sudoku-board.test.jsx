@@ -78,4 +78,41 @@ describe('SudokuBoard & SpectatorHintsFeed React components', () => {
         fireEvent.click(chip);
         expect(onApplyHint).toHaveBeenCalledWith(12, 7);
     });
+
+    it('uses roving tabIndex, renders R1-R9/C1-C9 axes, and shows partner digits & cursor in co-op', () => {
+        const puzzle = [...SAMPLE_SOLUTION];
+        puzzle[0] = 0;
+        puzzle[1] = 0;
+        puzzle[2] = 0;
+
+        let state = createSudokuGame({ difficulty: 'medium', puzzle, solution: SAMPLE_SOLUTION });
+        state = setCellValue(state, 0, 5, { owner: 'host' });
+        state = setCellValue(state, 1, 3, { owner: 'guest' });
+
+        render(
+            <SudokuBoard
+                gameState={state}
+                selectedIndex={0}
+                hintsByCell={new Map()}
+                floatingReactions={[]}
+                myRole="host"
+                partnerCursorIndex={2}
+                onCellSelect={vi.fn()}
+            />,
+        );
+
+        const cells = screen.getAllByRole('gridcell');
+        expect(cells[0]).toHaveAttribute('tabindex', '0');
+        expect(cells[1]).toHaveAttribute('tabindex', '-1');
+        expect(cells[0]).toHaveClass('sudoku-cell--user');
+        expect(cells[1]).toHaveClass('sudoku-cell--partner');
+        expect(cells[2]).toHaveClass('sudoku-cell--partner-cursor');
+        expect(cells[2].querySelector('.sudoku-cell__partner-pip')).not.toBeNull();
+        expect(cells[1]).toHaveAttribute('aria-label', expect.stringContaining('by partner'));
+        expect(cells[2]).toHaveAttribute('aria-label', expect.stringContaining('partner cursor'));
+
+        expect(document.querySelectorAll('.board-col-axes .board-axis-label')).toHaveLength(9);
+        expect(document.querySelectorAll('.board-row-axes .board-axis-label')).toHaveLength(9);
+    });
 });
+

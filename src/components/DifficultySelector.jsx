@@ -10,20 +10,26 @@ const DIFFICULTIES = [
 export function DifficultySelector({ difficulty, onChange }) {
     return (
         <fieldset id="difficulty-group" className="difficulty-group">
-            <legend>Difficulty</legend>
+            <legend className="sr-only">Difficulty</legend>
             <div className="difficulty-options">
-                {DIFFICULTIES.map((item) => (
-                    <label key={item.value} className="difficulty-label">
-                        <input
-                            type="radio"
-                            name="sudoku-difficulty"
-                            value={item.value}
-                            checked={difficulty === item.value}
-                            onChange={() => onChange(item.value)}
-                        />
-                        <span>{item.label}</span>
-                    </label>
-                ))}
+                {DIFFICULTIES.map((item) => {
+                    const isChecked = difficulty === item.value;
+                    return (
+                        <label
+                            key={item.value}
+                            className={`difficulty-label ${isChecked ? 'difficulty-label--active' : ''}`}
+                        >
+                            <input
+                                type="radio"
+                                name="sudoku-difficulty"
+                                value={item.value}
+                                checked={isChecked}
+                                onChange={() => onChange(item.value)}
+                            />
+                            <span>{item.label}</span>
+                        </label>
+                    );
+                })}
             </div>
         </fieldset>
     );

@@ -1,8 +1,13 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
-export function OnlineInviteBox({ inviteUrl }) {
+export function OnlineInviteBox({ inviteUrl, partnerOnline = false }) {
     const [feedback, setFeedback] = useState('');
+    const [expanded, setExpanded] = useState(!partnerOnline);
     const inputRef = useRef(null);
+
+    useEffect(() => {
+        setExpanded(!partnerOnline);
+    }, [partnerOnline]);
 
     async function handleCopyOrShare() {
         if (!inviteUrl) return;
@@ -16,19 +21,67 @@ export function OnlineInviteBox({ inviteUrl }) {
                 return;
             }
             await navigator.clipboard.writeText(inviteUrl);
-            setFeedback('Link copied to clipboard.');
+            setFeedback('Invite link copied.');
         } catch {
             inputRef.current?.select();
             document.execCommand?.('copy');
-            setFeedback('Link copied.');
+            setFeedback('Invite link copied.');
         }
 
         setTimeout(() => setFeedback(''), 3000);
     }
 
+    if (partnerOnline && !expanded) {
+        return (
+            <section id="online-controls" className="online-box online-box--compact" aria-label="Multiplayer Invitation">
+                <div className="online-box__compact-row">
+                    <span className="online-box__compact-status">
+                        <span className="online-box__dot" aria-hidden="true" />
+                        Partner connected
+                    </span>
+                    <div className="online-box__compact-actions">
+                        <button
+                            type="button"
+                            id="copy-link-btn"
+                            className="online-box__btn online-box__btn--sm"
+                            onClick={handleCopyOrShare}
+                        >
+                            Share Link
+                        </button>
+                        <button
+                            type="button"
+                            className="online-box__btn online-box__btn--ghost"
+                            aria-expanded="false"
+                            onClick={() => setExpanded(true)}
+                        >
+                            Show URL
+                        </button>
+                    </div>
+                </div>
+                {feedback && (
+                    <div id="copy-feedback" className="online-box__feedback" role="status" aria-live="polite">
+                        {feedback}
+                    </div>
+                )}
+            </section>
+        );
+    }
+
     return (
         <section id="online-controls" className="online-box" aria-label="Multiplayer Invitation">
-            <span className="online-box__label">Invite a co-op partner or spectators with this link:</span>
+            <div className="online-box__header">
+                <span className="online-box__label">Invite a co-op partner or spectators:</span>
+                {partnerOnline && (
+                    <button
+                        type="button"
+                        className="online-box__collapse-btn"
+                        aria-expanded="true"
+                        onClick={() => setExpanded(false)}
+                    >
+                        Hide
+                    </button>
+                )}
+            </div>
             <div className="online-box__input-row">
                 <input
                     ref={inputRef}
@@ -48,9 +101,11 @@ export function OnlineInviteBox({ inviteUrl }) {
                     Copy Link
                 </button>
             </div>
-            <div id="copy-feedback" className="online-box__feedback" role="status" aria-live="polite">
-                {feedback}
-            </div>
+            {feedback && (
+                <div id="copy-feedback" className="online-box__feedback" role="status" aria-live="polite">
+                    {feedback}
+                </div>
+            )}
         </section>
     );
 }

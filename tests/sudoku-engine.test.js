@@ -87,4 +87,27 @@ describe('Sudoku Engine', () => {
         expect(hydrated.difficulty).toBe('medium');
         expect(findConflicts(hydrated.board)).toEqual([]);
     });
+
+    it('tracks cellOwners for co-op moves, undo, remote updates, and serialization', () => {
+        const puzzle = [...SAMPLE_SOLUTION];
+        puzzle[0] = 0;
+        puzzle[1] = 0;
+
+        let state = createSudokuGame({ difficulty: 'easy', puzzle, solution: SAMPLE_SOLUTION });
+        expect(state.cellOwners).toHaveLength(81);
+
+        state = setCellValue(state, 0, 5, { owner: 'host' });
+        expect(state.cellOwners[0]).toBe('host');
+
+        state = undoLastMove(state);
+        expect(state.cellOwners[0]).toBeNull();
+
+        state = applyRemoteCellPatch(state, { index: 1, value: 3, notes: [], owner: 'guest' });
+        expect(state.cellOwners[1]).toBe('guest');
+
+        const hydrated = hydrateGameState(serializeGameState(state));
+        expect(hydrated.cellOwners[1]).toBe('guest');
+        expect(hydrated.cellOwners[0]).toBeNull();
+    });
 });
+

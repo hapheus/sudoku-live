@@ -5,12 +5,20 @@ export function getSudokuCellAriaLabel(index, value, {
     isConflict = false,
     notes = [],
     hint = null,
+    isPartnerOwned = false,
+    isPartnerFocused = false,
 } = {}) {
     const { row, col } = getCellCoords(index);
     const parts = [`Row ${row + 1}, Column ${col + 1}`];
 
     if (value >= 1 && value <= 9) {
-        parts.push(isGiven ? `given ${value}` : `${value}`);
+        if (isGiven) {
+            parts.push(`given ${value}`);
+        } else if (isPartnerOwned) {
+            parts.push(`${value} by partner`);
+        } else {
+            parts.push(`${value}`);
+        }
     } else {
         parts.push('empty');
         if (notes && notes.length > 0) {
@@ -26,6 +34,10 @@ export function getSudokuCellAriaLabel(index, value, {
         parts.push(`spectator hint ${hint.topValue}`);
     } else if (hint) {
         parts.push('spectator nudge');
+    }
+
+    if (isPartnerFocused) {
+        parts.push('partner cursor');
     }
 
     return parts.join(', ');

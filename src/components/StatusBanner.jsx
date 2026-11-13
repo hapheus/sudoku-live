@@ -14,45 +14,42 @@ export function StatusBanner({
     currentMembers,
     spectatedGameMode,
     gameState,
+    onReconnect,
 }) {
     const diffLabel = gameState.difficulty
         ? gameState.difficulty.charAt(0).toUpperCase() + gameState.difficulty.slice(1)
         : 'Medium';
 
-    let statusText = `${diffLabel} — ${gameState.filledCount}/81 filled`;
+    let statusText = `${diffLabel} • Solo`;
     let badgeType = 'active-turn';
 
     if (gameState.status === 'solved') {
         statusText = mode === 'online' || isSpectating
-            ? `Puzzle solved! (${diffLabel})`
-            : `Solved! (${diffLabel})`;
+            ? `Puzzle solved • ${diffLabel}`
+            : `Solved • ${diffLabel}`;
         badgeType = 'success';
     } else if (gameState.conflicts && gameState.conflicts.length > 0) {
-        statusText = `${diffLabel} — ${gameState.conflicts.length} conflicting cell${gameState.conflicts.length === 1 ? '' : 's'}`;
+        statusText = `${gameState.conflicts.length} conflicting cell${gameState.conflicts.length === 1 ? '' : 's'}`;
         badgeType = 'alert';
     } else if (isSpectating) {
-        statusText = `Watching Live (${diffLabel}) — ${gameState.filledCount}/81 filled`;
+        statusText = `Watching Live • ${diffLabel}`;
         badgeType = 'waiting';
     } else if (mode === 'online') {
-        statusText = `Co-op (${diffLabel}) — ${gameState.filledCount}/81 filled`;
+        statusText = `Co-op • ${diffLabel}`;
     }
 
-    // Connection badge
+    // Connection badge (shown only for multiplayer or live spectating)
     let connectionBadge = null;
-    if (mode === 'solo' && !isSpectating) {
-        if (connectionStatus === 'connected') {
-            connectionBadge = (
-                <span id="connection-status" className="connection-badge connection-badge--connected" aria-live="polite">
-                    Live Watch Ready
-                </span>
-            );
-        }
-    } else if (mode === 'online' || isSpectating) {
+    const isRealtimeMode = mode === 'online' || isSpectating;
+    const canRetryConnection = isRealtimeMode
+        && (connectionStatus === 'failed' || connectionStatus === 'disconnected' || connectionStatus === 'unavailable');
+
+    if (isRealtimeMode) {
         const labels = {
-            connected: 'Connected',
+            connected: 'Live',
             connecting: 'Connecting...',
             unavailable: 'Offline',
-            failed: 'Connection error',
+            failed: 'Connection lost',
             disconnected: 'Disconnected',
         };
         connectionBadge = (
@@ -69,6 +66,7 @@ export function StatusBanner({
     // Presence badges
     let opponentBadge = null;
     let spectatorBadge = null;
+    let coopLegend = null;
     const spectatorCount = currentMembers.filter((m) => m.role === 'spectator').length;
 
     if ((mode === 'online' || mode === 'solo') && !isSpectating) {
@@ -82,6 +80,19 @@ export function StatusBanner({
                     aria-live="polite"
                 >
                     {partnerOnline ? 'Partner online' : 'Waiting for partner'}
+                </span>
+            );
+
+            coopLegend = (
+                <span className="coop-legend" aria-label="Cell ownership colors">
+                    <span className="coop-legend__item coop-legend__item--self">
+                        <span className="coop-legend__swatch" aria-hidden="true" />
+                        You
+                    </span>
+                    <span className="coop-legend__item coop-legend__item--partner">
+                        <span className="coop-legend__swatch" aria-hidden="true" />
+                        Partner
+                    </span>
                 </span>
             );
         }
@@ -114,13 +125,28 @@ export function StatusBanner({
         );
     }
 
+    const hasMetaBadges = Boolean(connectionBadge || canRetryConnection || opponentBadge || spectatorBadge || coopLegend);
+
     return (
         <section className="status-banner" aria-label="Game Status">
-            <div className="status-meta-row">
-                {connectionBadge}
-                {opponentBadge}
-                {spectatorBadge}
-            </div>
+            {hasMetaBadges && (
+                <div className="status-meta-row">
+                    {connectionBadge}
+                    {canRetryConnection && onReconnect && (
+                        <button
+                            type="button"
+                            id="reconnect-btn"
+                            className="connection-retry-btn"
+                            onClick={onReconnect}
+                        >
+                            Reconnect
+                        </button>
+                    )}
+                    {opponentBadge}
+                    {spectatorBadge}
+                    {coopLegend}
+                </div>
+            )}
 
             <div className="status-primary-row">
                 <div id="game-status-text" className={`status-badge status-badge--${badgeType}`} role="status">

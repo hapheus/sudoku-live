@@ -13,8 +13,10 @@ import { generateGameId, isValidGameId, OnlineGameClient } from './services/onli
 import {
     loadOnlineGameSnapshot,
     loadParticipantSession,
+    loadSoloGameSnapshot,
     saveOnlineGameSnapshot,
     saveParticipantSession,
+    saveSoloGameSnapshot,
 } from './services/online-state-storage.js';
 import { ALLOWED_REACTIONS, aggregateHintsByCell } from './utils/watcher-helpers.js';
 import { ModeTabs } from './components/ModeTabs.jsx';
@@ -26,8 +28,16 @@ import { SudokuBoard } from './components/SudokuBoard.jsx';
 import { SpectatorHintsFeed } from './components/SpectatorHintsFeed.jsx';
 import { PlayerControls } from './components/PlayerControls.jsx';
 import { WatcherInteractions } from './components/WatcherInteractions.jsx';
+import { HelpDialog } from './components/HelpDialog.jsx';
+import { SolveSummary } from './components/SolveSummary.jsx';
 
 const GAME_PING_INTERVAL_MS = 5000;
+
+function hasUnsavedProgress(state) {
+    if (!state || state.status === 'solved') return false;
+    const givenCount = Array.isArray(state.givens) ? state.givens.filter(Boolean).length : 0;
+    return Boolean((state.history && state.history.length > 0) || state.filledCount > givenCount);
+}
 
 function parseInitialRoute() {
     if (typeof window === 'undefined') {
@@ -87,17 +97,24 @@ export function App() {
     const [spectatedGameMode, setSpectatedGameMode] = useState(null);
     const [gameState, setGameState] = useState(() => createSudokuGame({ difficulty: localStorage.getItem('sudoku_difficulty') || 'medium' }));
     const [selectedIndex, setSelectedIndex] = useState(null);
+    const [activeDigit, setActiveDigit] = useState(null);
+    const [partnerCursorIndex, setPartnerCursorIndex] = useState(null);
     const [notesMode, setNotesMode] = useState(false);
     const [rematchRequestedBy, setRematchRequestedBy] = useState(null);
     const [currentMembers, setCurrentMembers] = useState([]);
     const [activeLobbyRooms, setActiveLobbyRooms] = useState([]);
     const [connectionStatus, setConnectionStatus] = useState('disconnected');
     const [announcement, setAnnouncement] = useState('');
+    const [actionFeedback, setActionFeedback] = useState('');
+    const [isHelpOpen, setIsHelpOpen] = useState(false);
+    const [pendingConfirm, setPendingConfirm] = useState(null);
     const [hintsMap, setHintsMap] = useState(() => new Map());
     const [floatingReactions, setFloatingReactions] = useState([]);
 
     const cellRefs = useRef(Array(81).fill(null));
     const reactionSeq = useRef(0);
+    const feedbackTimerRef = useRef(null);
+    const confirmCancelRef = useRef(null);
     const onlineClientRef = useRef(null);
 
     // Live refs to avoid stale closures inside WebSocket event handlers
@@ -111,6 +128,7 @@ export function App() {
         rematchRequestedBy,
         currentMembers,
         hintsMap,
+        activeDigit,
     });
     stateRef.current = {
         mode,
@@ -122,10 +140,23 @@ export function App() {
         rematchRequestedBy,
         currentMembers,
         hintsMap,
+        activeDigit,
     };
 
     const announce = useCallback((msg) => {
         if (msg) setAnnouncement(msg);
+    }, []);
+
+    const showFeedback = useCallback((msg) => {
+        if (!msg) return;
+        setActionFeedback(msg);
+        setAnnouncement(msg);
+        if (feedbackTimerRef.current) {
+            clearTimeout(feedbackTimerRef.current);
+        }
+        feedbackTimerRef.current = setTimeout(() => {
+            setActionFeedback('');
+        }, 3200);
     }, []);
 
     const triggerFloatingReaction = useCallback((emoji) => {
@@ -140,6 +171,9 @@ export function App() {
 
     const persistSnapshotIfNeeded = useCallback((nextGameState, nextRematch = stateRef.current.rematchRequestedBy) => {
         const { onlineGameId: gId, mode: m, isSpectating: spec } = stateRef.current;
+        if (m === 'solo' && !spec) {
+            saveSoloGameSnapshot(nextGameState, gId);
+        }
         if (gId && (m === 'online' || spec)) {
             saveOnlineGameSnapshot(gId, nextGameState, nextRematch);
         }
@@ -208,7 +242,10 @@ export function App() {
         }
 
         if (type === 'cell-update') {
-            const patched = applyRemoteCellPatch(cur.gameState, data);
+            const patched = applyRemoteCellPatch(cur.gameState, {
+                ...data,
+                owner: data?.owner || null,
+            });
             setGameState(patched);
             stateRef.current.gameState = patched;
 
@@ -216,6 +253,16 @@ export function App() {
                 clearHintsForCell(data.index);
             }
             persistSnapshotIfNeeded(patched);
+            return;
+        }
+
+        if (type === 'cursor') {
+            const myClientId = onlineClientRef.current?.clientId;
+            if (!data || data.senderId === myClientId) return;
+            if (data.role === 'host' || data.role === 'guest') {
+                const nextIdx = Number.isInteger(data.index) && data.index >= 0 && data.index < 81 ? data.index : null;
+                setPartnerCursorIndex(nextIdx);
+            }
             return;
         }
 
@@ -249,7 +296,17 @@ export function App() {
             if (data && (data.role === 'host' || data.role === 'guest')) {
                 setRematchRequestedBy(data.role);
                 persistSnapshotIfNeeded(cur.gameState, data.role);
+                if (data.role !== cur.myRole) {
+                    showFeedback('Partner requested a new puzzle. Click Accept New Puzzle to confirm.');
+                }
             }
+            return;
+        }
+
+        if (type === 'new-puzzle-cancel') {
+            setRematchRequestedBy(null);
+            persistSnapshotIfNeeded(cur.gameState, null);
+            showFeedback('New puzzle request cancelled.');
             return;
         }
 
@@ -264,6 +321,8 @@ export function App() {
                 }
             }
             setSelectedIndex(null);
+            setActiveDigit(null);
+            setPartnerCursorIndex(null);
             setRematchRequestedBy(null);
             setHintsMap(new Map());
             persistSnapshotIfNeeded(nextState, null);
@@ -300,7 +359,7 @@ export function App() {
                 }
             }
         }
-    }, [announce, clearHintsForCell, persistSnapshotIfNeeded, syncLobbyProgress, triggerFloatingReaction]);
+    }, [announce, clearHintsForCell, persistSnapshotIfNeeded, showFeedback, syncLobbyProgress, triggerFloatingReaction]);
 
     const handleGamePresenceChange = useCallback((members) => {
         const resolved = onlineClientRef.current?.getGameMembers() || members || [];
@@ -344,6 +403,10 @@ export function App() {
             stateRef.current.currentMembers = authoritative;
         } else {
             setCurrentMembers((prev) => prev.filter((m) => m.id !== member.id));
+        }
+
+        if (member?.role === 'host' || member?.role === 'guest') {
+            setPartnerCursorIndex(null);
         }
 
         if (member?.id) {
@@ -468,17 +531,31 @@ export function App() {
         }
     }, [enterSpectatorView, handleGameMemberJoin, handleGameMemberLeave, handleGamePresenceChange, handleRemoteGameEvent]);
 
-    const startNewSoloGame = useCallback((overrideDifficulty = null) => {
-        const diff = overrideDifficulty || stateRef.current.difficulty;
-        const hadExistingSoloRoom = Boolean(stateRef.current.onlineGameId) && stateRef.current.myRole === 'host' && stateRef.current.mode === 'solo';
-        const roomId = hadExistingSoloRoom ? stateRef.current.onlineGameId : generateGameId();
+    const startNewSoloGame = useCallback((overrideDifficulty = null, { restoreSaved = false } = {}) => {
+        const saved = restoreSaved ? loadSoloGameSnapshot() : null;
+        const diff = saved?.gameState?.status === 'in_progress'
+            ? saved.gameState.difficulty
+            : (overrideDifficulty || stateRef.current.difficulty);
 
-        const nextState = createSudokuGame({ difficulty: diff });
+        const hadExistingSoloRoom = Boolean(stateRef.current.onlineGameId) && stateRef.current.myRole === 'host' && stateRef.current.mode === 'solo';
+        const roomId = saved?.roomId || (hadExistingSoloRoom ? stateRef.current.onlineGameId : generateGameId());
+
+        const nextState = (saved && saved.gameState.status !== 'solved')
+            ? saved.gameState
+            : createSudokuGame({ difficulty: diff });
+
+        if (saved && saved.gameState.status !== 'solved') {
+            setDifficulty(nextState.difficulty);
+            localStorage.setItem('sudoku_difficulty', nextState.difficulty);
+        }
+
         setMode('solo');
         setIsSpectating(false);
         setOnlineGameId(roomId);
         setMyRole('host');
         setSelectedIndex(null);
+        setActiveDigit(null);
+        setPartnerCursorIndex(null);
         setNotesMode(false);
         setHintsMap(new Map());
         setRematchRequestedBy(null);
@@ -492,6 +569,8 @@ export function App() {
         stateRef.current.onlineGameId = roomId;
         stateRef.current.myRole = 'host';
         stateRef.current.gameState = nextState;
+
+        saveSoloGameSnapshot(nextState, roomId);
 
         if (!hadExistingSoloRoom) {
             onlineClientRef.current?.joinGameChannel(roomId, {
@@ -517,7 +596,9 @@ export function App() {
             syncLobbyProgress(nextState, 'solo');
         }
 
-        announce(`New ${diff} Sudoku puzzle ready.`);
+        announce(saved && saved.gameState.status !== 'solved'
+            ? `Resumed ${nextState.difficulty} Solo puzzle.`
+            : `New ${diff} Sudoku puzzle ready.`);
     }, [announce, handleGameMemberJoin, handleGameMemberLeave, handleGamePresenceChange, handleRemoteGameEvent, syncLobbyProgress]);
 
     const startNewOnlineGame = useCallback((overrideDifficulty = null) => {
@@ -530,6 +611,8 @@ export function App() {
         setOnlineGameId(roomId);
         setMyRole('host');
         setSelectedIndex(null);
+        setActiveDigit(null);
+        setPartnerCursorIndex(null);
         setNotesMode(false);
         setHintsMap(new Map());
         setRematchRequestedBy(null);
@@ -630,7 +713,7 @@ export function App() {
         } else if (initialRoute.initialMode === 'watch') {
             openWatchDirectory();
         } else {
-            startNewSoloGame();
+            startNewSoloGame(null, { restoreSaved: true });
         }
 
         const cleanup = () => client.disconnect();
@@ -645,7 +728,7 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // 1-second puzzle clock
+    // 1-second puzzle clock & periodic solo persistence
     useEffect(() => {
         const timer = setInterval(() => {
             setGameState((prev) => {
@@ -654,6 +737,9 @@ export function App() {
                 }
                 const next = { ...prev, elapsedSeconds: (prev.elapsedSeconds || 0) + 1 };
                 stateRef.current.gameState = next;
+                if (stateRef.current.mode === 'solo' && next.elapsedSeconds % 5 === 0) {
+                    saveSoloGameSnapshot(next, stateRef.current.onlineGameId);
+                }
                 return next;
             });
         }, 1000);
@@ -679,52 +765,120 @@ export function App() {
         return () => clearInterval(timer);
     }, [syncLobbyProgress]);
 
-    const applyPlayerDigit = useCallback((digit) => {
+    // Escape key handling and focus management for confirmation dialog
+    useEffect(() => {
+        if (!pendingConfirm) return undefined;
+        confirmCancelRef.current?.focus();
+
+        const onKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                setPendingConfirm(null);
+            }
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [pendingConfirm]);
+
+    const writeDigitToCell = useCallback((targetIndex, digit) => {
         const cur = stateRef.current;
-        if (cur.isSpectating || cur.mode === 'watch' || selectedIndex === null || cur.gameState.status === 'solved') {
+        if (cur.isSpectating || cur.mode === 'watch' || targetIndex === null || cur.gameState.status === 'solved') {
             return;
         }
-        if (cur.gameState.givens[selectedIndex]) {
-            announce('Given clue cells cannot be changed.');
+        if (cur.gameState.givens[targetIndex]) {
+            showFeedback('Fixed starting clue — choose an empty cell.');
             return;
         }
 
         const isBroadcaster = (cur.mode === 'solo' || cur.mode === 'online') && Boolean(cur.onlineGameId) && !cur.isSpectating;
+        const owner = cur.mode === 'online' && (cur.myRole === 'host' || cur.myRole === 'guest') ? cur.myRole : null;
 
         try {
             if (notesMode && digit !== 0) {
-                const nextState = toggleCellNote(cur.gameState, selectedIndex, digit);
+                const nextState = toggleCellNote(cur.gameState, targetIndex, digit);
                 setGameState(nextState);
                 stateRef.current.gameState = nextState;
                 if (isBroadcaster) {
                     onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'cell-update', {
-                        index: selectedIndex,
+                        index: targetIndex,
                         value: null,
-                        notes: nextState.notes[selectedIndex],
+                        notes: nextState.notes[targetIndex],
                     });
                 }
                 persistSnapshotIfNeeded(nextState);
             } else {
-                const nextState = setCellValue(cur.gameState, selectedIndex, digit);
+                const nextState = setCellValue(cur.gameState, targetIndex, digit, { owner });
                 setGameState(nextState);
                 stateRef.current.gameState = nextState;
                 if (digit !== 0) {
-                    clearHintsForCell(selectedIndex);
+                    clearHintsForCell(targetIndex);
+                    const totalPlaced = nextState.board.filter((v) => v === digit).length;
+                    if (totalPlaced >= 9 && cur.activeDigit === digit) {
+                        setActiveDigit(null);
+                    }
                 }
                 if (isBroadcaster) {
                     onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'cell-update', {
-                        index: selectedIndex,
+                        index: targetIndex,
                         value: digit,
-                        notes: nextState.notes[selectedIndex],
+                        notes: nextState.notes[targetIndex],
+                        owner,
                     });
                     syncLobbyProgress(nextState);
                 }
                 persistSnapshotIfNeeded(nextState);
             }
         } catch (err) {
-            announce(err.message);
+            showFeedback(err.message);
         }
-    }, [announce, clearHintsForCell, notesMode, persistSnapshotIfNeeded, selectedIndex, syncLobbyProgress]);
+    }, [clearHintsForCell, notesMode, persistSnapshotIfNeeded, showFeedback, syncLobbyProgress]);
+
+    const applyPlayerDigit = useCallback((digit) => {
+        const cur = stateRef.current;
+        if (cur.isSpectating || cur.mode === 'watch' || cur.gameState.status === 'solved') {
+            return;
+        }
+
+        if (selectedIndex === null) {
+            if (digit === 0) {
+                if (cur.activeDigit !== null) {
+                    setActiveDigit(null);
+                    showFeedback('Digit lock cleared.');
+                } else {
+                    showFeedback('Select a cell to erase.');
+                }
+                return;
+            }
+
+            const nextActive = cur.activeDigit === digit ? null : digit;
+            setActiveDigit(nextActive);
+            showFeedback(
+                nextActive
+                    ? `Digit ${nextActive} locked — tap an empty cell to place it.`
+                    : 'Digit lock cleared.',
+            );
+            return;
+        }
+
+        writeDigitToCell(selectedIndex, digit);
+    }, [selectedIndex, showFeedback, writeDigitToCell]);
+
+    const handleCellSelect = useCallback((idx) => {
+        setSelectedIndex(idx);
+
+        const cur = stateRef.current;
+        if (cur.mode === 'online' && !cur.isSpectating && (cur.myRole === 'host' || cur.myRole === 'guest') && cur.onlineGameId) {
+            onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'cursor', {
+                senderId: onlineClientRef.current?.clientId,
+                role: cur.myRole,
+                index: idx,
+            });
+        }
+
+        if (!cur.isSpectating && cur.mode !== 'watch' && cur.gameState.status !== 'solved' && cur.activeDigit !== null) {
+            writeDigitToCell(idx, cur.activeDigit);
+        }
+    }, [writeDigitToCell]);
 
     const handleUndo = useCallback(() => {
         const cur = stateRef.current;
@@ -746,6 +900,7 @@ export function App() {
                         index: i,
                         value: nextState.board[i],
                         notes: nextState.notes[i],
+                        owner: nextState.cellOwners?.[i] || null,
                     });
                 }
             }
@@ -778,8 +933,9 @@ export function App() {
         const correctDigit = cur.gameState.solution[targetIdx];
         if (!correctDigit) return;
 
+        const owner = cur.mode === 'online' && (cur.myRole === 'host' || cur.myRole === 'guest') ? cur.myRole : null;
         setSelectedIndex(targetIdx);
-        const nextState = setCellValue(cur.gameState, targetIdx, correctDigit);
+        const nextState = setCellValue(cur.gameState, targetIdx, correctDigit, { owner });
         setGameState(nextState);
         stateRef.current.gameState = nextState;
         clearHintsForCell(targetIdx);
@@ -790,21 +946,26 @@ export function App() {
                 index: targetIdx,
                 value: correctDigit,
                 notes: [],
+                owner,
             });
             syncLobbyProgress(nextState);
         }
 
         const { row, col } = getCellCoords(targetIdx);
-        announce(`Hint applied: Row ${row + 1}, Column ${col + 1} is ${correctDigit}.`);
+        showFeedback(`Hint filled R${row + 1} C${col + 1} with ${correctDigit}.`);
         persistSnapshotIfNeeded(nextState);
-    }, [announce, clearHintsForCell, persistSnapshotIfNeeded, selectedIndex, syncLobbyProgress]);
+    }, [clearHintsForCell, persistSnapshotIfNeeded, selectedIndex, showFeedback, syncLobbyProgress]);
 
     const sendSpectatorHint = useCallback((value) => {
         const cur = stateRef.current;
         const client = onlineClientRef.current;
-        if (!cur.isSpectating || !cur.onlineGameId || selectedIndex === null || !client) return;
+        if (!cur.isSpectating || !cur.onlineGameId || !client) return;
+        if (selectedIndex === null) {
+            showFeedback('Select an empty cell on the board first.');
+            return;
+        }
         if (cur.gameState.board[selectedIndex] !== 0) {
-            announce('Select an empty cell to suggest a hint.');
+            showFeedback('That cell already has a digit — pick an empty cell.');
             return;
         }
 
@@ -831,13 +992,13 @@ export function App() {
                 ? `Suggested ${value} at Row ${row + 1}, Column ${col + 1}.`
                 : `Nudged players to check Row ${row + 1}, Column ${col + 1}.`);
         }
-    }, [announce, selectedIndex]);
+    }, [announce, selectedIndex, showFeedback]);
 
-    const switchMode = useCallback((newMode) => {
+    const executeSwitchMode = useCallback((newMode) => {
         const cur = stateRef.current;
-        if (cur.mode === newMode && !cur.isSpectating) return;
-
         onlineClientRef.current?.disconnect();
+        setPartnerCursorIndex(null);
+        setActiveDigit(null);
 
         if (newMode === 'watch') {
             setMode('watch');
@@ -865,22 +1026,55 @@ export function App() {
             setMyRole(null);
             setCurrentMembers([]);
             updateBrowserUrl('/');
-            startNewSoloGame();
+            startNewSoloGame(null, { restoreSaved: true });
         }
     }, [openWatchDirectory, resumeOnlineGame, startNewOnlineGame, startNewSoloGame]);
+
+    const switchMode = useCallback((newMode) => {
+        const cur = stateRef.current;
+        if (cur.mode === newMode && !cur.isSpectating) return;
+
+        if (!cur.isSpectating && cur.mode === 'online' && hasUnsavedProgress(cur.gameState)) {
+            const targetNames = {
+                solo: 'Solo',
+                online: 'Online Co-op',
+                watch: 'Watch Live',
+            };
+            setPendingConfirm({
+                title: `Switch to ${targetNames[newMode] || newMode}?`,
+                message: 'Leaving this co-op room will disconnect you from the current match.',
+                confirmLabel: `Switch to ${targetNames[newMode] || newMode}`,
+                cancelLabel: 'Stay in Co-op',
+                onConfirm: () => executeSwitchMode(newMode),
+            });
+            return;
+        }
+
+        executeSwitchMode(newMode);
+    }, [executeSwitchMode]);
 
     const exitSpectating = useCallback(() => {
         onlineClientRef.current?.leaveGameChannel();
         setOnlineGameId(null);
         setIsSpectating(false);
         setMode('watch');
+        setPartnerCursorIndex(null);
         setCurrentMembers([]);
         setHintsMap(new Map());
         updateBrowserUrl('/');
         openWatchDirectory();
     }, [openWatchDirectory]);
 
-    const handleNewPuzzleAction = useCallback(() => {
+    const handleCancelRematch = useCallback(() => {
+        const cur = stateRef.current;
+        if (cur.mode !== 'online' || !cur.onlineGameId) return;
+        setRematchRequestedBy(null);
+        persistSnapshotIfNeeded(cur.gameState, null);
+        onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'new-puzzle-cancel', { role: cur.myRole });
+        showFeedback('New puzzle request cancelled.');
+    }, [persistSnapshotIfNeeded, showFeedback]);
+
+    const startNewPuzzleConfirmed = useCallback(() => {
         const cur = stateRef.current;
         if (cur.mode !== 'online') {
             startNewSoloGame();
@@ -896,6 +1090,8 @@ export function App() {
             setGameState(nextState);
             stateRef.current.gameState = nextState;
             setSelectedIndex(null);
+            setActiveDigit(null);
+            setPartnerCursorIndex(null);
             setNotesMode(false);
             setRematchRequestedBy(null);
             setHintsMap(new Map());
@@ -909,15 +1105,79 @@ export function App() {
             setRematchRequestedBy(cur.myRole);
             persistSnapshotIfNeeded(cur.gameState, cur.myRole);
             onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'new-puzzle-request', { role: cur.myRole });
-            announce('New puzzle requested. Waiting for partner...');
+            showFeedback('New puzzle requested. Waiting for your partner.');
         }
-    }, [announce, persistSnapshotIfNeeded, startNewSoloGame, syncLobbyProgress]);
+    }, [announce, persistSnapshotIfNeeded, showFeedback, startNewSoloGame, syncLobbyProgress]);
+
+    const handleNewPuzzleAction = useCallback(() => {
+        const cur = stateRef.current;
+        const partnerOnline = cur.currentMembers.some(
+            (m) => m.role !== cur.myRole && (m.role === 'host' || m.role === 'guest'),
+        );
+
+        if (cur.mode === 'online' && partnerOnline) {
+            startNewPuzzleConfirmed();
+            return;
+        }
+
+        if (hasUnsavedProgress(cur.gameState)) {
+            setPendingConfirm({
+                title: 'Start a new puzzle?',
+                message: 'Your current puzzle progress will be replaced by a new board.',
+                confirmLabel: 'Start New Puzzle',
+                cancelLabel: 'Keep Current Puzzle',
+                onConfirm: () => startNewPuzzleConfirmed(),
+            });
+            return;
+        }
+
+        startNewPuzzleConfirmed();
+    }, [startNewPuzzleConfirmed]);
+
+    const handleDifficultyChange = useCallback((nextDiff) => {
+        const cur = stateRef.current;
+        if (nextDiff === cur.difficulty) return;
+
+        const applyDifficulty = () => {
+            setDifficulty(nextDiff);
+            localStorage.setItem('sudoku_difficulty', nextDiff);
+            if (cur.mode === 'solo') {
+                startNewSoloGame(nextDiff);
+            }
+        };
+
+        if (cur.mode === 'solo' && hasUnsavedProgress(cur.gameState)) {
+            const label = nextDiff.charAt(0).toUpperCase() + nextDiff.slice(1);
+            setPendingConfirm({
+                title: `Switch to ${label}?`,
+                message: 'Changing difficulty in Solo mode starts a new board and clears your current progress.',
+                confirmLabel: `Start ${label} Puzzle`,
+                cancelLabel: 'Keep Current Puzzle',
+                onConfirm: applyDifficulty,
+            });
+            return;
+        }
+
+        applyDifficulty();
+    }, [startNewSoloGame]);
+
+    const handleReconnect = useCallback(() => {
+        onlineClientRef.current?.client?.connect();
+        showFeedback('Reconnecting to live server...');
+    }, [showFeedback]);
 
     // Keyboard shortcuts & 9x9 arrow navigation
     useEffect(() => {
         const handleKeyDown = (e) => {
+            if (isHelpOpen || pendingConfirm) return;
             if (mode === 'watch' && !isSpectating) return;
             if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+
+            if (e.key === '?' && !e.metaKey && !e.ctrlKey) {
+                e.preventDefault();
+                setIsHelpOpen(true);
+                return;
+            }
 
             if (e.key >= '1' && e.key <= '9') {
                 const digit = parseInt(e.key, 10);
@@ -957,17 +1217,19 @@ export function App() {
             if (e.key === 'ArrowDown' && row < 8) nextIndex = (row + 1) * 9 + col;
             if (e.key === 'ArrowLeft' && col > 0) nextIndex = row * 9 + (col - 1);
             if (e.key === 'ArrowRight' && col < 8) nextIndex = row * 9 + (col + 1);
+            if (e.key === 'Home') nextIndex = row * 9;
+            if (e.key === 'End') nextIndex = row * 9 + 8;
 
             if (nextIndex !== null) {
                 e.preventDefault();
-                setSelectedIndex(nextIndex);
+                handleCellSelect(nextIndex);
                 cellRefs.current[nextIndex]?.focus();
             }
         };
 
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [applyPlayerDigit, handleUndo, isSpectating, mode, selectedIndex, sendSpectatorHint]);
+    }, [applyPlayerDigit, handleCellSelect, handleUndo, isHelpOpen, isSpectating, mode, pendingConfirm, selectedIndex, sendSpectatorHint]);
 
     const showBoard = mode !== 'watch' || isSpectating;
     const showHints = mode === 'solo' || mode === 'online' || isSpectating;
@@ -982,10 +1244,11 @@ export function App() {
 
     let restartLabel = 'New Puzzle';
     let restartDisabled = false;
+    const isWaitingForRematch = mode === 'online' && Boolean(rematchRequestedBy && rematchRequestedBy === myRole);
     if (mode === 'online') {
         if (!partnerOnline && gameState.status !== 'solved') {
             restartLabel = 'New Puzzle';
-        } else if (rematchRequestedBy && rematchRequestedBy === myRole) {
+        } else if (isWaitingForRematch) {
             restartLabel = 'Waiting for partner...';
             restartDisabled = true;
         } else if (rematchRequestedBy) {
@@ -1000,10 +1263,27 @@ export function App() {
             </div>
 
             <header className="app-header">
-                <h1 className="app-title">
-                    Sudoku <span className="app-title__accent">Live</span>
-                </h1>
-                <p className="app-subtitle">Unique-solution puzzles with real-time co-op &amp; spectator hints</p>
+                <div className="app-header__bar">
+                    <h1 className="app-title">
+                        Sudoku <span className="app-title__accent">Live</span>
+                    </h1>
+                    <button
+                        type="button"
+                        id="help-btn"
+                        className="help-trigger-btn"
+                        aria-label="How to play and keyboard shortcuts"
+                        aria-haspopup="dialog"
+                        aria-expanded={isHelpOpen}
+                        onClick={() => setIsHelpOpen(true)}
+                    >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                            <path d="M12 17h.01" />
+                        </svg>
+                        <span>Guide</span>
+                    </button>
+                </div>
             </header>
 
             <ModeTabs mode={mode} onSelectMode={switchMode} />
@@ -1011,18 +1291,15 @@ export function App() {
             {!isSpectating && mode !== 'watch' && (myRole !== 'guest' || mode === 'solo') && (
                 <DifficultySelector
                     difficulty={difficulty}
-                    onChange={(nextDiff) => {
-                        setDifficulty(nextDiff);
-                        localStorage.setItem('sudoku_difficulty', nextDiff);
-                        if (mode === 'solo') {
-                            startNewSoloGame(nextDiff);
-                        }
-                    }}
+                    onChange={handleDifficultyChange}
                 />
             )}
 
             {mode === 'online' && !isSpectating && onlineGameId && (
-                <OnlineInviteBox inviteUrl={buildInviteUrl(onlineGameId)} />
+                <OnlineInviteBox
+                    inviteUrl={buildInviteUrl(onlineGameId)}
+                    partnerOnline={partnerOnline}
+                />
             )}
 
             {mode === 'watch' && !isSpectating && (
@@ -1049,6 +1326,42 @@ export function App() {
                 </div>
             )}
 
+            {pendingConfirm && (
+                <section
+                    id="confirm-dialog"
+                    className="confirm-banner"
+                    role="alertdialog"
+                    aria-modal="false"
+                    aria-labelledby="confirm-title"
+                >
+                    <div className="confirm-banner__copy">
+                        <h2 id="confirm-title" className="confirm-banner__title">{pendingConfirm.title}</h2>
+                        <p className="confirm-banner__message">{pendingConfirm.message}</p>
+                    </div>
+                    <div className="confirm-banner__actions">
+                        <button
+                            ref={confirmCancelRef}
+                            type="button"
+                            className="confirm-banner__btn confirm-banner__btn--cancel"
+                            onClick={() => setPendingConfirm(null)}
+                        >
+                            {pendingConfirm.cancelLabel}
+                        </button>
+                        <button
+                            type="button"
+                            className="confirm-banner__btn confirm-banner__btn--confirm"
+                            onClick={() => {
+                                const action = pendingConfirm.onConfirm;
+                                setPendingConfirm(null);
+                                action?.();
+                            }}
+                        >
+                            {pendingConfirm.confirmLabel}
+                        </button>
+                    </div>
+                </section>
+            )}
+
             <StatusBanner
                 connectionStatus={connectionStatus}
                 mode={mode}
@@ -1057,6 +1370,7 @@ export function App() {
                 currentMembers={currentMembers}
                 spectatedGameMode={spectatedGameMode}
                 gameState={gameState}
+                onReconnect={handleReconnect}
             />
 
             {showBoard && (
@@ -1066,7 +1380,27 @@ export function App() {
                     hintsByCell={hintsByCell}
                     floatingReactions={floatingReactions}
                     cellRefs={cellRefs}
-                    onCellSelect={setSelectedIndex}
+                    onCellSelect={handleCellSelect}
+                    myRole={myRole}
+                    partnerCursorIndex={partnerCursorIndex}
+                />
+            )}
+
+            {actionFeedback && (
+                <div id="action-feedback" className="action-feedback" role="status">
+                    {actionFeedback}
+                </div>
+            )}
+
+            {showBoard && gameState.status === 'solved' && (
+                <SolveSummary
+                    difficulty={gameState.difficulty}
+                    elapsedSeconds={gameState.elapsedSeconds}
+                    mode={mode}
+                    isSpectating={isSpectating}
+                    restartLabel={restartLabel}
+                    restartDisabled={restartDisabled}
+                    onPlayAgain={handleNewPuzzleAction}
                 />
             )}
 
@@ -1075,14 +1409,15 @@ export function App() {
                     hintsByCell={hintsByCell}
                     canApply={(mode === 'solo' || mode === 'online') && !isSpectating && gameState.status !== 'solved'}
                     onSelectHint={(idx) => {
-                        setSelectedIndex(idx);
+                        handleCellSelect(idx);
                         cellRefs.current[idx]?.focus();
                     }}
                     onApplyHint={(idx, digit) => {
                         const cur = stateRef.current;
                         if (cur.isSpectating || cur.mode === 'watch' || cur.gameState.status === 'solved') return;
+                        const owner = cur.mode === 'online' && (cur.myRole === 'host' || cur.myRole === 'guest') ? cur.myRole : null;
                         setSelectedIndex(idx);
-                        const nextState = setCellValue(cur.gameState, idx, digit);
+                        const nextState = setCellValue(cur.gameState, idx, digit, { owner });
                         setGameState(nextState);
                         stateRef.current.gameState = nextState;
                         clearHintsForCell(idx);
@@ -1092,6 +1427,7 @@ export function App() {
                                 index: idx,
                                 value: digit,
                                 notes: nextState.notes[idx],
+                                owner,
                             });
                             syncLobbyProgress(nextState);
                         }
@@ -1105,6 +1441,8 @@ export function App() {
                     board={gameState.board}
                     notesMode={notesMode}
                     canUndo={Boolean(gameState.history?.length) && gameState.status !== 'solved'}
+                    activeDigit={activeDigit}
+                    isSolved={gameState.status === 'solved'}
                     onUndo={handleUndo}
                     onErase={() => applyPlayerDigit(0)}
                     onToggleNotes={() => setNotesMode((prev) => !prev)}
@@ -1130,7 +1468,7 @@ export function App() {
                 />
             )}
 
-            {!isSpectating && mode !== 'watch' && (
+            {!isSpectating && mode !== 'watch' && gameState.status !== 'solved' && (
                 <div className="action-controls">
                     <button
                         type="button"
@@ -1141,12 +1479,20 @@ export function App() {
                     >
                         {restartLabel}
                     </button>
+                    {isWaitingForRematch && (
+                        <button
+                            type="button"
+                            id="cancel-restart-btn"
+                            className="btn-secondary"
+                            onClick={handleCancelRematch}
+                        >
+                            Cancel Request
+                        </button>
+                    )}
                 </div>
             )}
 
-            <footer className="app-footer">
-                <p>Zero-DB Real-Time Sudoku &bull; React + Capacitor &bull; Powered by Centrifugo</p>
-            </footer>
+            <HelpDialog isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
         </div>
     );
 }
