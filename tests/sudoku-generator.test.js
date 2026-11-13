@@ -5,10 +5,13 @@ import {
     countSolutions,
     generateSolvedBoard,
     generateSudoku,
+    isSolvable,
+    isValidSolvedBoard,
     solveBoard,
+    verifyGeneratedPuzzle,
 } from '../src/domain/sudoku-generator.js';
 
-function isValidSolvedBoard(board) {
+function isValidCompleteSudoku(board) {
     if (!Array.isArray(board) || board.length !== 81) return false;
     const expected = '1,2,3,4,5,6,7,8,9';
 
@@ -40,6 +43,7 @@ function isValidSolvedBoard(board) {
 describe('Sudoku Generator & Solver', () => {
     it('generates valid complete 9x9 solved boards', () => {
         const board = generateSolvedBoard();
+        expect(isValidCompleteSudoku(board)).toBe(true);
         expect(isValidSolvedBoard(board)).toBe(true);
     });
 
@@ -47,13 +51,50 @@ describe('Sudoku Generator & Solver', () => {
         const { puzzle, solution, clues } = generateSudoku(difficulty);
         const preset = DIFFICULTY_PRESETS[difficulty];
 
-        expect(isValidSolvedBoard(solution)).toBe(true);
+        expect(isValidCompleteSudoku(solution)).toBe(true);
         expect(clues).toBeGreaterThanOrEqual(preset.minClues);
         expect(clues).toBeLessThanOrEqual(preset.maxClues);
         expect(puzzle.filter((v) => v !== 0)).toHaveLength(clues);
 
         expect(countSolutions(puzzle, 2)).toBe(1);
+        expect(isSolvable(puzzle, { requireUnique: true })).toBe(true);
+        expect(verifyGeneratedPuzzle(puzzle, solution)).toBe(true);
         expect(solveBoard(puzzle)).toEqual(solution);
+    });
+
+    it('guarantees solvability across multiple generated boards per difficulty', () => {
+        for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
+            for (let run = 0; run < 5; run++) {
+                const { puzzle, solution } = generateSudoku(difficulty);
+                expect(verifyGeneratedPuzzle(puzzle, solution)).toBe(true);
+                expect(countSolutions(puzzle, 2)).toBe(1);
+                expect(solveBoard(puzzle)).toEqual(solution);
+            }
+        }
+    });
+
+    it('rejects unsolvable, conflicted, and ambiguous boards in solvability checks', () => {
+        const unsolvableWithoutDirectDuplicates = Array(81).fill(0);
+        // Row 0 already has 1..8, while cell (0,8) sees 9 in column 8 -> dead end
+        for (let c = 0; c < 8; c++) {
+            unsolvableWithoutDirectDuplicates[c] = c + 1;
+        }
+        unsolvableWithoutDirectDuplicates[9 * 8 + 8] = 9;
+
+        expect(solveBoard(unsolvableWithoutDirectDuplicates)).toBeNull();
+        expect(countSolutions(unsolvableWithoutDirectDuplicates, 2)).toBe(0);
+        expect(isSolvable(unsolvableWithoutDirectDuplicates)).toBe(false);
+
+        const emptyBoard = Array(81).fill(0);
+        expect(isSolvable(emptyBoard)).toBe(true);
+        expect(isSolvable(emptyBoard, { requireUnique: true })).toBe(false);
+
+        const { puzzle, solution } = generateSudoku('easy');
+        const mismatchedSolution = [...solution];
+        const firstEmptyOrSwap = [mismatchedSolution[0], mismatchedSolution[1]];
+        mismatchedSolution[0] = firstEmptyOrSwap[1];
+        mismatchedSolution[1] = firstEmptyOrSwap[0];
+        expect(verifyGeneratedPuzzle(puzzle, mismatchedSolution)).toBe(false);
     });
 
     it('calibrates easy puzzles to be solvable by naked singles', () => {

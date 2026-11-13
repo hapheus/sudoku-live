@@ -50,7 +50,20 @@ function maskToDigits(mask) {
     return digits;
 }
 
+function isValidBoardShape(board) {
+    if (!Array.isArray(board) || board.length !== 81) return false;
+    for (let i = 0; i < 81; i++) {
+        const val = board[i];
+        if (!Number.isInteger(val) || val < 0 || val > 9) {
+            return false;
+        }
+    }
+    return true;
+}
+
 function buildMasks(board) {
+    if (!isValidBoardShape(board)) return null;
+
     const rows = new Int32Array(9);
     const cols = new Int32Array(9);
     const boxes = new Int32Array(9);
@@ -73,13 +86,35 @@ function buildMasks(board) {
 }
 
 /**
+ * Checks whether a board is a completely filled, conflict-free 9x9 Sudoku solution.
+ */
+export function isValidSolvedBoard(board) {
+    if (!isValidBoardShape(board)) return false;
+    for (let i = 0; i < 81; i++) {
+        if (board[i] < 1 || board[i] > 9) return false;
+    }
+    return buildMasks(board) !== null;
+}
+
+/**
+ * Checks whether a Sudoku board has at least one valid solution (or optionally a unique solution).
+ */
+export function isSolvable(board, { requireUnique = false } = {}) {
+    if (!buildMasks(board)) return false;
+    if (requireUnique) {
+        return countSolutions(board, 2) === 1;
+    }
+    return solveBoard(board) !== null;
+}
+
+/**
  * Counts valid solutions up to `limit` using bitmask MRV backtracking.
  */
 export function countSolutions(board, limit = 2) {
-    const work = [...board];
-    const masks = buildMasks(work);
+    const masks = buildMasks(board);
     if (!masks) return 0;
 
+    const work = [...board];
     const { rows, cols, boxes } = masks;
     let solutions = 0;
 
@@ -139,10 +174,10 @@ export function countSolutions(board, limit = 2) {
  * Solves a Sudoku board and returns the solved 81-cell array, or null if unsolvable.
  */
 export function solveBoard(board) {
-    const work = [...board];
-    const masks = buildMasks(work);
+    const masks = buildMasks(board);
     if (!masks) return null;
 
+    const work = [...board];
     const { rows, cols, boxes } = masks;
 
     function search() {
@@ -194,66 +229,71 @@ export function solveBoard(board) {
  * Generates a complete, valid, randomized 9x9 Sudoku solution.
  */
 export function generateSolvedBoard(rng = Math.random) {
-    const board = Array(81).fill(0);
+    for (let attempt = 0; attempt < 10; attempt++) {
+        const board = Array(81).fill(0);
 
-    // Seed the 3 independent diagonal 3x3 boxes with shuffled digits for instant variety
-    for (let boxStart = 0; boxStart < 9; boxStart += 3) {
-        const digits = shuffleArray([1, 2, 3, 4, 5, 6, 7, 8, 9], rng);
-        let k = 0;
-        for (let r = 0; r < 3; r++) {
-            for (let c = 0; c < 3; c++) {
-                board[(boxStart + r) * 9 + (boxStart + c)] = digits[k++];
-            }
-        }
-    }
-
-    const masks = buildMasks(board);
-    const { rows, cols, boxes } = masks;
-
-    function fill() {
-        let bestIdx = -1;
-        let bestMask = 0;
-        let bestCount = 10;
-
-        for (let i = 0; i < 81; i++) {
-            if (board[i] !== 0) continue;
-            const { row, col, box } = getCellCoords(i);
-            const candidates = ALL_DIGITS_MASK & ~(rows[row] | cols[col] | boxes[box]);
-            const cCount = countBits(candidates);
-            if (cCount === 0) return false;
-            if (cCount < bestCount) {
-                bestCount = cCount;
-                bestMask = candidates;
-                bestIdx = i;
-                if (cCount === 1) break;
+        // Seed the 3 independent diagonal 3x3 boxes with shuffled digits for instant variety
+        for (let boxStart = 0; boxStart < 9; boxStart += 3) {
+            const digits = shuffleArray([1, 2, 3, 4, 5, 6, 7, 8, 9], rng);
+            let k = 0;
+            for (let r = 0; r < 3; r++) {
+                for (let c = 0; c < 3; c++) {
+                    board[(boxStart + r) * 9 + (boxStart + c)] = digits[k++];
+                }
             }
         }
 
-        if (bestIdx === -1) return true;
+        const masks = buildMasks(board);
+        const { rows, cols, boxes } = masks;
 
-        const { row, col, box } = getCellCoords(bestIdx);
-        const candidates = shuffleArray(maskToDigits(bestMask), rng);
+        function fill() {
+            let bestIdx = -1;
+            let bestMask = 0;
+            let bestCount = 10;
 
-        for (const d of candidates) {
-            const bit = 1 << d;
-            board[bestIdx] = d;
-            rows[row] |= bit;
-            cols[col] |= bit;
-            boxes[box] |= bit;
+            for (let i = 0; i < 81; i++) {
+                if (board[i] !== 0) continue;
+                const { row, col, box } = getCellCoords(i);
+                const candidates = ALL_DIGITS_MASK & ~(rows[row] | cols[col] | boxes[box]);
+                const cCount = countBits(candidates);
+                if (cCount === 0) return false;
+                if (cCount < bestCount) {
+                    bestCount = cCount;
+                    bestMask = candidates;
+                    bestIdx = i;
+                    if (cCount === 1) break;
+                }
+            }
 
-            if (fill()) return true;
+            if (bestIdx === -1) return true;
 
-            board[bestIdx] = 0;
-            rows[row] &= ~bit;
-            cols[col] &= ~bit;
-            boxes[box] &= ~bit;
+            const { row, col, box } = getCellCoords(bestIdx);
+            const candidates = shuffleArray(maskToDigits(bestMask), rng);
+
+            for (const d of candidates) {
+                const bit = 1 << d;
+                board[bestIdx] = d;
+                rows[row] |= bit;
+                cols[col] |= bit;
+                boxes[box] |= bit;
+
+                if (fill()) return true;
+
+                board[bestIdx] = 0;
+                rows[row] &= ~bit;
+                cols[col] &= ~bit;
+                boxes[box] &= ~bit;
+            }
+
+            return false;
         }
 
-        return false;
+        if (fill() && isValidSolvedBoard(board)) {
+            return board;
+        }
     }
 
-    fill();
-    return board;
+    throw new Error('Failed to generate a valid solved Sudoku board.');
 }
 
 /**
@@ -353,7 +393,44 @@ export function analyzeLogicDifficulty(board, { allowHiddenSingles = false } = {
     };
 }
 
+/**
+ * Verifies that a generated puzzle is valid, matches its solution clues,
+ * has a unique solution, and solves identically to `solution`.
+ */
+export function verifyGeneratedPuzzle(puzzle, solution) {
+    if (!isValidSolvedBoard(solution) || !isValidBoardShape(puzzle)) {
+        return false;
+    }
+
+    for (let i = 0; i < 81; i++) {
+        if (puzzle[i] !== 0 && puzzle[i] !== solution[i]) {
+            return false;
+        }
+    }
+
+    if (countSolutions(puzzle, 2) !== 1) {
+        return false;
+    }
+
+    const solved = solveBoard(puzzle);
+    if (!solved || solved.length !== 81) {
+        return false;
+    }
+
+    for (let i = 0; i < 81; i++) {
+        if (solved[i] !== solution[i]) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 function digPuzzleFromSolution(solution, targetClues, rng) {
+    if (!isValidSolvedBoard(solution)) {
+        throw new Error('Cannot dig puzzle from an invalid Sudoku solution.');
+    }
+
     const puzzle = [...solution];
     let clues = 81;
 
@@ -401,6 +478,7 @@ function digPuzzleFromSolution(solution, targetClues, rng) {
 
 /**
  * Generates a unique-solution Sudoku puzzle calibrated to the requested difficulty.
+ * Every returned puzzle is verified to be uniquely solvable and consistent with its solution.
  *
  * @param {'easy'|'medium'|'hard'|'expert'} difficulty
  * @param {() => number} rng
@@ -414,11 +492,13 @@ export function generateSudoku(difficulty = 'medium', rng = Math.random) {
     let bestCandidate = null;
     const maxAttempts = normalizedDifficulty === 'expert' ? 10 : 6;
 
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    for (let attempt = 0; attempt < maxAttempts + 4; attempt++) {
         const solution = generateSolvedBoard(rng);
         const { puzzle, clues } = digPuzzleFromSolution(solution, targetClues, rng);
-        const nakedOnly = analyzeLogicDifficulty(puzzle, { allowHiddenSingles: false });
-        const withHidden = analyzeLogicDifficulty(puzzle, { allowHiddenSingles: true });
+
+        if (!verifyGeneratedPuzzle(puzzle, solution)) {
+            continue;
+        }
 
         const candidate = {
             puzzle,
@@ -427,25 +507,38 @@ export function generateSudoku(difficulty = 'medium', rng = Math.random) {
             clues,
         };
 
-        if (normalizedDifficulty === 'easy' && nakedOnly.solved) {
-            return candidate;
-        }
+        if (attempt < maxAttempts) {
+            const nakedOnly = analyzeLogicDifficulty(puzzle, { allowHiddenSingles: false });
+            const withHidden = analyzeLogicDifficulty(puzzle, { allowHiddenSingles: true });
 
-        if (normalizedDifficulty === 'medium' && clues <= preset.maxClues && withHidden.solved && !nakedOnly.solved) {
-            return candidate;
-        }
+            if (normalizedDifficulty === 'easy' && nakedOnly.solved) {
+                return candidate;
+            }
 
-        if (normalizedDifficulty === 'hard' && clues <= preset.maxClues && !nakedOnly.solved) {
-            return candidate;
-        }
+            if (normalizedDifficulty === 'medium' && clues <= preset.maxClues && withHidden.solved && !nakedOnly.solved) {
+                return candidate;
+            }
 
-        if (normalizedDifficulty === 'expert' && clues <= preset.maxClues && !withHidden.solved) {
-            return candidate;
+            if (normalizedDifficulty === 'hard' && clues <= preset.maxClues && !nakedOnly.solved) {
+                return candidate;
+            }
+
+            if (normalizedDifficulty === 'expert' && clues <= preset.maxClues && !withHidden.solved) {
+                return candidate;
+            }
         }
 
         if (!bestCandidate || Math.abs(clues - targetClues) < Math.abs(bestCandidate.clues - targetClues)) {
             bestCandidate = candidate;
         }
+
+        if (attempt >= maxAttempts - 1 && bestCandidate) {
+            return bestCandidate;
+        }
+    }
+
+    if (!bestCandidate || !verifyGeneratedPuzzle(bestCandidate.puzzle, bestCandidate.solution)) {
+        throw new Error('Failed to generate a guaranteed solvable Sudoku puzzle.');
     }
 
     return bestCandidate;
