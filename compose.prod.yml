@@ -12,10 +12,10 @@ services:
       - default
       - cf-tunnel-net
     environment:
-      WS_HOST: "sudoku-ws.${DOMAIN_NAME:-fraha.dev}"
-      WS_PORT: "443"
-      WS_SCHEME: "https"
-      PUBLIC_APP_URL: "https://sudoku.${DOMAIN_NAME:-fraha.dev}"
+      WS_HOST: "${WS_HOST:-sudoku-ws.${DOMAIN_NAME:-fraha.dev}}"
+      WS_PORT: "${WS_PORT:-443}"
+      WS_SCHEME: "${WS_SCHEME:-https}"
+      PUBLIC_APP_URL: "${PUBLIC_APP_URL:-https://sudoku.${DOMAIN_NAME:-fraha.dev}}"
     labels:
       cf.tunnel.hostname: "sudoku.${DOMAIN_NAME:-fraha.dev}"
       cf.tunnel.port: "8000"
@@ -38,7 +38,7 @@ services:
     volumes:
       - ./docker/centrifugo/config.json:/centrifugo/config.json:ro
     environment:
-      CENTRIFUGO_CLIENT_ALLOWED_ORIGINS: "https://sudoku.${DOMAIN_NAME:-fraha.dev} capacitor://localhost https://localhost http://localhost"
+      CENTRIFUGO_CLIENT_ALLOWED_ORIGINS: "${CENTRIFUGO_CLIENT_ALLOWED_ORIGINS:-https://sudoku.${DOMAIN_NAME:-fraha.dev} capacitor://localhost https://localhost http://localhost http://localhost:5173 http://localhost:8000}"
     labels:
       cf.tunnel.hostname: "sudoku-ws.${DOMAIN_NAME:-fraha.dev}"
       cf.tunnel.port: "8080"

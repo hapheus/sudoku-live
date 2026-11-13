@@ -5,15 +5,13 @@ services:
       dockerfile: Dockerfile
     container_name: sudoku-live-app
     restart: unless-stopped
-    depends_on:
-      centrifugo:
-        condition: service_healthy
     ports:
       - "8000:8000"
     environment:
-      WS_HOST: "localhost"
-      WS_PORT: "8081"
-      WS_SCHEME: "http"
+      WS_HOST: "${WS_HOST:-localhost}"
+      WS_PORT: "${WS_PORT:-8081}"
+      WS_SCHEME: "${WS_SCHEME:-http}"
+      PUBLIC_APP_URL: "${PUBLIC_APP_URL:-}"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/up"]
       interval: 10s
