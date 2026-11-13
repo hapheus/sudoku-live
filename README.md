@@ -69,15 +69,37 @@ php artisan migrate
 npm run build
 
 # 5. Start development servers
-# Option A: Start all services via devenv (recommended)
+# Option A: Run everything with Docker Compose (zero local dependencies)
+docker compose up -d
+
+# Option B: Start all services via devenv
 devenv up
 
-# Option B: Run commands in separate terminals
+# Option C: Run commands manually in separate terminals
 php artisan serve --port=8000
 php artisan reverb:start --port=8080
 ```
 
 Open `http://localhost:8000` in your browser.
+
+---
+
+## Running with Docker
+
+A multi-stage `Dockerfile` and `docker-compose.yml` are included to run the complete stack (Web server, Reverb WebSocket server, SQLite persistence, and compiled assets) with zero local runtime dependencies.
+
+```bash
+# Build and start in background
+docker compose up -d
+
+# View service logs
+docker compose logs -f
+
+# Stop container
+docker compose down
+```
+
+Open `http://localhost:8000` to play.
 
 ---
 
