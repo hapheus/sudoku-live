@@ -42,6 +42,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let rematchRequestedBy = null;
 
     // Online state (pure in-browser)
+    const GAME_PING_INTERVAL_MS = 5000;
+    let gamePingTimer = null;
     let onlineGameId = root.dataset.gameId || null;
     let myRole = null; // 'host' | 'guest' | 'spectator'
     let mySymbol = null; // 'X' | 'O' | null
@@ -209,7 +211,59 @@ document.addEventListener('DOMContentLoaded', () => {
             rematchRequestedBy = null;
             renderCurrentState();
             boardView.announce('Rematch started. Player X plays first.');
+            return;
         }
+
+        if (type === 'ping') {
+            if (data && data.gameState && myRole !== 'host') {
+                const remoteMoves = data.gameState.board.filter((c) => c !== null).length;
+                const localMoves = gameState.board.filter((c) => c !== null).length;
+                if (
+                    remoteMoves > localMoves
+                    || data.gameState.status !== gameState.status
+                    || data.gameState.currentTurn !== gameState.currentTurn
+                ) {
+                    gameState = data.gameState;
+                    renderCurrentState();
+                }
+            }
+            updatePresenceUI();
+        }
+    }
+
+    function stopGamePing() {
+        if (gamePingTimer !== null) {
+            clearInterval(gamePingTimer);
+            gamePingTimer = null;
+        }
+    }
+
+    function startGamePing() {
+        stopGamePing();
+        gamePingTimer = setInterval(() => {
+            if (mode !== 'online' || !onlineGameId || isSpectating) {
+                return;
+            }
+
+            onlineClient.sendGamePing({
+                role: myRole,
+                symbol: mySymbol,
+                gameState: myRole === 'host' ? gameState : null,
+                timestamp: Date.now(),
+            });
+
+            if (myRole === 'host') {
+                const movesCount = gameState.board.filter((c) => c !== null).length;
+                const guestOnline = currentMembers.some((m) => m.role === 'guest');
+                let status = 'waiting';
+                if (gameState.status !== 'in_progress') {
+                    status = 'finished';
+                } else if (guestOnline || movesCount > 0) {
+                    status = 'in_progress';
+                }
+                onlineClient.broadcastLobbyUpdate(onlineGameId, status, movesCount);
+            }
+        }, GAME_PING_INTERVAL_MS);
     }
 
     function handleGamePresenceChange(members) {
@@ -480,6 +534,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (mode === 'watch') {
+            stopGamePing();
             onlineClient.disconnect();
             onlineGameId = null;
             isSpectating = false;
@@ -506,6 +561,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 resumeOnlineGame();
             }
         } else {
+            stopGamePing();
             onlineClient.disconnect();
             onlineGameId = null;
             currentMembers = [];
@@ -555,6 +611,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         renderCurrentState();
         updatePresenceUI();
+        startGamePing();
     }
 
     function resumeOnlineGame() {
@@ -587,6 +644,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         renderCurrentState();
         updatePresenceUI();
+        startGamePing();
     }
 
     function restartGame() {
@@ -682,4 +740,6 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         renderCurrentState();
     }
+
+    window.addEventListener('beforeunload', stopGamePing);
 });
