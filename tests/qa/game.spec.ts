@@ -68,7 +68,7 @@ for (const theme of ['dark', 'light']) {
             await expect(page.getByRole('gridcell').nth(1)).toHaveText('3');
             await page.keyboard.press('ControlOrMeta+z');
             await expect(page.getByRole('gridcell').nth(1)).toHaveText('');
-            await expect(page.getByRole('button', { name: 'Setup', exact: true })).toBeVisible();
+            await expect(page.getByRole('button', { name: 'Back', exact: true })).toBeVisible();
             await expect(page.getByRole('button', { name: 'New Puzzle', exact: true })).toBeVisible();
             await expect(page.getByRole('radio')).toHaveCount(0);
             await expect(page.getByRole('tab')).toHaveCount(0);
