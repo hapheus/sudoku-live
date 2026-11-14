@@ -5,9 +5,15 @@ export function SettingsPanel({
     theme,
     language,
     musicEnabled = true,
+    musicVolume = 0.45,
+    soundEnabled = true,
+    soundVolume = 0.65,
     onChangeTheme,
     onChangeLanguage,
     onChangeMusicEnabled = () => {},
+    onChangeMusicVolume = () => {},
+    onChangeSoundEnabled = () => {},
+    onChangeSoundVolume = () => {},
     onOpenGuide,
     messages = enMessages,
 }) {
@@ -25,6 +31,14 @@ export function SettingsPanel({
         { value: true, label: messages.musicOn || 'On' },
         { value: false, label: messages.musicOff || 'Off' },
     ];
+
+    const soundOptions = [
+        { value: true, label: messages.soundOn || 'On' },
+        { value: false, label: messages.soundOff || 'Off' },
+    ];
+
+    const musicPercent = Math.round(Math.min(1, Math.max(0, Number(musicVolume) || 0)) * 100);
+    const soundPercent = Math.round(Math.min(1, Math.max(0, Number(soundVolume) || 0)) * 100);
 
     return (
         <section id="settings-panel" className="settings-panel" aria-label={messages.settingsTitle}>
@@ -106,6 +120,68 @@ export function SettingsPanel({
                                 </label>
                             );
                         })}
+                    </div>
+                    <div className={`settings-volume-row ${!musicEnabled ? 'settings-volume-row--disabled' : ''}`}>
+                        <label htmlFor="sudoku-music-volume" className="settings-volume-row__label">
+                            {messages.volumeLabel || 'Volume'}
+                        </label>
+                        <input
+                            id="sudoku-music-volume"
+                            type="range"
+                            className="settings-volume-row__slider"
+                            min={0}
+                            max={100}
+                            step={5}
+                            value={musicPercent}
+                            disabled={!musicEnabled}
+                            aria-label={messages.musicVolumeLabel || 'Volume: Background Music'}
+                            onChange={(e) => onChangeMusicVolume(Number(e.target.value) / 100)}
+                        />
+                        <span className="settings-volume-row__value">{`${musicPercent}%`}</span>
+                    </div>
+                </fieldset>
+            </div>
+
+            <div className="settings-group">
+                <fieldset className="settings-fieldset">
+                    <legend className="settings-fieldset__legend">{messages.settingsSounds || 'Sound Effects'}</legend>
+                    <div className="segmented-options segmented-options--2" role="radiogroup" aria-label={messages.settingsSounds || 'Sound Effects'}>
+                        {soundOptions.map((opt) => {
+                            const active = Boolean(soundEnabled) === opt.value;
+                            return (
+                                <label
+                                    key={String(opt.value)}
+                                    className={`segmented-label ${active ? 'segmented-label--active' : ''}`}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="sudoku-sounds"
+                                        value={String(opt.value)}
+                                        checked={active}
+                                        onChange={() => onChangeSoundEnabled(opt.value)}
+                                    />
+                                    <span>{opt.label}</span>
+                                </label>
+                            );
+                        })}
+                    </div>
+                    <div className={`settings-volume-row ${!soundEnabled ? 'settings-volume-row--disabled' : ''}`}>
+                        <label htmlFor="sudoku-sound-volume" className="settings-volume-row__label">
+                            {messages.volumeLabel || 'Volume'}
+                        </label>
+                        <input
+                            id="sudoku-sound-volume"
+                            type="range"
+                            className="settings-volume-row__slider"
+                            min={0}
+                            max={100}
+                            step={5}
+                            value={soundPercent}
+                            disabled={!soundEnabled}
+                            aria-label={messages.soundVolumeLabel || 'Volume: Sound Effects'}
+                            onChange={(e) => onChangeSoundVolume(Number(e.target.value) / 100)}
+                        />
+                        <span className="settings-volume-row__value">{`${soundPercent}%`}</span>
                     </div>
                 </fieldset>
             </div>

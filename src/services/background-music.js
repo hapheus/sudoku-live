@@ -1,5 +1,12 @@
 const MUSIC_STORAGE_KEY = 'sudoku_music_enabled';
+const MUSIC_VOLUME_STORAGE_KEY = 'sudoku_music_volume';
 const DEFAULT_MUSIC_VOLUME = 0.45;
+
+function clampVolume(value, fallback) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return fallback;
+    return Math.min(1, Math.max(0, num));
+}
 
 const discoveredTrackModules = import.meta.glob(
     [
@@ -54,6 +61,24 @@ export function saveMusicEnabled(enabled, storage = typeof localStorage !== 'und
     }
 }
 
+export function loadMusicVolume(storage = typeof localStorage !== 'undefined' ? localStorage : null) {
+    try {
+        const raw = storage?.getItem(MUSIC_VOLUME_STORAGE_KEY);
+        if (raw === null || raw === undefined || raw === '') return DEFAULT_MUSIC_VOLUME;
+        return clampVolume(raw, DEFAULT_MUSIC_VOLUME);
+    } catch {
+        return DEFAULT_MUSIC_VOLUME;
+    }
+}
+
+export function saveMusicVolume(volume, storage = typeof localStorage !== 'undefined' ? localStorage : null) {
+    try {
+        storage?.setItem(MUSIC_VOLUME_STORAGE_KEY, String(clampVolume(volume, DEFAULT_MUSIC_VOLUME)));
+    } catch {
+        // Ignore storage quota / privacy errors
+    }
+}
+
 export function createBackgroundMusicPlayer({
     tracks = getMusicTracks(),
     shuffle = true,
@@ -62,9 +87,12 @@ export function createBackgroundMusicPlayer({
     storage = typeof localStorage !== 'undefined' ? localStorage : null,
     win = typeof window !== 'undefined' ? window : null,
     doc = typeof document !== 'undefined' ? document : null,
-    defaultVolume = DEFAULT_MUSIC_VOLUME,
+    defaultVolume = null,
 } = {}) {
     let enabled = loadMusicEnabled(storage);
+    let volume = typeof defaultVolume === 'number'
+        ? clampVolume(defaultVolume, DEFAULT_MUSIC_VOLUME)
+        : loadMusicVolume(storage);
     let playlist = shuffle && tracks.length > 1 ? shuffleTracks(tracks, random) : [...tracks];
     let currentIndex = 0;
     let destroyed = false;
@@ -84,7 +112,7 @@ export function createBackgroundMusicPlayer({
         if (!audio) return null;
 
         audio.preload = 'auto';
-        audio.volume = defaultVolume;
+        audio.volume = volume;
         if ('playsInline' in audio) {
             audio.playsInline = true;
         }
@@ -259,6 +287,15 @@ export function createBackgroundMusicPlayer({
         }
     };
 
+    const setVolume = (nextVolume) => {
+        const resolved = clampVolume(nextVolume, volume);
+        volume = resolved;
+        saveMusicVolume(resolved, storage);
+        if (audio) {
+            audio.volume = resolved;
+        }
+    };
+
     const destroy = () => {
         if (destroyed) return;
         destroyed = true;
@@ -276,6 +313,8 @@ export function createBackgroundMusicPlayer({
     return {
         start,
         setEnabled,
+        setVolume,
+        getVolume: () => volume,
         playNext: advanceToNextTrack,
         isEnabled: () => enabled,
         getCurrentIndex: () => currentIndex,

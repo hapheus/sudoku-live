@@ -18,7 +18,8 @@ import {
     undoLastMove,
 } from './domain/sudoku-engine.js';
 import { generateGameId, isValidGameId, OnlineGameClient } from './services/online-game-client.js';
-import { createBackgroundMusicPlayer, loadMusicEnabled } from './services/background-music.js';
+import { createBackgroundMusicPlayer, loadMusicEnabled, loadMusicVolume } from './services/background-music.js';
+import { createSoundEffectsPlayer, loadSoundEnabled, loadSoundVolume } from './services/sound-effects.js';
 import {
     loadOnlineGameSnapshot,
     loadParticipantSession,
@@ -104,6 +105,9 @@ export function App() {
         localStorage.getItem('sudoku_lang') === 'de' ? 'de' : 'en'
     ));
     const [musicEnabled, setMusicEnabled] = useState(() => loadMusicEnabled());
+    const [musicVolume, setMusicVolume] = useState(() => loadMusicVolume());
+    const [soundEnabled, setSoundEnabled] = useState(() => loadSoundEnabled());
+    const [soundVolume, setSoundVolume] = useState(() => loadSoundVolume());
     const messages = useMemo(() => getMessages(language), [language]);
 
     const [difficulty, setDifficulty] = useState(() => localStorage.getItem('sudoku_difficulty') || 'medium');
@@ -140,6 +144,7 @@ export function App() {
     const confirmCancelRef = useRef(null);
     const onlineClientRef = useRef(null);
     const musicPlayerRef = useRef(null);
+    const soundEffectsRef = useRef(null);
 
     // Live refs to avoid stale closures inside WebSocket event handlers
     const stateRef = useRef({
@@ -208,6 +213,27 @@ export function App() {
         musicPlayerRef.current?.setEnabled(musicEnabled);
     }, [musicEnabled]);
 
+    useEffect(() => {
+        musicPlayerRef.current?.setVolume(musicVolume);
+    }, [musicVolume]);
+
+    useEffect(() => {
+        const sfx = createSoundEffectsPlayer();
+        soundEffectsRef.current = sfx;
+        return () => {
+            sfx.destroy();
+            soundEffectsRef.current = null;
+        };
+    }, []);
+
+    useEffect(() => {
+        soundEffectsRef.current?.setEnabled(soundEnabled);
+    }, [soundEnabled]);
+
+    useEffect(() => {
+        soundEffectsRef.current?.setVolume(soundVolume);
+    }, [soundVolume]);
+
     useEffect(() => () => {
         if (unitCelebrationTimerRef.current) {
             clearTimeout(unitCelebrationTimerRef.current);
@@ -242,9 +268,9 @@ export function App() {
     }, []);
 
     const triggerUnitCelebration = useCallback((prevBoard, nextState, pivotIndex = null) => {
-        if (!prevBoard || !nextState?.board) return;
+        if (!prevBoard || !nextState?.board) return false;
         const result = detectNewlyCompletedUnits(prevBoard, nextState.board, nextState.variant, pivotIndex);
-        if (!result.hasAny) return;
+        if (!result.hasAny) return false;
 
         if (unitCelebrationTimerRef.current) {
             clearTimeout(unitCelebrationTimerRef.current);
@@ -266,10 +292,30 @@ export function App() {
                 announce(parts.join(', '));
             }
         }
+        return true;
     }, [announce]);
+
+    const playMoveSoundFeedback = useCallback((nextState, index, digit, unitCompleted) => {
+        const sfx = soundEffectsRef.current;
+        if (!sfx || !nextState || !Number.isInteger(digit) || digit <= 0) return;
+
+        const expected = nextState.solution?.[index];
+        const isCorrect = expected > 0 ? digit === expected : !nextState.conflicts?.includes(index);
+
+        if (nextState.status === 'solved' && isCorrect) {
+            sfx.playGameSolved();
+        } else if (!isCorrect) {
+            sfx.playWrongDigit();
+        } else if (unitCompleted) {
+            sfx.playUnitCompleted();
+        } else {
+            sfx.playCorrectDigit();
+        }
+    }, []);
 
     const triggerFloatingReaction = useCallback((emoji) => {
         if (!ALLOWED_REACTIONS.has(emoji)) return;
+        soundEffectsRef.current?.playSpectatorCheer();
         const id = ++reactionSeq.current;
         const left = 15 + Math.floor(Math.random() * 68);
         setFloatingReactions((prev) => [...prev, { id, emoji, left }]);
@@ -378,7 +424,10 @@ export function App() {
 
             if (typeof data.value === 'number' && data.value > 0) {
                 clearHintsForCell(data.index);
-                triggerUnitCelebration(prevBoard, patched, data.index);
+                const unitCompleted = triggerUnitCelebration(prevBoard, patched, data.index);
+                if (prevBoard[data.index] !== data.value) {
+                    playMoveSoundFeedback(patched, data.index, data.value, unitCompleted);
+                }
             }
             persistSnapshotIfNeeded(patched);
             return;
@@ -495,7 +544,7 @@ export function App() {
                 }
             }
         }
-    }, [announce, clearHintsForCell, clearUnitCelebration, persistSnapshotIfNeeded, showFeedback, syncLobbyProgress, triggerFloatingReaction, triggerUnitCelebration]);
+    }, [announce, clearHintsForCell, clearUnitCelebration, persistSnapshotIfNeeded, playMoveSoundFeedback, showFeedback, syncLobbyProgress, triggerFloatingReaction, triggerUnitCelebration]);
 
     const handleGamePresenceChange = useCallback((members) => {
         const resolved = onlineClientRef.current?.getGameMembers() || members || [];
@@ -995,13 +1044,17 @@ export function App() {
                 }
                 persistSnapshotIfNeeded(nextState);
             } else {
-                const prevBoard = cur.gameState.board;
-                const nextState = setCellValue(cur.gameState, targetIndex, digit, { owner });
+                const prevGameState = cur.gameState;
+                const prevBoard = prevGameState.board;
+                const nextState = setCellValue(prevGameState, targetIndex, digit, { owner });
                 setGameState(nextState);
                 stateRef.current.gameState = nextState;
                 if (digit !== 0) {
                     clearHintsForCell(targetIndex);
-                    triggerUnitCelebration(prevBoard, nextState, targetIndex);
+                    const unitCompleted = triggerUnitCelebration(prevBoard, nextState, targetIndex);
+                    if (nextState !== prevGameState) {
+                        playMoveSoundFeedback(nextState, targetIndex, digit, unitCompleted);
+                    }
                     const totalPlaced = nextState.board.filter((v) => v === digit).length;
                     if (totalPlaced >= specInfo.gridSize && cur.activeDigit === digit) {
                         setActiveDigit(null);
@@ -1021,7 +1074,7 @@ export function App() {
         } catch (err) {
             showFeedback(err.message);
         }
-    }, [clearHintsForCell, notesMode, persistSnapshotIfNeeded, showFeedback, syncLobbyProgress, triggerUnitCelebration]);
+    }, [clearHintsForCell, notesMode, persistSnapshotIfNeeded, playMoveSoundFeedback, showFeedback, syncLobbyProgress, triggerUnitCelebration]);
 
     const applyPlayerDigit = useCallback((digit) => {
         const cur = stateRef.current;
@@ -1214,7 +1267,8 @@ export function App() {
         setGameState(nextState);
         stateRef.current.gameState = nextState;
         clearHintsForCell(targetIdx);
-        triggerUnitCelebration(prevBoard, nextState, targetIdx);
+        const unitCompleted = triggerUnitCelebration(prevBoard, nextState, targetIdx);
+        playMoveSoundFeedback(nextState, targetIdx, correctDigit, unitCompleted);
 
         const isBroadcaster = (cur.mode === 'solo' || cur.mode === 'online') && Boolean(cur.onlineGameId) && !cur.isSpectating;
         if (isBroadcaster) {
@@ -1230,7 +1284,7 @@ export function App() {
         const { row, col } = getCellCoords(targetIdx, activeVariant);
         showFeedback(`Hint filled R${row + 1} C${col + 1} with ${correctDigit}.`);
         persistSnapshotIfNeeded(nextState);
-    }, [clearHintsForCell, persistSnapshotIfNeeded, selectedIndex, showFeedback, syncLobbyProgress, triggerUnitCelebration]);
+    }, [clearHintsForCell, persistSnapshotIfNeeded, playMoveSoundFeedback, selectedIndex, showFeedback, syncLobbyProgress, triggerUnitCelebration]);
 
     const sendSpectatorHint = useCallback((value) => {
         const cur = stateRef.current;
@@ -1902,13 +1956,17 @@ export function App() {
                                 const cur = stateRef.current;
                                 if (cur.isSpectating || cur.mode === 'watch' || cur.gameState.status === 'solved') return;
                                 const owner = (cur.myRole === 'host' || cur.myRole === 'guest') ? cur.myRole : null;
-                                const prevBoard = cur.gameState.board;
+                                const prevGameState = cur.gameState;
+                                const prevBoard = prevGameState.board;
                                 setSelectedIndex(idx);
-                                const nextState = setCellValue(cur.gameState, idx, digit, { owner });
+                                const nextState = setCellValue(prevGameState, idx, digit, { owner });
                                 setGameState(nextState);
                                 stateRef.current.gameState = nextState;
                                 clearHintsForCell(idx);
-                                triggerUnitCelebration(prevBoard, nextState, idx);
+                                const unitCompleted = triggerUnitCelebration(prevBoard, nextState, idx);
+                                if (nextState !== prevGameState) {
+                                    playMoveSoundFeedback(nextState, idx, digit, unitCompleted);
+                                }
                                 const isBroadcaster = (cur.mode === 'solo' || cur.mode === 'online') && Boolean(cur.onlineGameId) && !cur.isSpectating;
                                 if (isBroadcaster) {
                                     onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'cell-update', {
@@ -2064,9 +2122,15 @@ export function App() {
                         theme={theme}
                         language={language}
                         musicEnabled={musicEnabled}
+                        musicVolume={musicVolume}
+                        soundEnabled={soundEnabled}
+                        soundVolume={soundVolume}
                         onChangeTheme={setTheme}
                         onChangeLanguage={setLanguage}
                         onChangeMusicEnabled={setMusicEnabled}
+                        onChangeMusicVolume={setMusicVolume}
+                        onChangeSoundEnabled={setSoundEnabled}
+                        onChangeSoundVolume={setSoundVolume}
                         onOpenGuide={() => setIsHelpOpen(true)}
                         messages={messages}
                     />

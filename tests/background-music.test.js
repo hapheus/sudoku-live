@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
     createBackgroundMusicPlayer,
     getMusicTracks,
+    loadMusicVolume,
+    saveMusicVolume,
 } from '../src/services/background-music.js';
 
 function createMockAudio({ rejectInitialPlay = false } = {}) {
@@ -250,6 +252,37 @@ describe('BackgroundMusicPlayer', () => {
         await Promise.resolve();
         expect(localStorage.getItem('sudoku_music_enabled')).toBe('true');
         expect(audio.paused).toBe(false);
+
+        player.destroy();
+    });
+
+    it('persists and clamps background music volume and applies changes live', async () => {
+        expect(loadMusicVolume()).toBe(0.45);
+
+        saveMusicVolume(1.4);
+        expect(localStorage.getItem('sudoku_music_volume')).toBe('1');
+        expect(loadMusicVolume()).toBe(1);
+
+        saveMusicVolume(-0.2);
+        expect(localStorage.getItem('sudoku_music_volume')).toBe('0');
+        expect(loadMusicVolume()).toBe(0);
+
+        localStorage.removeItem('sudoku_music_volume');
+        const audio = createMockAudio();
+        const player = createBackgroundMusicPlayer({
+            tracks: [{ id: '01.mp3', title: '01', src: '/01.mp3' }],
+            audioFactory: () => audio,
+        });
+
+        player.start();
+        await Promise.resolve();
+        expect(player.getVolume()).toBe(0.45);
+        expect(audio.volume).toBe(0.45);
+
+        player.setVolume(0.2);
+        expect(player.getVolume()).toBe(0.2);
+        expect(audio.volume).toBe(0.2);
+        expect(localStorage.getItem('sudoku_music_volume')).toBe('0.2');
 
         player.destroy();
     });

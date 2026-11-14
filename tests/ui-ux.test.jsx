@@ -72,19 +72,28 @@ describe('UI/UX components & Solo persistence', () => {
         expect(onSelectMode).toHaveBeenCalledWith('watch');
     });
 
-    it('emits theme, language, music, and guide callbacks in SettingsPanel', () => {
+    it('emits theme, language, music, sound, volume, and guide callbacks in SettingsPanel', () => {
         const onChangeTheme = vi.fn();
         const onChangeLanguage = vi.fn();
         const onChangeMusicEnabled = vi.fn();
+        const onChangeMusicVolume = vi.fn();
+        const onChangeSoundEnabled = vi.fn();
+        const onChangeSoundVolume = vi.fn();
         const onOpenGuide = vi.fn();
-        render(
+        const { rerender } = render(
             <SettingsPanel
                 theme="dark"
                 language="en"
                 musicEnabled
+                musicVolume={0.45}
+                soundEnabled
+                soundVolume={0.65}
                 onChangeTheme={onChangeTheme}
                 onChangeLanguage={onChangeLanguage}
                 onChangeMusicEnabled={onChangeMusicEnabled}
+                onChangeMusicVolume={onChangeMusicVolume}
+                onChangeSoundEnabled={onChangeSoundEnabled}
+                onChangeSoundVolume={onChangeSoundVolume}
                 onOpenGuide={onOpenGuide}
             />,
         );
@@ -95,8 +104,47 @@ describe('UI/UX components & Solo persistence', () => {
         fireEvent.click(screen.getByRole('radio', { name: 'Deutsch' }));
         expect(onChangeLanguage).toHaveBeenCalledWith('de');
 
-        fireEvent.click(screen.getByRole('radio', { name: 'Off' }));
+        const musicGroup = screen.getByRole('radiogroup', { name: 'Background Music' });
+        fireEvent.click(musicGroup.querySelector('input[value="false"]'));
         expect(onChangeMusicEnabled).toHaveBeenCalledWith(false);
+
+        const musicSlider = screen.getByRole('slider', { name: 'Volume: Background Music' });
+        expect(musicSlider).toHaveValue('45');
+        expect(musicSlider).not.toBeDisabled();
+        fireEvent.change(musicSlider, { target: { value: '80' } });
+        expect(onChangeMusicVolume).toHaveBeenCalledWith(0.8);
+
+        const soundGroup = screen.getByRole('radiogroup', { name: 'Sound Effects' });
+        fireEvent.click(soundGroup.querySelector('input[value="false"]'));
+        expect(onChangeSoundEnabled).toHaveBeenCalledWith(false);
+
+        const soundSlider = screen.getByRole('slider', { name: 'Volume: Sound Effects' });
+        expect(soundSlider).toHaveValue('65');
+        expect(soundSlider).not.toBeDisabled();
+        fireEvent.change(soundSlider, { target: { value: '30' } });
+        expect(onChangeSoundVolume).toHaveBeenCalledWith(0.3);
+
+        rerender(
+            <SettingsPanel
+                theme="dark"
+                language="en"
+                musicEnabled={false}
+                musicVolume={0.8}
+                soundEnabled={false}
+                soundVolume={0.3}
+                onChangeTheme={onChangeTheme}
+                onChangeLanguage={onChangeLanguage}
+                onChangeMusicEnabled={onChangeMusicEnabled}
+                onChangeMusicVolume={onChangeMusicVolume}
+                onChangeSoundEnabled={onChangeSoundEnabled}
+                onChangeSoundVolume={onChangeSoundVolume}
+                onOpenGuide={onOpenGuide}
+            />,
+        );
+        expect(screen.getByRole('slider', { name: 'Volume: Background Music' })).toBeDisabled();
+        expect(screen.getByRole('slider', { name: 'Volume: Sound Effects' })).toBeDisabled();
+        expect(screen.getByText('80%')).toBeInTheDocument();
+        expect(screen.getByText('30%')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Open Guide' }));
         expect(onOpenGuide).toHaveBeenCalledTimes(1);

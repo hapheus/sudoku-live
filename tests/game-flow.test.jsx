@@ -190,3 +190,130 @@ it('does not publish a game to the live lobby during Setup selection, only once 
     expect(joinLobbySpy).toHaveBeenCalledTimes(3);
     expect(joinLobbySpy.mock.calls[2][0].gameId).toBe(hostedRoomId);
 });
+
+it('triggers distinct sound effects for wrong/correct digits, unit completion, puzzle solved, and spectator cheers', () => {
+    const scheduledFreqs = [];
+    const OriginalAudioContext = window.AudioContext;
+
+    class MockAudioContext {
+        constructor() {
+            this.currentTime = 0;
+            this.state = 'running';
+            this.destination = {};
+        }
+
+        createGain() {
+            return {
+                gain: {
+                    setValueAtTime: vi.fn(),
+                    linearRampToValueAtTime: vi.fn(),
+                    exponentialRampToValueAtTime: vi.fn(),
+                },
+                connect: vi.fn(),
+            };
+        }
+
+        createBiquadFilter() {
+            return {
+                type: 'lowpass',
+                frequency: { setValueAtTime: vi.fn() },
+                connect: vi.fn(),
+            };
+        }
+
+        createOscillator() {
+            return {
+                type: 'sine',
+                frequency: {
+                    setValueAtTime: vi.fn((freq) => {
+                        scheduledFreqs.push(freq);
+                    }),
+                    exponentialRampToValueAtTime: vi.fn(),
+                },
+                connect: vi.fn(),
+                start: vi.fn(),
+                stop: vi.fn(),
+            };
+        }
+
+        close() {}
+    }
+
+    window.AudioContext = MockAudioContext;
+
+    try {
+        const solution2x3 = [
+            1, 2, 3, 4, 5, 6,
+            4, 5, 6, 1, 2, 3,
+            2, 3, 1, 6, 4, 5,
+            5, 6, 4, 2, 3, 1,
+            3, 1, 2, 5, 6, 4,
+            6, 4, 5, 3, 1, 2,
+        ];
+        const puzzle = [...solution2x3];
+        puzzle[0] = 0; // solution 1
+        puzzle[1] = 0; // solution 2
+        puzzle[13] = 0; // solution 3
+        puzzle[20] = 0; // solution 4 (filled below as saved progress)
+        let savedState = createSudokuGame({
+            difficulty: 'easy',
+            variant: '2x3',
+            puzzle,
+            solution: solution2x3,
+        });
+        savedState = setCellValue(savedState, 20, 4);
+        saveSoloGameSnapshot(savedState, 'roomsfx1');
+
+        render(<App />);
+        fireEvent.click(screen.getByRole('button', { name: 'Resume Current Game' }));
+        const cells = screen.getAllByRole('gridcell');
+
+        // 1. Wrong digit on cell 0 (enter 3, solution is 1; digit 3 is still available) -> 220 Hz, 174.61 Hz
+        fireEvent.click(cells[0]);
+        fireEvent.click(document.querySelector('.numpad-btn[data-digit="3"]'));
+        expect(cells[0]).toHaveTextContent('3');
+        expect(scheduledFreqs).toEqual([220, 174.61]);
+        scheduledFreqs.length = 0;
+
+        // 2. Correct digit on cell 1 (enter 2; no unit completed yet) -> 783.99 Hz + 392 Hz
+        fireEvent.click(cells[1]);
+        fireEvent.click(document.querySelector('.numpad-btn[data-digit="2"]'));
+        expect(scheduledFreqs).toEqual([783.99, 392]);
+        scheduledFreqs.length = 0;
+
+        // 3. Fill cell 0 with 1 -> completes row/col/box (puzzle not solved yet) -> 8 oscillators starting with C5 (523.25)
+        fireEvent.click(cells[0]);
+        fireEvent.click(document.querySelector('.numpad-btn[data-digit="1"]'));
+        expect(scheduledFreqs).toHaveLength(8);
+        expect(scheduledFreqs[0]).toBe(523.25);
+        scheduledFreqs.length = 0;
+
+        // 4. Fill last remaining cell 13 with 3 -> puzzle solved -> 9 oscillators celebratory chord
+        fireEvent.click(cells[13]);
+        fireEvent.click(document.querySelector('.numpad-btn[data-digit="3"]'));
+        expect(scheduledFreqs).toHaveLength(9);
+        expect(scheduledFreqs[0]).toBe(523.25);
+        scheduledFreqs.length = 0;
+
+        // Settings toggles and volume sliders persist settings in localStorage
+        fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+        fireEvent.change(screen.getByRole('slider', { name: 'Volume: Background Music' }), { target: { value: '25' } });
+        expect(localStorage.getItem('sudoku_music_volume')).toBe('0.25');
+        fireEvent.change(screen.getByRole('slider', { name: 'Volume: Sound Effects' }), { target: { value: '80' } });
+        expect(localStorage.getItem('sudoku_sound_volume')).toBe('0.8');
+
+        const soundGroup = screen.getByRole('radiogroup', { name: 'Sound Effects' });
+        fireEvent.click(soundGroup.querySelector('input[value="false"]'));
+        expect(localStorage.getItem('sudoku_sound_enabled')).toBe('false');
+
+        // 5. Spectator cheer reaction triggers cheer sound (when enabled)
+        cleanup();
+        localStorage.clear();
+        window.history.replaceState({}, '', '/games/roomcheer1?watch=1');
+        render(<App />);
+        fireEvent.click(document.querySelector('.emoji-btn[data-emoji="👏"]'));
+        expect(scheduledFreqs).toEqual([783.99, 987.77, 1174.66]);
+    } finally {
+        window.AudioContext = OriginalAudioContext;
+    }
+});
