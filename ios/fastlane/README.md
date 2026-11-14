@@ -15,6 +15,14 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 
 ## iOS
 
+### ios preflight
+
+```sh
+[bundle exec] fastlane ios preflight
+```
+
+Verify Capacitor, Xcode, and Fastlane configuration before building
+
 ### ios sync_web
 
 ```sh
@@ -22,6 +30,14 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 ```
 
 Build Vite web bundle and sync Capacitor iOS assets
+
+### ios simulator
+
+```sh
+[bundle exec] fastlane ios simulator
+```
+
+Build unsigned Debug app for iOS Simulator (no Apple Developer account required)
 
 ### ios register_app
 

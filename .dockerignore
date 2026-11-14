@@ -8,9 +8,13 @@
 .direnv
 node_modules
 dist
+dist-itch
+sudoku-live-itch.zip
 ios
 tests
 docs
+test-results
+playwright-report
 *.log
 .DS_Store
 ~

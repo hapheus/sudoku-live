@@ -10,9 +10,7 @@
         "allow_anonymous_connect_without_token": true
     },
     "admin": {
-        "enabled": true,
-        "password": "PASSWORD",
-        "secret": "SECRET"
+        "enabled": false
     },
     "channel": {
         "namespaces": [
