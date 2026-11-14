@@ -27,6 +27,17 @@ export function getMusicTracks(modules = discoveredTrackModules) {
         });
 }
 
+export function shuffleTracks(tracks, random = Math.random) {
+    if (!Array.isArray(tracks)) return [];
+    const copy = [...tracks];
+    for (let i = copy.length - 1; i > 0; i -= 1) {
+        const raw = typeof random === 'function' ? random() : Math.random();
+        const j = Math.min(i, Math.max(0, Math.floor(raw * (i + 1))));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+}
+
 export function loadMusicEnabled(storage = typeof localStorage !== 'undefined' ? localStorage : null) {
     try {
         return storage?.getItem(MUSIC_STORAGE_KEY) !== 'false';
@@ -45,6 +56,8 @@ export function saveMusicEnabled(enabled, storage = typeof localStorage !== 'und
 
 export function createBackgroundMusicPlayer({
     tracks = getMusicTracks(),
+    shuffle = true,
+    random = Math.random,
     audioFactory = null,
     storage = typeof localStorage !== 'undefined' ? localStorage : null,
     win = typeof window !== 'undefined' ? window : null,
@@ -52,6 +65,7 @@ export function createBackgroundMusicPlayer({
     defaultVolume = DEFAULT_MUSIC_VOLUME,
 } = {}) {
     let enabled = loadMusicEnabled(storage);
+    let playlist = shuffle && tracks.length > 1 ? shuffleTracks(tracks, random) : [...tracks];
     let currentIndex = 0;
     let destroyed = false;
     let waitingForGesture = false;
@@ -75,9 +89,9 @@ export function createBackgroundMusicPlayer({
             audio.playsInline = true;
         }
         audio.setAttribute?.('playsinline', '');
-        audio.loop = tracks.length === 1;
-        if (tracks.length > 0) {
-            audio.src = tracks[currentIndex].src;
+        audio.loop = playlist.length === 1;
+        if (playlist.length > 0) {
+            audio.src = playlist[currentIndex].src;
         }
         return audio;
     };
@@ -99,16 +113,16 @@ export function createBackgroundMusicPlayer({
     };
 
     const tryPlay = () => {
-        if (destroyed || !enabled || tracks.length === 0) return;
+        if (destroyed || !enabled || playlist.length === 0) return;
         if (doc && doc.visibilityState === 'hidden') return;
 
         const el = createAudio();
         if (!el || typeof el.play !== 'function') return;
 
-        if (!el.src && tracks[currentIndex]) {
-            el.src = tracks[currentIndex].src;
+        if (!el.src && playlist[currentIndex]) {
+            el.src = playlist[currentIndex].src;
         }
-        el.loop = tracks.length === 1;
+        el.loop = playlist.length === 1;
 
         try {
             const result = el.play();
@@ -144,13 +158,13 @@ export function createBackgroundMusicPlayer({
     }
 
     const playTrackAt = (index) => {
-        if (destroyed || tracks.length === 0) return;
-        currentIndex = ((index % tracks.length) + tracks.length) % tracks.length;
+        if (destroyed || playlist.length === 0) return;
+        currentIndex = ((index % playlist.length) + playlist.length) % playlist.length;
         const el = createAudio();
         if (!el) return;
 
-        el.loop = tracks.length === 1;
-        el.src = tracks[currentIndex].src;
+        el.loop = playlist.length === 1;
+        el.src = playlist[currentIndex].src;
         if (typeof el.currentTime === 'number') {
             try {
                 el.currentTime = 0;
@@ -163,10 +177,33 @@ export function createBackgroundMusicPlayer({
         }
     };
 
+    const advanceToNextTrack = () => {
+        if (destroyed || playlist.length === 0) return;
+        if (playlist.length === 1) {
+            playTrackAt(0);
+            return;
+        }
+        const nextIndex = currentIndex + 1;
+        if (nextIndex < playlist.length) {
+            playTrackAt(nextIndex);
+            return;
+        }
+        if (shuffle) {
+            const previousTrack = playlist[currentIndex];
+            playlist = shuffleTracks(tracks, random);
+            if (previousTrack && playlist[0]?.id === previousTrack.id && playlist.length > 1) {
+                const raw = typeof random === 'function' ? random() : Math.random();
+                const swapIndex = 1 + Math.min(playlist.length - 2, Math.max(0, Math.floor(raw * (playlist.length - 1))));
+                [playlist[0], playlist[swapIndex]] = [playlist[swapIndex], playlist[0]];
+            }
+        }
+        playTrackAt(0);
+    };
+
     const handleEnded = () => {
-        if (destroyed || !enabled || tracks.length === 0) return;
+        if (destroyed || !enabled || playlist.length === 0) return;
         consecutiveErrors = 0;
-        if (tracks.length === 1) {
+        if (playlist.length === 1) {
             if (typeof audio?.currentTime === 'number') {
                 try {
                     audio.currentTime = 0;
@@ -177,14 +214,14 @@ export function createBackgroundMusicPlayer({
             tryPlay();
             return;
         }
-        playTrackAt(currentIndex + 1);
+        advanceToNextTrack();
     };
 
     const handleError = () => {
-        if (destroyed || !enabled || tracks.length <= 1) return;
+        if (destroyed || !enabled || playlist.length <= 1) return;
         consecutiveErrors += 1;
-        if (consecutiveErrors < tracks.length) {
-            playTrackAt(currentIndex + 1);
+        if (consecutiveErrors < playlist.length) {
+            advanceToNextTrack();
         }
     };
 
@@ -198,7 +235,7 @@ export function createBackgroundMusicPlayer({
     };
 
     const start = () => {
-        if (destroyed || tracks.length === 0) return;
+        if (destroyed || playlist.length === 0) return;
         const el = createAudio();
         if (el) {
             el.addEventListener?.('ended', handleEnded);
@@ -239,11 +276,11 @@ export function createBackgroundMusicPlayer({
     return {
         start,
         setEnabled,
-        playNext: () => playTrackAt(currentIndex + 1),
+        playNext: advanceToNextTrack,
         isEnabled: () => enabled,
         getCurrentIndex: () => currentIndex,
-        getCurrentTrack: () => tracks[currentIndex] || null,
-        getTracks: () => tracks,
+        getCurrentTrack: () => playlist[currentIndex] || null,
+        getTracks: () => [...playlist],
         destroy,
     };
 }

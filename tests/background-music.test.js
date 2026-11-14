@@ -54,7 +54,8 @@ describe('BackgroundMusicPlayer', () => {
 
     it('discovers bundled MP3 tracks from src/assets/music and sorts naturally', () => {
         const bundled = getMusicTracks();
-        expect(bundled.some((t) => t.id === 'petals_on_glass.mp3')).toBe(true);
+        expect(bundled.length).toBeGreaterThan(0);
+        expect(bundled.some((t) => t.id.toLowerCase() === 'petals_on_glass.mp3')).toBe(true);
 
         const sorted = getMusicTracks({
             '../assets/music/10_finale.mp3': '/assets/10.mp3',
@@ -90,7 +91,7 @@ describe('BackgroundMusicPlayer', () => {
         player.destroy();
     });
 
-    it('plays multiple tracks sequentially in an endless loop', async () => {
+    it('plays multiple tracks sequentially in an endless loop when shuffle is disabled', async () => {
         const audio = createMockAudio();
         const tracks = [
             { id: '01.mp3', title: '01', src: '/01.mp3' },
@@ -99,6 +100,7 @@ describe('BackgroundMusicPlayer', () => {
         ];
         const player = createBackgroundMusicPlayer({
             tracks,
+            shuffle: false,
             audioFactory: () => audio,
         });
 
@@ -123,6 +125,56 @@ describe('BackgroundMusicPlayer', () => {
         await Promise.resolve();
         expect(player.getCurrentTrack()?.id).toBe('01.mp3');
         expect(audio.src).toBe('/01.mp3');
+
+        player.destroy();
+    });
+
+    it('shuffles tracks by default on start and avoids repeating the last track when reshuffling', async () => {
+        const audio = createMockAudio();
+        const tracks = [
+            { id: '01.mp3', title: '01', src: '/01.mp3' },
+            { id: '02.mp3', title: '02', src: '/02.mp3' },
+            { id: '03.mp3', title: '03', src: '/03.mp3' },
+        ];
+        // Sequence:
+        // Initial Fisher-Yates (i=2, i=1): random 0, 0 -> ['02.mp3', '03.mp3', '01.mp3']
+        // Next cycle Fisher-Yates (i=2, i=1): random 0.99, 0.99 -> identity ['01.mp3', '02.mp3', '03.mp3'],
+        // which would repeat '01.mp3' back-to-back, so boundary swap moves '01.mp3' away from index 0.
+        const values = [0, 0, 0.99, 0.99, 0];
+        let call = 0;
+        const random = () => {
+            const val = values[call % values.length];
+            call += 1;
+            return val;
+        };
+
+        const player = createBackgroundMusicPlayer({
+            tracks,
+            random,
+            audioFactory: () => audio,
+        });
+
+        player.start();
+        await Promise.resolve();
+
+        expect(player.getTracks().map((t) => t.id)).toEqual(['02.mp3', '03.mp3', '01.mp3']);
+        expect(player.getCurrentTrack()?.id).toBe('02.mp3');
+
+        audio.emit('ended');
+        await Promise.resolve();
+        expect(player.getCurrentTrack()?.id).toBe('03.mp3');
+
+        audio.emit('ended');
+        await Promise.resolve();
+        expect(player.getCurrentTrack()?.id).toBe('01.mp3');
+
+        // Cycle finishes on '01.mp3'; next cycle must not start with '01.mp3' again.
+        audio.emit('ended');
+        await Promise.resolve();
+        const nextFirst = player.getCurrentTrack()?.id;
+        expect(nextFirst).not.toBe('01.mp3');
+        expect(['02.mp3', '03.mp3']).toContain(nextFirst);
+        expect(player.getTracks().map((t) => t.id).sort()).toEqual(['01.mp3', '02.mp3', '03.mp3']);
 
         player.destroy();
     });

@@ -13,6 +13,7 @@ import { PlayerControls } from '../src/components/PlayerControls.jsx';
 import { WatcherInteractions } from '../src/components/WatcherInteractions.jsx';
 import { HelpDialog } from '../src/components/HelpDialog.jsx';
 import { SolveSummary } from '../src/components/SolveSummary.jsx';
+import deMessages from '../src/locales/de.json';
 import { createSudokuGame, setCellValue } from '../src/domain/sudoku-engine.js';
 import {
     clearSoloGameSnapshot,
@@ -269,11 +270,11 @@ describe('UI/UX components & Solo persistence', () => {
         expect(document.querySelectorAll('.spectator-pad__digits .spectator-pad__btn')).toHaveLength(6);
     });
 
-    it('opens HelpDialog and closes on Escape key, and renders SolveSummary CTA', () => {
+    it('opens localized touch-first HelpDialog and closes on Escape key, and renders SolveSummary CTA', () => {
         const onClose = vi.fn();
         const onPlayAgain = vi.fn();
 
-        render(
+        const { rerender } = render(
             <>
                 <HelpDialog isOpen onClose={onClose} />
                 <SolveSummary
@@ -288,13 +289,22 @@ describe('UI/UX components & Solo persistence', () => {
             </>,
         );
 
-        expect(screen.getByRole('dialog', { name: 'How to Play & Shortcuts' })).toBeInTheDocument();
+        expect(screen.getByRole('dialog', { name: 'Game Guide' })).toBeInTheDocument();
+        expect(screen.getByText('Tap to Enter Numbers')).toBeInTheDocument();
+        expect(screen.queryByText('Keyboard Shortcuts')).not.toBeInTheDocument();
+        expect(screen.queryByText(/Arrow keys/i)).not.toBeInTheDocument();
+
         fireEvent.keyDown(document, { key: 'Escape' });
         expect(onClose).toHaveBeenCalledTimes(1);
 
         expect(screen.getByText('Hard Co-op finished in 02:05')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Play Again' }));
         expect(onPlayAgain).toHaveBeenCalledTimes(1);
+
+        rerender(<HelpDialog isOpen onClose={onClose} messages={deMessages} />);
+        expect(screen.getByRole('dialog', { name: 'Spielanleitung' })).toBeInTheDocument();
+        expect(screen.getByText('Zahlen per Tipp eingeben')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Schließen' })).toBeInTheDocument();
     });
 
     it('persists and restores Solo puzzle progress in localStorage', () => {

@@ -50,36 +50,34 @@ export function HelpDialog({ isOpen, onClose, messages = enMessages }) {
 
                 <div className="help-sections">
                     <div className="help-section">
-                        <h3 className="help-section__heading">Two Ways to Enter Digits</h3>
+                        <h3 className="help-section__heading">{messages.helpGoalHeading}</h3>
+                        <p className="help-section__text">{messages.helpGoalBody}</p>
+                    </div>
+
+                    <div className="help-section">
+                        <h3 className="help-section__heading">{messages.helpInputHeading}</h3>
                         <p className="help-section__text">
-                            <strong>Cell first:</strong> Select any empty cell, then tap a number (1–9 in 3×3, or 1–6 in 2×3).
+                            <strong>{messages.helpInputCellLabel}</strong> {messages.helpInputCellText}
                         </p>
                         <p className="help-section__text">
-                            <strong>Digit first:</strong> With no cell selected, tap a digit on the number pad to lock it, then tap empty cells to place it.
+                            <strong>{messages.helpInputLockLabel}</strong> {messages.helpInputLockText}
                         </p>
                     </div>
 
                     <div className="help-section">
-                        <h3 className="help-section__heading">Keyboard Shortcuts</h3>
-                        <ul className="shortcut-list">
-                            <li><span>Move across grid</span><kbd>Arrow keys</kbd></li>
-                            <li><span>Enter digit</span><kbd>1 – 9 (or 1 – 6)</kbd></li>
-                            <li><span>Clear cell</span><kbd>Backspace / Del / 0</kbd></li>
-                            <li><span>Toggle pencil notes</span><kbd>N</kbd></li>
-                            <li><span>Undo last move</span><kbd>Ctrl / ⌘ + Z</kbd></li>
-                            <li><span>Clear selection / digit lock</span><kbd>Esc</kbd></li>
-                            <li><span>Jump between grid &amp; pad</span><kbd>Tab</kbd></li>
-                        </ul>
+                        <h3 className="help-section__heading">{messages.helpToolsHeading}</h3>
+                        <p className="help-section__text">
+                            <strong>{messages.helpToolsNotesLabel}</strong> {messages.helpToolsNotesText}
+                        </p>
+                        <p className="help-section__text">
+                            <strong>{messages.helpToolsActionsLabel}</strong> {messages.helpToolsActionsText}
+                        </p>
                     </div>
 
                     <div className="help-section">
-                        <h3 className="help-section__heading">Watch Live &amp; Co-op Join</h3>
-                        <p className="help-section__text">
-                            In <strong>Watch Live</strong>, you can spectate any live game, send hints (e.g. <code>R3C4 → 5</code>) or <strong>Nudge cell</strong>, or tap <strong>Join</strong> to jump in as a co-op partner.
-                        </p>
-                        <p className="help-section__text">
-                            When a partner joins, your digits appear in blue and your partner&rsquo;s digits and live cursor appear in violet.
-                        </p>
+                        <h3 className="help-section__heading">{messages.helpLiveHeading}</h3>
+                        <p className="help-section__text">{messages.helpLiveWatchText}</p>
+                        <p className="help-section__text">{messages.helpLiveCoopText}</p>
                     </div>
                 </div>
             </section>
