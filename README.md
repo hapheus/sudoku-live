@@ -4,6 +4,22 @@ A fast, accessible, zero-backend Sudoku app built with **React 19**, **Vite**, *
 
 ---
 
+## Playing
+
+The app opens on Play setup, with grid size and difficulty choices. Select **Play** to start, or **Resume Current Game** to keep existing progress. During a game, **Setup** returns to the setup screen and **New Puzzle** starts a replacement (with confirmation when needed). The fixed bottom navigation provides **Play**, **Watch**, and **Settings**. Settings persist the Light/Dark theme and English/German language choice. Existing direct co-op and spectator links remain supported.
+
+## UI verification
+
+```bash
+npm test
+npm run build
+npm run e2e                 # headless Chromium
+npm run e2e:headed          # visible Chromium window
+npm run e2e:headed -- --grep "settings change"  # one test
+```
+
+Install Chromium for Playwright when needed with `npx playwright install chromium`. Both E2E commands start a local Vite server on port 5178 automatically. Run them sequentially. Headed execution requires a graphical desktop session. Failures retain traces and screenshots under ignored `test-results/`; inspect a trace with `npx playwright show-trace <path-to-trace.zip>`. Visual references live in `tests/qa/baselines/`; review screenshots before updating them with `npm run e2e -- --update-snapshots`. Both modes use the same full Chromium binary (`channel: chromium`) and hide native scrollbar chrome for consistent screenshot geometry; scrolling remains enabled. Only the changing elapsed-time text is masked in screenshot comparisons. See [the QA report](tests/qa/REPORT.md) for verified coverage and limitations.
+
 ## Key Features
 
 - **Calibrated Sudoku Generator & Unique-Solution Solver**:
@@ -14,7 +30,7 @@ A fast, accessible, zero-backend Sudoku app built with **React 19**, **Vite**, *
 - **Three Game Modes**:
   1. **Solo (Live Observable)**: Single-player solving with pencil-mark notes, automatic peer note cleanup, conflict highlighting, undo history, timer, and solver hints. Solo sessions publish live to `sudoku:lobby` when Centrifugo is connected so spectators can watch, suggest hints, and react in real time (while remaining 100% playable offline).
   2. **Online Co-op**: Real-time collaborative solving over Centrifugo with invite links, presence announcements, shared cell updates/notes, 300s history recovery on mobile/Capacitor reconnect, and co-op new-puzzle negotiation. Additional visitors beyond two players automatically join as spectators.
-  3. **Watch Live (Spectator Mode)**: Browse active Solo and Co-op rooms in real time via `sudoku:lobby`, watch live progress (`filled_count/81`), suggest cell hints (`1–9` or nudge) that players can apply with one click, and send floating emoji reactions.
+  3. **Watch Live (Spectator Mode)**: The Watch tab lists active rooms; direct spectator URLs also let visitors watch a live match, suggest cell hints (`1–9` or nudge) that players can apply with one click, and send floating emoji reactions.
 - **100% Serverless & Zero-DB Architecture**:
   - Runs completely in the client (Browser SPA + iOS via Capacitor) with `localStorage` Solo persistence, `sessionStorage` co-op snapshot recovery, and direct WebSocket communication with Centrifugo v6.
 - **Multi-App WebSocket Ready**:

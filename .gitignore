@@ -19,3 +19,6 @@ Thumbs.db
 .direnv
 ~
 /skills
+
+/test-results/
+/playwright-report/
