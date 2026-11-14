@@ -177,3 +177,27 @@ test('web start screen exposes App Store link, Privacy Policy, and Impressum cle
     await expect(page.locator('#play-setup')).toBeVisible();
 });
 
+test('start screen music toggle defaults to Off (opt-in), syncs with Settings, and persists across reload', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openFixture(page, 'dark');
+
+    const setupMusicOff = page.locator('#setup-music-control input[value="false"]');
+    const setupMusicOn = page.locator('#setup-music-control input[value="true"]');
+    await expect(setupMusicOff).toBeChecked();
+    await expect(setupMusicOn).not.toBeChecked();
+
+    // Opt in on Start screen
+    await page.locator('#setup-music-control label', { hasText: 'On' }).click();
+    await expect(setupMusicOn).toBeChecked();
+
+    // Verify synced in Settings and persists across reload
+    await page.getByRole('tab', { name: 'Settings', exact: true }).click();
+    const settingsMusicGroup = page.getByRole('radiogroup', { name: 'Background Music' });
+    await expect(settingsMusicGroup.locator('input[value="true"]')).toBeChecked();
+    await expect(page.getByRole('slider', { name: 'Volume: Background Music' })).toBeEnabled();
+
+    await page.reload();
+    await expect(page.locator('#setup-music-control input[value="true"]')).toBeChecked();
+});
+
+

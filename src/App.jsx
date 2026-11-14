@@ -19,8 +19,20 @@ import {
     undoLastMove,
 } from './domain/sudoku-engine.js';
 import { generateEventId, generateGameId, isValidGameId, OnlineGameClient } from './services/online-game-client.js';
-import { createBackgroundMusicPlayer, loadMusicEnabled, loadMusicVolume } from './services/background-music.js';
-import { createSoundEffectsPlayer, loadSoundEnabled, loadSoundVolume } from './services/sound-effects.js';
+import {
+    createBackgroundMusicPlayer,
+    loadMusicEnabled,
+    loadMusicVolume,
+    saveMusicEnabled,
+    saveMusicVolume,
+} from './services/background-music.js';
+import {
+    createSoundEffectsPlayer,
+    loadSoundEnabled,
+    loadSoundVolume,
+    saveSoundEnabled,
+    saveSoundVolume,
+} from './services/sound-effects.js';
 import {
     loadJoinsAllowed,
     loadJoinsAutoAccept,
@@ -56,6 +68,7 @@ import { SolveSummary } from './components/SolveSummary.jsx';
 import { BottomNav } from './components/BottomNav.jsx';
 import { SettingsPanel } from './components/SettingsPanel.jsx';
 import { LegalPage } from './components/LegalPage.jsx';
+import { IconMusic, IconVolume2, IconVolumeX } from './components/AppIcons.jsx';
 
 const GAME_PING_INTERVAL_MS = 5000;
 const APP_STORE_URL = 'https://apps.apple.com/app/id6834748729';
@@ -279,11 +292,15 @@ export function App() {
     }, []);
 
     useEffect(() => {
-        musicPlayerRef.current?.setEnabled(musicEnabled);
+        if (musicPlayerRef.current && musicPlayerRef.current.isEnabled() !== musicEnabled) {
+            musicPlayerRef.current.setEnabled(musicEnabled);
+        }
     }, [musicEnabled]);
 
     useEffect(() => {
-        musicPlayerRef.current?.setVolume(musicVolume);
+        if (musicPlayerRef.current && musicPlayerRef.current.getVolume() !== musicVolume) {
+            musicPlayerRef.current.setVolume(musicVolume);
+        }
     }, [musicVolume]);
 
     useEffect(() => {
@@ -296,12 +313,42 @@ export function App() {
     }, []);
 
     useEffect(() => {
-        soundEffectsRef.current?.setEnabled(soundEnabled);
+        if (soundEffectsRef.current && soundEffectsRef.current.isEnabled() !== soundEnabled) {
+            soundEffectsRef.current.setEnabled(soundEnabled);
+        }
     }, [soundEnabled]);
 
     useEffect(() => {
-        soundEffectsRef.current?.setVolume(soundVolume);
+        if (soundEffectsRef.current && soundEffectsRef.current.getVolume() !== soundVolume) {
+            soundEffectsRef.current.setVolume(soundVolume);
+        }
     }, [soundVolume]);
+
+    const handleMusicEnabledChange = useCallback((nextEnabled) => {
+        const resolved = Boolean(nextEnabled);
+        saveMusicEnabled(resolved);
+        musicPlayerRef.current?.setEnabled(resolved);
+        setMusicEnabled(resolved);
+    }, []);
+
+    const handleMusicVolumeChange = useCallback((nextVolume) => {
+        saveMusicVolume(nextVolume);
+        musicPlayerRef.current?.setVolume(nextVolume);
+        setMusicVolume(musicPlayerRef.current?.getVolume() ?? nextVolume);
+    }, []);
+
+    const handleSoundEnabledChange = useCallback((nextEnabled) => {
+        const resolved = Boolean(nextEnabled);
+        saveSoundEnabled(resolved);
+        soundEffectsRef.current?.setEnabled(resolved);
+        setSoundEnabled(resolved);
+    }, []);
+
+    const handleSoundVolumeChange = useCallback((nextVolume) => {
+        saveSoundVolume(nextVolume);
+        soundEffectsRef.current?.setVolume(nextVolume);
+        setSoundVolume(soundEffectsRef.current?.getVolume() ?? nextVolume);
+    }, []);
 
     useEffect(() => () => {
         if (unitCelebrationTimerRef.current) {
@@ -2701,6 +2748,42 @@ export function App() {
                                 onChange={handleDifficultyChange}
                                 messages={messages}
                             />
+                            <div id="setup-music-control" className="setup-music-row">
+                                <div className="setup-music-row__label-wrap">
+                                    <IconMusic className={`setup-music-row__icon ${musicEnabled ? 'setup-music-row__icon--active' : ''}`} />
+                                    <span id="setup-music-label" className="setup-music-row__label">
+                                        {messages.settingsMusic || 'Background Music'}
+                                    </span>
+                                </div>
+                                <div
+                                    className="segmented-options segmented-options--2 setup-music-row__options"
+                                    role="radiogroup"
+                                    aria-labelledby="setup-music-label"
+                                >
+                                    <label className={`segmented-label setup-music-row__option ${musicEnabled ? 'segmented-label--active' : ''}`}>
+                                        <input
+                                            type="radio"
+                                            name="sudoku-setup-music"
+                                            value="true"
+                                            checked={Boolean(musicEnabled)}
+                                            onChange={() => handleMusicEnabledChange(true)}
+                                        />
+                                        <IconVolume2 className="settings-icon settings-icon--option" />
+                                        <span>{messages.musicOn || 'On'}</span>
+                                    </label>
+                                    <label className={`segmented-label setup-music-row__option ${!musicEnabled ? 'segmented-label--active' : ''}`}>
+                                        <input
+                                            type="radio"
+                                            name="sudoku-setup-music"
+                                            value="false"
+                                            checked={!musicEnabled}
+                                            onChange={() => handleMusicEnabledChange(false)}
+                                        />
+                                        <IconVolumeX className="settings-icon settings-icon--option" />
+                                        <span>{messages.musicOff || 'Off'}</span>
+                                    </label>
+                                </div>
+                            </div>
                         </div>
 
                         <div className="play-setup__actions">
@@ -3074,10 +3157,10 @@ export function App() {
                         onChangeLanguage={setLanguage}
                         onChangeJoinsAllowed={setJoinsAllowed}
                         onChangeJoinsAutoAccept={setJoinsAutoAccept}
-                        onChangeMusicEnabled={setMusicEnabled}
-                        onChangeMusicVolume={setMusicVolume}
-                        onChangeSoundEnabled={setSoundEnabled}
-                        onChangeSoundVolume={setSoundVolume}
+                        onChangeMusicEnabled={handleMusicEnabledChange}
+                        onChangeMusicVolume={handleMusicVolumeChange}
+                        onChangeSoundEnabled={handleSoundEnabledChange}
+                        onChangeSoundVolume={handleSoundVolumeChange}
                         onOpenGuide={() => setIsHelpOpen(true)}
                         messages={messages}
                     />

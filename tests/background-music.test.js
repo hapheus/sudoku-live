@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
     createBackgroundMusicPlayer,
     getMusicTracks,
+    loadMusicEnabled,
     loadMusicVolume,
+    saveMusicEnabled,
     saveMusicVolume,
 } from '../src/services/background-music.js';
 
@@ -54,6 +56,30 @@ describe('BackgroundMusicPlayer', () => {
         localStorage.clear();
     });
 
+    it('defaults background music to opt-in (off) and does not autoplay until enabled', async () => {
+        expect(loadMusicEnabled()).toBe(false);
+
+        const audio = createMockAudio();
+        const player = createBackgroundMusicPlayer({
+            tracks: [{ id: 'petals_on_glass.mp3', title: 'petals on glass', src: '/petals.mp3' }],
+            audioFactory: () => audio,
+        });
+
+        player.start();
+        await Promise.resolve();
+
+        expect(player.isEnabled()).toBe(false);
+        expect(audio.play).not.toHaveBeenCalled();
+
+        player.setEnabled(true);
+        await Promise.resolve();
+        expect(localStorage.getItem('sudoku_music_enabled')).toBe('true');
+        expect(player.isEnabled()).toBe(true);
+        expect(audio.play).toHaveBeenCalledTimes(1);
+
+        player.destroy();
+    });
+
     it('discovers bundled MP3 tracks from src/assets/music and sorts naturally', () => {
         const bundled = getMusicTracks();
         expect(bundled.length).toBeGreaterThan(0);
@@ -71,7 +97,8 @@ describe('BackgroundMusicPlayer', () => {
         ]);
     });
 
-    it('loops a single track continuously', async () => {
+    it('loops a single track continuously when opted in', async () => {
+        saveMusicEnabled(true);
         const audio = createMockAudio();
         const player = createBackgroundMusicPlayer({
             tracks: [{ id: 'petals_on_glass.mp3', title: 'petals on glass', src: '/petals.mp3' }],
@@ -94,6 +121,7 @@ describe('BackgroundMusicPlayer', () => {
     });
 
     it('plays multiple tracks sequentially in an endless loop when shuffle is disabled', async () => {
+        saveMusicEnabled(true);
         const audio = createMockAudio();
         const tracks = [
             { id: '01.mp3', title: '01', src: '/01.mp3' },
@@ -132,6 +160,7 @@ describe('BackgroundMusicPlayer', () => {
     });
 
     it('shuffles tracks by default on start and avoids repeating the last track when reshuffling', async () => {
+        saveMusicEnabled(true);
         const audio = createMockAudio();
         const tracks = [
             { id: '01.mp3', title: '01', src: '/01.mp3' },
@@ -182,6 +211,7 @@ describe('BackgroundMusicPlayer', () => {
     });
 
     it('unlocks playback on first user gesture when initial autoplay is blocked', async () => {
+        saveMusicEnabled(true);
         const audio = createMockAudio({ rejectInitialPlay: true });
         const player = createBackgroundMusicPlayer({
             tracks: [{ id: '01.mp3', title: '01', src: '/01.mp3' }],
@@ -205,6 +235,7 @@ describe('BackgroundMusicPlayer', () => {
     });
 
     it('supports enabling/disabling music persistently and pausing while tab is hidden', async () => {
+        saveMusicEnabled(true);
         const audio = createMockAudio();
         let visibilityState = 'visible';
         const docListeners = new Map();
@@ -268,6 +299,7 @@ describe('BackgroundMusicPlayer', () => {
         expect(loadMusicVolume()).toBe(0);
 
         localStorage.removeItem('sudoku_music_volume');
+        saveMusicEnabled(true);
         const audio = createMockAudio();
         const player = createBackgroundMusicPlayer({
             tracks: [{ id: '01.mp3', title: '01', src: '/01.mp3' }],
@@ -292,6 +324,7 @@ describe('BackgroundMusicPlayer', () => {
     });
 
     it('routes music through Web Audio GainNode so volume works even when HTMLAudioElement.volume is ignored (iOS)', async () => {
+        saveMusicEnabled(true);
         const audio = createMockAudio();
         const gainNode = {
             gain: {

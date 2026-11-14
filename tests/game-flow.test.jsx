@@ -297,6 +297,12 @@ it('triggers distinct sound effects for wrong/correct digits, unit completion, p
 
         // Settings toggles and volume sliders persist settings in localStorage
         fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+        const musicGroup = screen.getByRole('radiogroup', { name: 'Background Music' });
+        expect(musicGroup.querySelector('input[value="false"]')).toBeChecked();
+        expect(screen.getByRole('slider', { name: 'Volume: Background Music' })).toBeDisabled();
+        fireEvent.click(musicGroup.querySelector('input[value="true"]'));
+        expect(localStorage.getItem('sudoku_music_enabled')).toBe('true');
+
         fireEvent.change(screen.getByRole('slider', { name: 'Volume: Background Music' }), { target: { value: '25' } });
         expect(localStorage.getItem('sudoku_music_volume')).toBe('0.25');
         fireEvent.change(screen.getByRole('slider', { name: 'Volume: Sound Effects' }), { target: { value: '80' } });
@@ -1151,7 +1157,7 @@ it('allocates a fresh room and does not carry over notes or digits when starting
     const cells = screen.getAllByRole('gridcell');
     const emptyIdx = cells.findIndex((c) => !c.classList.contains('sudoku-cell--given'));
     fireEvent.click(cells[emptyIdx]);
-    fireEvent.click(document.querySelector('.numpad-btn[data-digit="6"]'));
+    fireEvent.click(document.querySelector('.numpad-btn:not(:disabled)'));
 
     cleanup();
     localStorage.setItem('sudoku_theme', 'dark');
@@ -1207,4 +1213,39 @@ it('clears selected cell highlight as soon as the final digit solves the puzzle'
     expect(document.querySelectorAll('.sudoku-cell--same-digit')).toHaveLength(0);
     expect(document.querySelectorAll('.sudoku-cell--revealed')).toHaveLength(36);
 });
+
+it('defaults background music to Off (opt-in) on Start screen, syncs with Settings, and remembers preference across reload', () => {
+    render(<App />);
+
+    const setupMusicGroup = document.getElementById('setup-music-control').querySelector('[role="radiogroup"]');
+    expect(setupMusicGroup.querySelector('input[value="false"]')).toBeChecked();
+    expect(setupMusicGroup.querySelector('input[value="true"]')).not.toBeChecked();
+
+    // Opt in directly on the Start screen
+    fireEvent.click(setupMusicGroup.querySelector('input[value="true"]'));
+    expect(localStorage.getItem('sudoku_music_enabled')).toBe('true');
+    expect(setupMusicGroup.querySelector('input[value="true"]')).toBeChecked();
+
+    // Settings reflects the opted-in music state
+    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+    const settingsMusicGroup = screen.getByRole('radiogroup', { name: 'Background Music' });
+    expect(settingsMusicGroup.querySelector('input[value="true"]')).toBeChecked();
+    expect(screen.getByRole('slider', { name: 'Volume: Background Music' })).not.toBeDisabled();
+
+    // Reload / remount remembers the opted-in preference on both Start and Settings
+    cleanup();
+    render(<App />);
+    const reloadedSetupGroup = document.getElementById('setup-music-control').querySelector('[role="radiogroup"]');
+    expect(reloadedSetupGroup.querySelector('input[value="true"]')).toBeChecked();
+
+    // Turning it off in Settings persists Off across reload
+    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+    fireEvent.click(screen.getByRole('radiogroup', { name: 'Background Music' }).querySelector('input[value="false"]'));
+    expect(localStorage.getItem('sudoku_music_enabled')).toBe('false');
+
+    cleanup();
+    render(<App />);
+    expect(document.getElementById('setup-music-control').querySelector('input[value="false"]')).toBeChecked();
+});
+
 

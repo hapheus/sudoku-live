@@ -47,9 +47,9 @@ export function shuffleTracks(tracks, random = Math.random) {
 
 export function loadMusicEnabled(storage = typeof localStorage !== 'undefined' ? localStorage : null) {
     try {
-        return storage?.getItem(MUSIC_STORAGE_KEY) !== 'false';
+        return storage?.getItem(MUSIC_STORAGE_KEY) === 'true';
     } catch {
-        return true;
+        return false;
     }
 }
 
