@@ -72,7 +72,7 @@ export function SettingsPanel({
                 <h2 className="settings-panel__title">{messages.settingsTitle}</h2>
             </header>
 
-            <div className="settings-group">
+            <div className="settings-group settings-group--2col">
                 <fieldset className="settings-fieldset">
                     <legend className="settings-fieldset__legend">
                         <span className="settings-fieldset__legend-inner">
@@ -103,9 +103,7 @@ export function SettingsPanel({
                         })}
                     </div>
                 </fieldset>
-            </div>
 
-            <div className="settings-group">
                 <fieldset className="settings-fieldset">
                     <legend className="settings-fieldset__legend">
                         <span className="settings-fieldset__legend-inner">
@@ -136,7 +134,7 @@ export function SettingsPanel({
                 </fieldset>
             </div>
 
-            <div className="settings-group">
+            <div className="settings-group settings-group--2col">
                 <fieldset className="settings-fieldset">
                     <legend className="settings-fieldset__legend">
                         <span className="settings-fieldset__legend-inner">
@@ -167,8 +165,6 @@ export function SettingsPanel({
                         })}
                     </div>
                 </fieldset>
-
-                <div className="settings-divider" aria-hidden="true" />
 
                 <fieldset
                     className={`settings-fieldset settings-fieldset--sub ${!joinsAllowed ? 'settings-fieldset--disabled' : ''}`}

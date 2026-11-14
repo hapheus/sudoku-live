@@ -43,3 +43,13 @@ Local captures and failure traces are retained under ignored `test-results/`. `n
 ## Limitations
 
 References were captured on macOS with the installed Playwright Chromium; other operating systems/renderers have not been validated. No native iOS/simulator run, VoiceOver session, actual touch device, live multi-client server test, or manual full WCAG certification. Zoom is 200% CSS zoom emulation, not native Safari browser zoom. Reduced motion is enabled for deterministic rendering; animation timing is not under test. Light/Dark are both covered. No developer drawer exists. No configured lint/typecheck script or devenv E2E task exists; these absent checks are not counted as passed. Use the documented package commands, which start Vite on port 5178 automatically. Headed execution requires a graphical desktop session.
+
+## Update — 2026-11-14 (Gameplay Mobile Viewport Fit)
+
+- **Changes**: Hidden `.bottom-nav` during active gameplay and spectating (replaced by top-bar `← Setup`, `?` Guide, and `⚙` Settings controls); switched `<500px` `.numpad` to a single-row 9-column strip (`44px` min-height); added `100dvh` board cap (`min-height: 540px`); eliminated `.notes-quick-bar` and `.action-feedback` vertical layout shifts; quieted `#restart-btn` to `.btn-secondary`; fixed nested `<main>` landmark in `SudokuBoard.jsx`.
+- **Checks**:
+  - `npm test`: 30 files, 150 tests passed.
+  - `npm run lint`: 0 errors (29 pre-existing warnings).
+  - `npm run build`: passed.
+  - `npm run e2e -- --update-snapshots`: 17 passed (all 12 responsive viewports + axe WCAG 2.1 AA + `scrollHeight <= innerHeight + 1` on `height >= 640`).
+  - `impeccable detect --json`: 0 findings on modified UI files.

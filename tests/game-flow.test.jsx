@@ -52,8 +52,8 @@ it('switches cleanly between Watch lobby, Spectator view, and Settings (Light mo
     fireEvent.click(screen.getByRole('button', { name: 'Play' }));
     expect(screen.getByRole('grid')).toBeVisible();
 
-    // Switch to Settings -> Light mode + Deutsch
-    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+    // Switch to Settings via in-game Settings button -> Light mode + Deutsch
+    fireEvent.click(document.getElementById('game-settings-btn'));
     expect(screen.getByRole('heading', { name: 'Settings' })).toBeVisible();
 
     fireEvent.click(screen.getByRole('radio', { name: 'Light' }));
@@ -71,16 +71,18 @@ it('switches cleanly between Watch lobby, Spectator view, and Settings (Light mo
     expect(screen.getByRole('grid')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Hinweis' })).toBeVisible();
 
-    // Switch to Watch tab
+    // Exit to Setup and switch to Watch tab
+    fireEvent.click(document.getElementById('back-to-setup-btn'));
     fireEvent.click(screen.getByRole('tab', { name: 'Zuschauen' }));
     expect(screen.getByRole('heading', { name: 'Aktive Live-Spiele' })).toBeVisible();
 
-    // Direct /games/:id?watch=1 opens Watch Spectator screen with interaction buttons
+    // Direct /games/:id?watch=1 opens Watch Spectator screen with interaction buttons (and hides BottomNav)
     cleanup();
     localStorage.clear();
     window.history.replaceState({}, '', '/games/room123?watch=1');
     render(<App />);
-    expect(screen.getByRole('tab', { name: 'Watch' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    expect(document.getElementById('exit-watch-btn')).toBeVisible();
     expect(screen.getByText(/Spectating Live Match/i)).toBeVisible();
     expect(screen.getByRole('region', { name: 'Spectator Interactions' })).toBeVisible();
 });
@@ -296,7 +298,7 @@ it('triggers distinct sound effects for wrong/correct digits, unit completion, p
         scheduledFreqs.length = 0;
 
         // Settings toggles and volume sliders persist settings in localStorage
-        fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+        fireEvent.click(document.getElementById('game-settings-btn'));
         const musicGroup = screen.getByRole('radiogroup', { name: 'Background Music' });
         expect(musicGroup.querySelector('input[value="false"]')).toBeChecked();
         expect(screen.getByRole('slider', { name: 'Volume: Background Music' })).toBeDisabled();
@@ -383,7 +385,7 @@ it('enforces join approval settings defaults, persists changes, and handles host
     });
 
     // 3. Auto-accept ON: incoming request auto-approved without banner
-    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+    fireEvent.click(document.getElementById('game-settings-btn'));
     fireEvent.click(screen.getByRole('radiogroup', { name: 'Auto-accept Joins' }).querySelector('input[value="true"]'));
     expect(localStorage.getItem('sudoku_joins_auto_accept')).toBe('true');
     expect(updatePolicySpy).toHaveBeenCalledWith('auto');

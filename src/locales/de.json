@@ -141,5 +141,6 @@
   "shiftRowUp": "Zeile nach oben schieben",
   "shiftRowDown": "Zeile nach unten schieben",
   "shiftColLeft": "Spalte nach links schieben",
-  "shiftColRight": "Spalte nach rechts schieben"
+  "shiftColRight": "Spalte nach rechts schieben",
+  "shiftHintNoCell": "Zelle wählen, um Zeile oder Spalte im Block zu verschieben"
 }

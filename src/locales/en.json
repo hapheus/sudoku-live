@@ -141,5 +141,6 @@
   "shiftRowUp": "Shift row up",
   "shiftRowDown": "Shift row down",
   "shiftColLeft": "Shift column left",
-  "shiftColRight": "Shift column right"
+  "shiftColRight": "Shift column right",
+  "shiftHintNoCell": "Select a cell to shift its row or column within its box"
 }
