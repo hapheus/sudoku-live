@@ -1,7 +1,7 @@
 # ==============================================================================
 # Stage 1: Build React + Vite Frontend Assets
 # ==============================================================================
-FROM node:22-alpine AS frontend-builder
+FROM node:26-alpine AS frontend-builder
 
 WORKDIR /app
 
@@ -17,7 +17,7 @@ RUN npm run build
 # ==============================================================================
 # Stage 2: Lightweight Nginx Static Web Runtime
 # ==============================================================================
-FROM nginx:1.27-alpine
+FROM nginx:1.29-alpine
 
 LABEL org.opencontainers.image.title="Sudoku Live" \
       org.opencontainers.image.description="Zero-backend Sudoku SPA with real-time Centrifugo WebSocket co-op and spectator mode" \
