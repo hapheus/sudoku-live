@@ -1,6 +1,6 @@
 # Sudoku Live project record
 
-Client-side Sudoku game in `hapheus/tictacagro`, using React, Vite, Capacitor iOS, and Centrifugo.
+Client-side Sudoku game in `hapheus/sudoku-live`, using React, Vite, Capacitor iOS, and Centrifugo.
 
 - Setup and architecture: [repository README](../../README.md)
 - Current work: [STATUS](STATUS.md)
