@@ -1,57 +1,41 @@
+import {
+    getDefaultStorage,
+    loadBooleanPref,
+    loadNumberPref,
+    saveBooleanPref,
+    saveNumberPref,
+} from '../utils/storage.js';
+import {
+    clampVolume,
+    createGestureListenerManager,
+    getDefaultAudioContextClass,
+    toPerceptualGain,
+} from './audio-core.js';
+
 const SOUND_STORAGE_KEY = 'sudoku_sound_enabled';
 const SOUND_VOLUME_STORAGE_KEY = 'sudoku_sound_volume';
 const DEFAULT_SOUND_VOLUME = 0.65;
 const MAX_SOUND_MASTER_GAIN = 0.7;
 
-function clampVolume(value, fallback) {
-    const num = Number(value);
-    if (!Number.isFinite(num)) return fallback;
-    return Math.min(1, Math.max(0, num));
+export function loadSoundEnabled(storage = getDefaultStorage('local')) {
+    return loadBooleanPref(SOUND_STORAGE_KEY, true, storage);
 }
 
-function toPerceptualGain(volume) {
-    const clamped = clampVolume(volume, DEFAULT_SOUND_VOLUME);
-    if (clamped <= 0) return 0;
-    return clamped * clamped;
+export function saveSoundEnabled(enabled, storage = getDefaultStorage('local')) {
+    saveBooleanPref(SOUND_STORAGE_KEY, enabled, storage);
 }
 
-function getDefaultAudioContextClass(win) {
-    if (!win) return null;
-    return win.AudioContext || win.webkitAudioContext || null;
+export function loadSoundVolume(storage = getDefaultStorage('local')) {
+    return loadNumberPref(SOUND_VOLUME_STORAGE_KEY, DEFAULT_SOUND_VOLUME, { min: 0, max: 1 }, storage);
 }
 
-export function loadSoundEnabled(storage = typeof localStorage !== 'undefined' ? localStorage : null) {
-    try {
-        return storage?.getItem(SOUND_STORAGE_KEY) !== 'false';
-    } catch {
-        return true;
-    }
-}
-
-export function saveSoundEnabled(enabled, storage = typeof localStorage !== 'undefined' ? localStorage : null) {
-    try {
-        storage?.setItem(SOUND_STORAGE_KEY, enabled ? 'true' : 'false');
-    } catch {
-        // Ignore storage quota / privacy errors
-    }
-}
-
-export function loadSoundVolume(storage = typeof localStorage !== 'undefined' ? localStorage : null) {
-    try {
-        const raw = storage?.getItem(SOUND_VOLUME_STORAGE_KEY);
-        if (raw === null || raw === undefined || raw === '') return DEFAULT_SOUND_VOLUME;
-        return clampVolume(raw, DEFAULT_SOUND_VOLUME);
-    } catch {
-        return DEFAULT_SOUND_VOLUME;
-    }
-}
-
-export function saveSoundVolume(volume, storage = typeof localStorage !== 'undefined' ? localStorage : null) {
-    try {
-        storage?.setItem(SOUND_VOLUME_STORAGE_KEY, String(clampVolume(volume, DEFAULT_SOUND_VOLUME)));
-    } catch {
-        // Ignore storage quota / privacy errors
-    }
+export function saveSoundVolume(volume, storage = getDefaultStorage('local')) {
+    saveNumberPref(
+        SOUND_VOLUME_STORAGE_KEY,
+        volume,
+        { min: 0, max: 1, fallback: DEFAULT_SOUND_VOLUME },
+        storage,
+    );
 }
 
 function scheduleTone(ctx, destination, {
@@ -106,16 +90,19 @@ export function createSoundEffectsPlayer({
     let destroyed = false;
     let ctx = null;
     let masterGain = null;
-    let gestureListenersAttached = false;
 
     const computeMasterGain = (vol) => {
         const ceiling = typeof masterVolume === 'number'
             ? masterVolume / (DEFAULT_SOUND_VOLUME * DEFAULT_SOUND_VOLUME)
             : MAX_SOUND_MASTER_GAIN;
-        return Math.max(0, ceiling * toPerceptualGain(vol));
+        return Math.max(0, ceiling * toPerceptualGain(vol, DEFAULT_SOUND_VOLUME));
     };
 
-    const gestureEvents = ['pointerdown', 'touchstart', 'keydown', 'click'];
+    const gestureManager = createGestureListenerManager({
+        target: win,
+        capture: true,
+        onGesture: handleUserGesture,
+    });
 
     const ensureContext = () => {
         if (destroyed) return null;
@@ -144,13 +131,7 @@ export function createSoundEffectsPlayer({
         return ctx;
     };
 
-    const removeGestureListeners = () => {
-        if (!win || !gestureListenersAttached) return;
-        gestureListenersAttached = false;
-        for (const evt of gestureEvents) {
-            win.removeEventListener?.(evt, handleUserGesture, true);
-        }
-    };
+    const removeGestureListeners = () => gestureManager.remove();
 
     function handleUserGesture() {
         if (destroyed) {
@@ -170,11 +151,7 @@ export function createSoundEffectsPlayer({
     }
 
     const attachGestureListeners = () => {
-        if (!win || gestureListenersAttached || destroyed) return;
-        gestureListenersAttached = true;
-        for (const evt of gestureEvents) {
-            win.addEventListener?.(evt, handleUserGesture, { capture: true, passive: true });
-        }
+        if (!destroyed) gestureManager.attach();
     };
 
     if (enabled) {

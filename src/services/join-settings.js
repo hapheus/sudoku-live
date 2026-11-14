@@ -1,3 +1,5 @@
+import { getDefaultStorage, loadBooleanPref, saveBooleanPref } from '../utils/storage.js';
+
 export const JOIN_ALLOWED_STORAGE_KEY = 'sudoku_joins_allowed';
 export const JOIN_AUTO_ACCEPT_STORAGE_KEY = 'sudoku_joins_auto_accept';
 
@@ -8,36 +10,20 @@ export function normalizeJoinPolicy(policy) {
     return 'confirm';
 }
 
-export function loadJoinsAllowed(storage = typeof localStorage !== 'undefined' ? localStorage : null) {
-    try {
-        return storage?.getItem(JOIN_ALLOWED_STORAGE_KEY) !== 'false';
-    } catch {
-        return true;
-    }
+export function loadJoinsAllowed(storage = getDefaultStorage('local')) {
+    return loadBooleanPref(JOIN_ALLOWED_STORAGE_KEY, true, storage);
 }
 
-export function saveJoinsAllowed(allowed, storage = typeof localStorage !== 'undefined' ? localStorage : null) {
-    try {
-        storage?.setItem(JOIN_ALLOWED_STORAGE_KEY, allowed ? 'true' : 'false');
-    } catch {
-        // Ignore storage quota / privacy errors
-    }
+export function saveJoinsAllowed(allowed, storage = getDefaultStorage('local')) {
+    saveBooleanPref(JOIN_ALLOWED_STORAGE_KEY, allowed, storage);
 }
 
-export function loadJoinsAutoAccept(storage = typeof localStorage !== 'undefined' ? localStorage : null) {
-    try {
-        return storage?.getItem(JOIN_AUTO_ACCEPT_STORAGE_KEY) === 'true';
-    } catch {
-        return false;
-    }
+export function loadJoinsAutoAccept(storage = getDefaultStorage('local')) {
+    return loadBooleanPref(JOIN_AUTO_ACCEPT_STORAGE_KEY, false, storage);
 }
 
-export function saveJoinsAutoAccept(autoAccept, storage = typeof localStorage !== 'undefined' ? localStorage : null) {
-    try {
-        storage?.setItem(JOIN_AUTO_ACCEPT_STORAGE_KEY, autoAccept ? 'true' : 'false');
-    } catch {
-        // Ignore storage quota / privacy errors
-    }
+export function saveJoinsAutoAccept(autoAccept, storage = getDefaultStorage('local')) {
+    saveBooleanPref(JOIN_AUTO_ACCEPT_STORAGE_KEY, autoAccept, storage);
 }
 
 export function resolveJoinPolicy(joinsAllowed, joinsAutoAccept) {

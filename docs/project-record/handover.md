@@ -2,7 +2,7 @@
 
 ## Completed work
 
-Browser coverage updated to the current UI on top of `main` (`413cf9b`), tracked in issue #1. The earlier splash-only expectations were invalidated by subsequent setup/navigation/theme commits; they were replaced rather than bypassed. Added a headed script and reviewed Light/Dark references with explicit user approval. The user also approved the minimal number-pad whitespace correction that resolves axe's label/content mismatch.
+SOLID / TDD / DRY modularization completed on branch `refactor/solid-dry-modularize` (tracked in [Issue #9](https://github.com/hapheus/sudoku-shift/issues/9)). Monolithic `src/App.jsx` (3309 -> 776 lines) and `src/domain/sudoku-engine.js` (900 -> 444 lines) were decomposed into focused domain modules, shared storage/audio/WS utilities, remote event router, custom hooks, and view components with TDD unit tests (29 files, 147 tests).
 
 ## Work in progress / next steps
 

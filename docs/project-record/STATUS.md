@@ -2,21 +2,20 @@
 
 ## Current work
 
-- Issue: https://github.com/hapheus/sudoku-live/issues/3
-- Implementation branch: `feat/showcase-packaging-selfhost`, based on `main` (`eb9c27b`).
-- Showcase enhancements implemented:
-  - Capacitor 8 + Fastlane: `preflight` and `simulator` lanes, DRY `build_release_ipa!` helper, English `APP_LANGUAGE` default, `ios/fastlane/.env.example`, and `docs/ios/README.md` (+ `docs/ios/spec.md`).
-  - itch.io HTML5 ZIP: `scripts/package-itch.mjs` (`build:itch`, `verify:itch`), Vitest unit tests (`tests/itch-package.test.js`), and `docs/itch-io/README.md`.
-  - Docker self-hosting: OCI labels and `HEALTHCHECK` in `Dockerfile`, security headers in `docker/nginx.conf`, Centrifugo admin UI disabled by default in `docker/centrifugo/config.json`, `docker:*` npm scripts, and `docs/self-hosting/README.md`.
-  - Documentation split into topic directories (`docs/ios/`, `docs/itch-io/`, `docs/self-hosting/`, `docs/architecture/`, `docs/testing/`) with concise `README.md` hub.
-- Verification complete: 107 Vitest tests (12 files), Vite production build, `build:itch` + `verify:itch` (18 files, 22.02 MB), `ios:preflight`, `ruby -c ios/fastlane/Fastfile`, and `docker:config` passed.
-- Playwright E2E, `docker build`, and `fastlane simulator` / `archive` were not run in this step.
+- Issue: https://github.com/hapheus/sudoku-shift/issues/9
+- Implementation branch: `refactor/solid-dry-modularize`, based on `main` (`cd5a5f9`).
+- SOLID / TDD / DRY refactoring completed:
+  - Shared infrastructure: extracted `src/utils/storage.js` and `src/services/audio-core.js`, removing duplicated storage/audio boilerplate across `join-settings.js`, `online-state-storage.js`, `background-music.js`, and `sound-effects.js`.
+  - Domain decomposition: split `src/domain/sudoku-engine.js` (from 900 to 444 lines) into `src/domain/sudoku-variants.js`, `src/domain/sudoku-board-metrics.js`, `src/domain/sudoku-shifts.js`, and `src/domain/sudoku-hints.js` without circular dependencies.
+  - Online client decomposition: extracted `src/services/ws-config.js` and `src/services/event-deduper.js` from `src/services/online-game-client.js`, plus `src/services/remote-event-router.js` for incoming WebSocket event dispatch.
+  - `App.jsx` decomposition (reduced from 3309 to 776 lines): extracted `src/utils/app-routing.js`, `src/hooks/useAppPreferences.js`, `src/hooks/useAudioPlayers.js`, `src/hooks/useFeedbackTimers.js`, `src/hooks/useGameTimersAndModals.js`, `src/hooks/useBoardActions.js`, `src/hooks/useOnlineSession.js`, `src/hooks/useNavigationAndSetup.js`, `src/hooks/useKeyboardNavigation.js`, `src/components/AlertBannerDialog.jsx`, `src/components/SetupView.jsx`, and `src/components/GamePlayView.jsx`.
+- Verification after final edit:
+  - `npm test`: 29 test files, 147 tests passed.
+  - `npm run build`: Vite production build succeeded.
+  - `npm run e2e`: 5 behavioral E2E tests passed; 12 visual regression tests (`setup and gameplay`) failed only on `toHaveScreenshot` diffs against pre-existing `tests/qa/baselines/` (`setup-*.png` baseline still shows "Sudoku Live" vs "Sudoku Shift" from `cd5a5f9`; `game-*.png` had 2–5 px diffs).
 
 ## Remaining
 
-1. Before native release, reconcile the iOS 15/iPad specification with the existing Xcode settings: recommended deployment target (17.0 on the installed SDK), iPhone-only device family. Native build/device verification remains unperformed.
-2. Compare/synchronize this record to Obsidian when vault write access is authorized.
-
-Merge into `main` and local checkout of `main` were explicitly requested after commit/push. No release or deployment is authorized.
-
-The Guide was discussed as a candidate for shorter app-oriented help; its content has not been changed in this test-focused task.
+1. Refresh Playwright visual baselines (`tests/qa/baselines/`) if desired on `main` / separate visual-baseline approval (left untouched in this refactoring branch).
+2. Before native release, reconcile the iOS 15/iPad specification with the existing Xcode settings: recommended deployment target (17.0 on the installed SDK), iPhone-only device family. Native build/device verification remains unperformed.
+3. Compare/synchronize this record to Obsidian when vault write access is authorized.

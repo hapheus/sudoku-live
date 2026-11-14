@@ -1,36 +1,18 @@
 import { Centrifuge } from 'centrifuge';
+import { createEventDeduper } from './event-deduper.js';
 import { normalizeJoinPolicy } from './join-settings.js';
+import {
+    buildWsUrl,
+    generateEventId,
+    generateGameId,
+    getOrCreateClientId,
+    isValidGameId,
+    resolveRuntimeWsConfig,
+} from './ws-config.js';
 
-const VALID_GAME_ID_RE = /^[A-Za-z0-9_-]{6,64}$/;
-const MAX_SEEN_EVENT_IDS = 200;
+export { generateEventId, generateGameId, isValidGameId, resolveRuntimeWsConfig };
+
 const PRESENCE_SETTLE_TIMEOUT_MS = 350;
-
-export function isValidGameId(gameId) {
-    return typeof gameId === 'string' && VALID_GAME_ID_RE.test(gameId);
-}
-
-function randomHex(byteCount) {
-    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
-        const bytes = new Uint8Array(byteCount);
-        crypto.getRandomValues(bytes);
-        return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-    }
-    return Math.random().toString(36).substring(2, 2 + byteCount * 2);
-}
-
-export function generateGameId() {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-        return crypto.randomUUID();
-    }
-    return `game_${randomHex(12)}`;
-}
-
-export function generateEventId() {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-        return crypto.randomUUID();
-    }
-    return `evt_${Date.now().toString(36)}_${randomHex(6)}`;
-}
 
 function normalizeRole(role) {
     return role === 'host' || role === 'guest' || role === 'spectator' ? role : 'spectator';
@@ -38,20 +20,6 @@ function normalizeRole(role) {
 
 function normalizeGameMode(mode) {
     return mode === 'solo' || mode === 'online' ? mode : 'online';
-}
-
-export function resolveRuntimeWsConfig(explicitConfig = {}) {
-    const runtime = typeof window !== 'undefined' && window.__APP_CONFIG__ ? window.__APP_CONFIG__ : {};
-    const env = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : {};
-
-    return {
-        wsUrl: explicitConfig.wsUrl || runtime.wsUrl || env.VITE_WS_URL || '',
-        host: explicitConfig.host || runtime.wsHost || env.VITE_WS_HOST || '',
-        port: explicitConfig.port || runtime.wsPort || env.VITE_WS_PORT || '',
-        scheme: explicitConfig.scheme || runtime.wsScheme || env.VITE_WS_SCHEME || '',
-        token: explicitConfig.token || '',
-        getToken: explicitConfig.getToken || null,
-    };
 }
 
 export class OnlineGameClient {
@@ -73,77 +41,16 @@ export class OnlineGameClient {
         this.lobbyActiveServerClients = new Set();
         this.lobbyRoomsByGameId = new Map();
         this.hostedLobbyMeta = null;
-        this.seenEventIds = new Set();
-
-        // Persistent client id per browser / app session
-        let storedClientId = null;
-        try {
-            storedClientId = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('ttt_client_id') : null;
-        } catch {
-            storedClientId = null;
-        }
-        this.clientId = storedClientId;
-        if (!this.clientId || !/^[A-Za-z0-9_-]{4,64}$/.test(this.clientId)) {
-            this.clientId = `client_${randomHex(8)}`;
-            try {
-                if (typeof sessionStorage !== 'undefined') {
-                    sessionStorage.setItem('ttt_client_id', this.clientId);
-                }
-            } catch {
-                // Ignore restricted iframe / storage quota errors
-            }
-        }
+        this.eventDeduper = createEventDeduper();
+        this.clientId = getOrCreateClientId();
     }
 
     rememberEvent(eventId) {
-        if (!eventId || typeof eventId !== 'string') {
-            return false;
-        }
-        if (this.seenEventIds.has(eventId)) {
-            return true;
-        }
-        this.seenEventIds.add(eventId);
-        if (this.seenEventIds.size > MAX_SEEN_EVENT_IDS) {
-            const oldest = this.seenEventIds.values().next().value;
-            this.seenEventIds.delete(oldest);
-        }
-        return false;
+        return this.eventDeduper.remember(eventId);
     }
 
     buildWsUrl() {
-        if (typeof this.wsConfig.wsUrl === 'string' && this.wsConfig.wsUrl.trim() !== '') {
-            return this.wsConfig.wsUrl.trim();
-        }
-
-        const browserProtocol = typeof window !== 'undefined' && window.location ? window.location.protocol : 'http:';
-        const browserHostname = typeof window !== 'undefined' && window.location ? window.location.hostname : 'localhost';
-        const isNativeCapacitor = typeof window !== 'undefined' && Boolean(window.Capacitor?.isNativePlatform?.());
-
-        if (isNativeCapacitor && !this.wsConfig.host && !this.wsConfig.scheme && !this.wsConfig.port) {
-            return 'wss://sudoku-ws.fraha.dev/connection/websocket';
-        }
-
-        const isLocalOrigin = browserHostname === 'localhost' || browserHostname === '127.0.0.1';
-        const isHttps = this.wsConfig.scheme
-            ? this.wsConfig.scheme === 'https'
-            : browserProtocol === 'https:';
-        const wsScheme = isHttps ? 'wss' : 'ws';
-
-        let host = this.wsConfig.host;
-        if (!host || host === 'localhost' || host === '127.0.0.1') {
-            if (!isLocalOrigin && browserHostname.startsWith('sudoku.')) {
-                host = `sudoku-ws.${browserHostname.slice('sudoku.'.length)}`;
-            } else {
-                host = browserHostname || 'localhost';
-            }
-        }
-
-        const defaultPort = isLocalOrigin ? 8081 : (isHttps ? 443 : 80);
-        const port = parseInt(this.wsConfig.port || defaultPort, 10);
-        const omitPort = Number.isNaN(port) || (isHttps && port === 443) || (!isHttps && port === 80);
-        const portSuffix = omitPort ? '' : `:${port}`;
-
-        return `${wsScheme}://${host}${portSuffix}/connection/websocket`;
+        return buildWsUrl(this.wsConfig);
     }
 
     ensureClient() {
@@ -212,7 +119,7 @@ export class OnlineGameClient {
         }
 
         this.leaveGameChannel();
-        this.seenEventIds.clear();
+        this.eventDeduper.clear();
 
         this.currentGameId = gameId;
         this.activeServerClients.clear();
