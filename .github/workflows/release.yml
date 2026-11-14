@@ -1,0 +1,95 @@
+name: Release & itch.io Upload
+
+on:
+  push:
+    branches:
+      - main
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  auto-release:
+    name: Create Release from Conventional Commits
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      released: ${{ steps.version.outputs.released }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Compute next version and create GitHub Release
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NEXT_VERSION="$(node scripts/next-release-version.mjs)"
+          if [ -z "$NEXT_VERSION" ]; then
+            echo "No releasable commits (feat/fix/perf/breaking) since last tag. Skipping release."
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          TAG="v${NEXT_VERSION}"
+          gh release create "$TAG" \
+            --target "${{ github.sha }}" \
+            --title "$TAG" \
+            --generate-notes
+          echo "released=true" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+  itch-upload:
+    name: Upload HTML5 Build to itch.io
+    needs: auto-release
+    if: >
+      always() &&
+      (
+        (github.event_name == 'release' && github.event.action == 'published') ||
+        (github.event_name == 'push' && needs.auto-release.outputs.released == 'true')
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build:itch
+      - run: npm run verify:itch
+
+      - name: Install itch.io butler
+        run: |
+          curl -fsSL -o butler.zip "https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default"
+          unzip -q butler.zip -d "$HOME/.local/bin"
+          chmod +x "$HOME/.local/bin/butler"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Push build to itch.io
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+          RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || needs.auto-release.outputs.tag }}
+        run: |
+          if [ -z "$BUTLER_API_KEY" ]; then
+            echo "::error::BUTLER_API_KEY secret is not configured."
+            exit 1
+          fi
+          VERSION="${RELEASE_TAG#v}"
+          butler push dist-itch hapheus/sudoku-shift:html5 --userversion "$VERSION"
