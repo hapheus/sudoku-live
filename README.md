@@ -5,6 +5,8 @@
 
 Zero-backend 9×9 and 6×6 Sudoku app built with **React 19**, **Vite 8**, **Capacitor 8**, and **Centrifugo v6** WebSockets — structured as a reference showcase for shipping one web codebase to **Docker**, **itch.io HTML5**, and **iOS (TestFlight)**.
 
+Created for **[GitHub Game Off 2026](https://itch.io/jam/game-off-2026)**.
+
 [Quick Start](#quick-start-golden-path-docker) · [Distribution Guides](#distribution-guides) · [Scope & Non-Goals](#scope--non-goals) · [Verification](#verification)
 
 ---
