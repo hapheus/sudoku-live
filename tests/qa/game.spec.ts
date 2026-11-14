@@ -71,19 +71,26 @@ for (const theme of ['dark', 'light']) {
             await expect(page.getByRole('button', { name: 'Setup', exact: true })).toBeVisible();
             await expect(page.getByRole('button', { name: 'New Puzzle', exact: true })).toBeVisible();
             await expect(page.getByRole('radio')).toHaveCount(0);
-            await expect(page.getByRole('tab')).toHaveCount(3);
+            await expect(page.getByRole('tab')).toHaveCount(0);
+            await expect(page.locator('#game-help-btn')).toBeVisible();
+            await expect(page.locator('#game-settings-btn')).toBeVisible();
             expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+            if (height >= 640) {
+                expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1)).toBe(true);
+            }
             await checkAccessibility(page, testInfo, 'game');
             await capture(page, testInfo, `game-${theme}-${width}x${height}`);
             await page.getByRole('button', { name: 'Notes', exact: true }).click();
             await expect(page.getByRole('button', { name: 'Notes On' })).toHaveAttribute('aria-pressed', 'true');
             await checkAccessibility(page, testInfo, 'notes');
-            // Playwright checks hit testing: the fixed navigation must not block input.
+            // Playwright checks hit testing and viewport fit: controls stay clickable without overlap.
             await page.getByRole('button', { name: /^Enter 9,/ }).click();
             await expect(page.getByRole('gridcell').nth(1)).toHaveText('9');
-            const nav = await page.getByRole('navigation', { name: 'Primary Navigation' }).boundingBox();
-            expect(nav).not.toBeNull();
-            expect(nav!.y + nav!.height).toBeLessThanOrEqual(height + 1);
+            const shiftBar = await page.locator('.shift-bar').boundingBox();
+            expect(shiftBar).not.toBeNull();
+            if (height >= 640) {
+                expect(shiftBar!.y + shiftBar!.height).toBeLessThanOrEqual(height + 1);
+            }
         });
     }
 }

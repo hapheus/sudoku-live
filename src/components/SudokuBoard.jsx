@@ -103,7 +103,7 @@ export function SudokuBoard({
     const axisIndices = Array.from({ length: gridSize }, (_, i) => i + 1);
 
     return (
-        <main id="game-panel" className="board-wrapper" role="tabpanel">
+        <div id="game-panel" className="board-wrapper">
             <div id="reaction-stage" className="reaction-stage" aria-live="polite" aria-atomic="false">
                 {floatingReactions.map((item) => (
                     <span
@@ -312,6 +312,6 @@ export function SudokuBoard({
                     </div>
                 </div>
             </div>
-        </main>
+        </div>
     );
 }

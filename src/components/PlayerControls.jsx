@@ -91,31 +91,6 @@ export function PlayerControls({
                 </button>
             </div>
 
-            {notesMode && !isSolved && (onFillCandidates || onClearNotes) && (
-                <div className="notes-quick-bar" role="group" aria-label="Pencil note helpers">
-                    {onFillCandidates && (
-                        <button
-                            type="button"
-                            id="auto-notes-btn"
-                            className="notes-quick-btn"
-                            onClick={onFillCandidates}
-                        >
-                            {messages.fillCandidates}
-                        </button>
-                    )}
-                    {onClearNotes && (
-                        <button
-                            type="button"
-                            id="clear-notes-btn"
-                            className="notes-quick-btn notes-quick-btn--muted"
-                            onClick={onClearNotes}
-                        >
-                            {messages.clearNotes}
-                        </button>
-                    )}
-                </div>
-            )}
-
             <div
                 className={`numpad ${maxDigit === 6 ? 'numpad--6x6' : ''}`}
                 role="group"
@@ -154,7 +129,12 @@ export function PlayerControls({
             </div>
 
             {(onShiftRow || onShiftCol) && (
-                <div className="shift-bar" role="toolbar" aria-label={messages.shiftToolbarLabel || 'Shift row or column within box'}>
+                <div
+                    className="shift-bar"
+                    role="toolbar"
+                    aria-label={messages.shiftToolbarLabel || 'Shift row or column within box'}
+                    title={!canShift ? (messages.shiftHintNoCell || 'Select a cell to shift its row or column within its box') : undefined}
+                >
                     <span className="shift-bar__label" aria-hidden="true">{messages.shiftLabel || 'Shift'}</span>
                     <div className="shift-bar__actions">
                         <button
@@ -202,6 +182,31 @@ export function PlayerControls({
                             →
                         </button>
                     </div>
+                </div>
+            )}
+
+            {notesMode && !isSolved && (onFillCandidates || onClearNotes) && (
+                <div className="notes-quick-bar" role="group" aria-label="Pencil note helpers">
+                    {onFillCandidates && (
+                        <button
+                            type="button"
+                            id="auto-notes-btn"
+                            className="notes-quick-btn"
+                            onClick={onFillCandidates}
+                        >
+                            {messages.fillCandidates}
+                        </button>
+                    )}
+                    {onClearNotes && (
+                        <button
+                            type="button"
+                            id="clear-notes-btn"
+                            className="notes-quick-btn notes-quick-btn--muted"
+                            onClick={onClearNotes}
+                        >
+                            {messages.clearNotes}
+                        </button>
+                    )}
                 </div>
             )}
         </section>
