@@ -65,7 +65,51 @@ def build_xcargs(api_key)
   args.join(" ")
 end
 
+def build_release_ipa!(api_key)
+  build_app(
+    project: PROJECT_PATH,
+    scheme: SCHEME_NAME,
+    configuration: "Release",
+    clean: true,
+    export_method: "app-store",
+    output_directory: BUILD_OUTPUT_DIR,
+    output_name: "SudokuLive.ipa",
+    xcargs: build_xcargs(api_key),
+    export_options: {
+      signingStyle: "automatic",
+      teamID: TEAM_ID,
+      uploadSymbols: true
+    }
+  )
+end
+
 platform :ios do
+  desc "Verify Capacitor, Xcode, and Fastlane configuration before building"
+  lane :preflight do
+    require "json"
+
+    cap_config_path = File.join(REPO_ROOT, "capacitor.config.json")
+    UI.user_error!("Missing capacitor.config.json at #{cap_config_path}") unless File.exist?(cap_config_path)
+    cap_config = JSON.parse(File.read(cap_config_path))
+
+    UI.user_error!("Missing Xcode project at #{PROJECT_PATH}") unless Dir.exist?(PROJECT_PATH)
+
+    sh("node", "--version")
+    sh("xcodebuild", "-version")
+    sh("npx", "--prefix", REPO_ROOT, "cap", "ls")
+
+    current_build = read_current_build_number
+    api_key_ready = !resolve_asc_api_key.nil?
+
+    UI.success("Preflight passed:")
+    UI.message("  App ID:          #{cap_config['appId']} (Fastlane: #{APP_IDENTIFIER})")
+    UI.message("  Web Dir:         #{cap_config['webDir']}")
+    UI.message("  Xcode Scheme:    #{SCHEME_NAME}")
+    UI.message("  Team ID:         #{TEAM_ID}")
+    UI.message("  Build Number:    #{current_build}")
+    UI.message("  ASC API Key:     #{api_key_ready ? 'configured' : 'not set (Xcode/Apple ID fallback)'}")
+  end
+
   desc "Build Vite web bundle and sync Capacitor iOS assets"
   lane :sync_web do
     sh(
@@ -75,12 +119,26 @@ platform :ios do
     )
   end
 
+  desc "Build unsigned Debug app for iOS Simulator (no Apple Developer account required)"
+  lane :simulator do |options|
+    sync_web unless options[:skip_web]
+    sh(
+      "xcodebuild",
+      "-project", PROJECT_PATH,
+      "-scheme", SCHEME_NAME,
+      "-configuration", "Debug",
+      "-destination", "generic/platform=iOS Simulator",
+      "CODE_SIGNING_ALLOWED=NO",
+      "build"
+    )
+  end
+
   desc "Register Bundle ID and create App Store Connect app entry if missing"
   lane :register_app do
     produce(
       app_identifier: APP_IDENTIFIER,
       app_name: ENV.fetch("APP_NAME", "Sudoku Live"),
-      language: ENV.fetch("APP_LANGUAGE", "German"),
+      language: ENV.fetch("APP_LANGUAGE", "English"),
       app_version: "1.0",
       sku: ENV.fetch("APP_SKU", "dev.fraha.sudoku"),
       team_id: TEAM_ID,
@@ -92,22 +150,7 @@ platform :ios do
   lane :archive do |options|
     sync_web unless options[:skip_web]
     api_key = resolve_asc_api_key
-
-    build_app(
-      project: PROJECT_PATH,
-      scheme: SCHEME_NAME,
-      configuration: "Release",
-      clean: true,
-      export_method: "app-store",
-      output_directory: BUILD_OUTPUT_DIR,
-      output_name: "SudokuLive.ipa",
-      xcargs: build_xcargs(api_key),
-      export_options: {
-        signingStyle: "automatic",
-        teamID: TEAM_ID,
-        uploadSymbols: true
-      }
-    )
+    build_release_ipa!(api_key)
   end
 
   desc "Build, bump build number, and upload to TestFlight (Internal Testing)"
@@ -133,21 +176,7 @@ platform :ios do
       write_build_number!(next_build)
     end
 
-    build_app(
-      project: PROJECT_PATH,
-      scheme: SCHEME_NAME,
-      configuration: "Release",
-      clean: true,
-      export_method: "app-store",
-      output_directory: BUILD_OUTPUT_DIR,
-      output_name: "SudokuLive.ipa",
-      xcargs: build_xcargs(api_key),
-      export_options: {
-        signingStyle: "automatic",
-        teamID: TEAM_ID,
-        uploadSymbols: true
-      }
-    )
+    build_release_ipa!(api_key)
 
     has_app_specific_password = !ENV["FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD"].to_s.strip.empty?
     if api_key || has_app_specific_password

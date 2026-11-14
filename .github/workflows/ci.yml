@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  unit-and-build:
+    name: Unit Tests & Vite Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  itch-package:
+    name: itch.io ZIP Build & Verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build:itch
+      - run: npm run verify:itch
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sudoku-live-itch-zip
+          path: sudoku-live-itch.zip
+          retention-days: 7
+
+  docker-smoke:
+    name: Docker Build & Smoke Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run docker:config
+
+      - name: Start Docker Compose stack and verify endpoints
+        run: |
+          set -euo pipefail
+          trap 'docker compose logs --no-color; docker compose down -v' EXIT
+
+          docker compose up -d --build
+
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/up >/dev/null && curl -fsS http://127.0.0.1:8081/health >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+
+          curl -fsS http://127.0.0.1:8000/up | grep -q "ok"
+          curl -fsS http://127.0.0.1:8000/env-config.js | grep -q "window.__APP_CONFIG__"
+          curl -fsS http://127.0.0.1:8081/health >/dev/null
+
+  e2e-playwright:
+    name: Playwright E2E & Accessibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e -- --ignore-snapshots
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-test-results
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+
+  ios-simulator:
+    name: iOS Capacitor & Simulator Build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: ruby -c ios/fastlane/Fastfile
+      - run: npm run ios:preflight
+      - run: cd ios && fastlane simulator
