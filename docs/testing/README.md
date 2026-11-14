@@ -54,5 +54,5 @@ Notes:
 - **`unit-and-build`** (`ubuntu-latest`): `npm test` and `npm run build`.
 - **`itch-package`** (`ubuntu-latest`): `npm run build:itch`, `npm run verify:itch`, and uploads `sudoku-live-itch.zip` as an artifact.
 - **`docker-smoke`** (`ubuntu-latest`): `npm run docker:config`, builds and starts `docker compose`, and verifies `/up`, `/env-config.js`, and Centrifugo `/health`.
-- **`e2e-playwright`** (`ubuntu-latest`): `npm run e2e` with Chromium and uploads traces/reports on failure.
+- **`e2e-playwright`** (`ubuntu-latest`): `npm run e2e -- --ignore-snapshots` (functional & `axe-core` checks on Linux without macOS font-diff false positives) and uploads traces/reports on failure.
 - **`ios-simulator`** (`macos-latest`): `ruby -c ios/fastlane/Fastfile`, `npm run ios:preflight`, and `fastlane simulator` (`CODE_SIGNING_ALLOWED=NO`).
