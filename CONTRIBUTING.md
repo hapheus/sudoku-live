@@ -12,13 +12,11 @@ English is mandatory throughout the entire project for all code, comments, commi
 
 ## Git Workflow & Branch Conventions
 
-We follow Git Flow conventions:
-
-- `main`: Production-ready releases.
-- `develop`: Primary integration branch. All feature branches merge here.
-- `feature/<name>`: New features or enhancements (branched from `develop`).
-- `hotfix/<name>`: Urgent production fixes (branched from `main`).
-- `release/<version>`: Release preparation branches.
+- `main`: Protected integration and release branch (requires passing CI checks and 2 Code Owner approvals).
+- `feat/<name>`: New features or enhancements (branched from `main`).
+- `fix/<name>`: Bug fixes (branched from `main`).
+- `docs/<name>`: Documentation updates (branched from `main`).
+- `chore/<name>`: Tooling, build, or maintenance updates (branched from `main`).
 
 ---
 
@@ -84,8 +82,8 @@ Before opening a pull request, ensure all tests, builds, and container checks pa
 
 ## Pull Request Process
 
-1. Create a feature branch from `develop`.
+1. Create a feature branch from `main`.
 2. Write unit and feature tests following TDD principles.
 3. Keep external dependencies minimal. Avoid introducing heavy UI or state management libraries.
 4. Ensure accessibility adheres to WCAG 2.2 AA guidelines (keyboard focus, touch targets, screen reader labels).
-5. Open a Pull Request targeting `develop` with a clear description of the changes.
+5. Open a Pull Request targeting `main` with a clear description of the changes.
