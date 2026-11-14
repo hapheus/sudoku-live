@@ -18,6 +18,7 @@ import {
     undoLastMove,
 } from './domain/sudoku-engine.js';
 import { generateGameId, isValidGameId, OnlineGameClient } from './services/online-game-client.js';
+import { createBackgroundMusicPlayer, loadMusicEnabled } from './services/background-music.js';
 import {
     loadOnlineGameSnapshot,
     loadParticipantSession,
@@ -102,6 +103,7 @@ export function App() {
     const [language, setLanguage] = useState(() => (
         localStorage.getItem('sudoku_lang') === 'de' ? 'de' : 'en'
     ));
+    const [musicEnabled, setMusicEnabled] = useState(() => loadMusicEnabled());
     const messages = useMemo(() => getMessages(language), [language]);
 
     const [difficulty, setDifficulty] = useState(() => localStorage.getItem('sudoku_difficulty') || 'medium');
@@ -137,6 +139,7 @@ export function App() {
     const unitCelebrationTimerRef = useRef(null);
     const confirmCancelRef = useRef(null);
     const onlineClientRef = useRef(null);
+    const musicPlayerRef = useRef(null);
 
     // Live refs to avoid stale closures inside WebSocket event handlers
     const stateRef = useRef({
@@ -190,6 +193,20 @@ export function App() {
         document.documentElement.lang = language;
         localStorage.setItem('sudoku_lang', language);
     }, [language]);
+
+    useEffect(() => {
+        const player = createBackgroundMusicPlayer();
+        musicPlayerRef.current = player;
+        player.start();
+        return () => {
+            player.destroy();
+            musicPlayerRef.current = null;
+        };
+    }, []);
+
+    useEffect(() => {
+        musicPlayerRef.current?.setEnabled(musicEnabled);
+    }, [musicEnabled]);
 
     useEffect(() => () => {
         if (unitCelebrationTimerRef.current) {
@@ -273,10 +290,18 @@ export function App() {
     }, []);
 
     const syncLobbyProgress = useCallback((overrideState = null, overrideMode = null) => {
-        const { myRole: role, onlineGameId: gId, mode: curMode, currentMembers: members, gameState: curState, isSpectating: spec } = stateRef.current;
+        const {
+            isPlayingGame: playing,
+            myRole: role,
+            onlineGameId: gId,
+            mode: curMode,
+            currentMembers: members,
+            gameState: curState,
+            isSpectating: spec,
+        } = stateRef.current;
         const targetState = overrideState || curState;
         const targetMode = overrideMode || curMode;
-        if (role !== 'host' || !gId || spec || (targetMode !== 'solo' && targetMode !== 'online')) return;
+        if (!playing || role !== 'host' || !gId || spec || (targetMode !== 'solo' && targetMode !== 'online')) return;
 
         const guestOnline = members.some((m) => m.role === 'guest');
         const effectiveMode = guestOnline ? 'online' : targetMode;
@@ -700,7 +725,46 @@ export function App() {
         showFeedback('Joined live match as co-op partner!');
     }, [clearUnitCelebration, joinAsOnlinePlayer, showFeedback]);
 
-    const startNewSoloGame = useCallback((overrideDifficulty = null, overrideVariant = null, { restoreSaved = false } = {}) => {
+    const ensureHostOnlineSession = useCallback((targetState, roomId, targetMode = stateRef.current.mode) => {
+        if (!targetState || !roomId || !onlineClientRef.current) return;
+        const resolvedMode = targetMode === 'online' ? 'online' : 'solo';
+        const resolvedVar = normalizeVariant(targetState.variant || inferVariantFromBoardLength(targetState.board?.length));
+        const specInfo = getVariantSpec(resolvedVar);
+        const client = onlineClientRef.current;
+        const guestOnline = stateRef.current.currentMembers.some((m) => m.role === 'guest');
+
+        if (client.currentGameId !== roomId || !client.gameChannel) {
+            client.joinGameChannel(roomId, {
+                role: 'host',
+                gameMode: resolvedMode,
+                onEvent: handleRemoteGameEvent,
+                onPresenceChange: handleGamePresenceChange,
+                onMemberJoin: handleGameMemberJoin,
+                onMemberLeave: handleGameMemberLeave,
+            });
+        }
+
+        if (!client.lobbyChannel || client.hostedLobbyMeta?.game_id !== roomId) {
+            client.joinLobby({
+                gameId: roomId,
+                status: targetState.status === 'solved' ? 'solved' : 'in_progress',
+                gameMode: guestOnline ? 'online' : resolvedMode,
+                difficulty: targetState.difficulty,
+                variant: specInfo.id,
+                totalCells: specInfo.totalCells,
+                hasGuest: guestOnline,
+                filledCount: targetState.filledCount,
+            });
+        } else {
+            syncLobbyProgress(targetState, resolvedMode);
+        }
+    }, [handleGameMemberJoin, handleGameMemberLeave, handleGamePresenceChange, handleRemoteGameEvent, syncLobbyProgress]);
+
+    const startNewSoloGame = useCallback((
+        overrideDifficulty = null,
+        overrideVariant = null,
+        { restoreSaved = false, startSession = true } = {},
+    ) => {
         clearUnitCelebration();
         const saved = restoreSaved ? loadSoloGameSnapshot() : null;
         const diff = saved?.gameState?.status === 'in_progress'
@@ -749,39 +813,25 @@ export function App() {
         stateRef.current.myRole = 'host';
         stateRef.current.gameState = nextState;
 
-        saveSoloGameSnapshot(nextState, roomId);
+        if (startSession || (saved && saved.gameState.status !== 'solved')) {
+            saveSoloGameSnapshot(nextState, roomId);
+        }
 
-        if (!hadExistingSoloRoom) {
-            onlineClientRef.current?.joinGameChannel(roomId, {
-                role: 'host',
-                gameMode: 'solo',
-                onEvent: handleRemoteGameEvent,
-                onPresenceChange: handleGamePresenceChange,
-                onMemberJoin: handleGameMemberJoin,
-                onMemberLeave: handleGameMemberLeave,
-            });
-
-            onlineClientRef.current?.joinLobby({
-                gameId: roomId,
-                status: 'in_progress',
-                gameMode: 'solo',
-                difficulty: nextState.difficulty,
-                variant: specInfo.id,
-                totalCells: specInfo.totalCells,
-                hasGuest: false,
-                filledCount: nextState.filledCount,
-            });
-        } else {
-            onlineClientRef.current?.broadcastGameEvent(roomId, 'new-puzzle-accept', {
-                gameState: serializeGameState(nextState),
-            });
-            syncLobbyProgress(nextState, 'solo');
+        if (startSession) {
+            const client = onlineClientRef.current;
+            const isExistingChannel = Boolean(client && client.currentGameId === roomId && client.gameChannel);
+            if (isExistingChannel) {
+                client.broadcastGameEvent(roomId, 'new-puzzle-accept', {
+                    gameState: serializeGameState(nextState),
+                });
+            }
+            ensureHostOnlineSession(nextState, roomId, 'solo');
         }
 
         announce(saved && saved.gameState.status !== 'solved'
             ? `Resumed ${specInfo.shortLabel} ${nextState.difficulty} Solo puzzle.`
             : `New ${specInfo.shortLabel} ${diff} Sudoku puzzle ready.`);
-    }, [announce, clearUnitCelebration, handleGameMemberJoin, handleGameMemberLeave, handleGamePresenceChange, handleRemoteGameEvent, syncLobbyProgress]);
+    }, [announce, clearUnitCelebration, ensureHostOnlineSession]);
 
     const resumeOnlineGame = useCallback((gameId) => {
         let initialState = stateRef.current.gameState;
@@ -840,7 +890,7 @@ export function App() {
         } else if (initialRoute.initialMode === 'watch') {
             openWatchDirectory();
         } else {
-            startNewSoloGame(null, null, { restoreSaved: true });
+            startNewSoloGame(null, null, { restoreSaved: true, startSession: false });
         }
 
         const cleanup = () => client.disconnect();
@@ -883,7 +933,7 @@ export function App() {
     useEffect(() => {
         const timer = setInterval(() => {
             const cur = stateRef.current;
-            const isBroadcaster = (cur.mode === 'solo' || cur.mode === 'online') && Boolean(cur.onlineGameId) && !cur.isSpectating;
+            const isBroadcaster = cur.isPlayingGame && (cur.mode === 'solo' || cur.mode === 'online') && Boolean(cur.onlineGameId) && !cur.isSpectating;
             if (!isBroadcaster) return;
 
             onlineClientRef.current?.sendGamePing({
@@ -1257,7 +1307,7 @@ export function App() {
         stateRef.current.navTab = 'play';
         stateRef.current.isPlayingGame = false;
         updateBrowserUrl('/');
-        startNewSoloGame(null, null, { restoreSaved: true });
+        startNewSoloGame(null, null, { restoreSaved: true, startSession: false });
     }, [clearUnitCelebration, openWatchDirectory, startNewSoloGame]);
 
     const switchMode = useCallback((newMode) => {
@@ -1476,7 +1526,11 @@ export function App() {
             if (!hasUnsavedProgress(curState) && !isCoop && matchesSelection && curState.status !== 'solved') {
                 setNavTab('play');
                 setIsPlayingGame(true);
+                stateRef.current.navTab = 'play';
+                stateRef.current.isPlayingGame = true;
                 setSelectedIndex(0);
+                saveSoloGameSnapshot(curState, stateRef.current.onlineGameId);
+                ensureHostOnlineSession(curState, stateRef.current.onlineGameId, 'solo');
                 requestAnimationFrame(() => cellRefs.current[0]?.focus());
                 return;
             }
@@ -1491,9 +1545,11 @@ export function App() {
                 updateBrowserUrl('/');
             }
 
-            startNewSoloGame(cur.difficulty, cur.variant);
             setNavTab('play');
             setIsPlayingGame(true);
+            stateRef.current.navTab = 'play';
+            stateRef.current.isPlayingGame = true;
+            startNewSoloGame(cur.difficulty, cur.variant, { startSession: true });
             setSelectedIndex(0);
             requestAnimationFrame(() => cellRefs.current[0]?.focus());
         };
@@ -1510,7 +1566,7 @@ export function App() {
         }
 
         launchGame();
-    }, [startNewSoloGame]);
+    }, [ensureHostOnlineSession, startNewSoloGame]);
 
     const handleResumeFromSetup = useCallback(() => {
         const curState = stateRef.current.gameState;
@@ -1523,8 +1579,25 @@ export function App() {
         }
         setNavTab('play');
         setIsPlayingGame(true);
+        stateRef.current.navTab = 'play';
+        stateRef.current.isPlayingGame = true;
         setSelectedIndex(0);
+        if (stateRef.current.myRole === 'host' && !stateRef.current.isSpectating && stateRef.current.onlineGameId) {
+            ensureHostOnlineSession(curState, stateRef.current.onlineGameId, stateRef.current.mode);
+        }
         requestAnimationFrame(() => cellRefs.current[0]?.focus());
+    }, [ensureHostOnlineSession]);
+
+    const handleBackToSetup = useCallback(() => {
+        setIsPlayingGame(false);
+        stateRef.current.isPlayingGame = false;
+        const cur = stateRef.current;
+        const hasPartner = cur.currentMembers.some(
+            (m) => m.role !== cur.myRole && (m.role === 'host' || m.role === 'guest'),
+        );
+        if (!hasPartner && cur.myRole === 'host') {
+            onlineClientRef.current?.leaveLobby();
+        }
     }, []);
 
     const handleReconnect = useCallback(() => {
@@ -1741,7 +1814,7 @@ export function App() {
                                     type="button"
                                     id="back-to-setup-btn"
                                     className="game-top-bar__back-btn"
-                                    onClick={() => setIsPlayingGame(false)}
+                                    onClick={handleBackToSetup}
                                 >
                                     <span aria-hidden="true">←</span>
                                     <span>{messages.backToSetup}</span>
@@ -1990,8 +2063,10 @@ export function App() {
                     <SettingsPanel
                         theme={theme}
                         language={language}
+                        musicEnabled={musicEnabled}
                         onChangeTheme={setTheme}
                         onChangeLanguage={setLanguage}
+                        onChangeMusicEnabled={setMusicEnabled}
                         onOpenGuide={() => setIsHelpOpen(true)}
                         messages={messages}
                     />

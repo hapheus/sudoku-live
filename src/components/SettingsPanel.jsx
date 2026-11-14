@@ -4,8 +4,10 @@ import enMessages from '../locales/en.json';
 export function SettingsPanel({
     theme,
     language,
+    musicEnabled = true,
     onChangeTheme,
     onChangeLanguage,
+    onChangeMusicEnabled = () => {},
     onOpenGuide,
     messages = enMessages,
 }) {
@@ -17,6 +19,11 @@ export function SettingsPanel({
     const langOptions = [
         { value: 'en', label: messages.langEn },
         { value: 'de', label: messages.langDe },
+    ];
+
+    const musicOptions = [
+        { value: true, label: messages.musicOn || 'On' },
+        { value: false, label: messages.musicOff || 'Off' },
     ];
 
     return (
@@ -68,6 +75,32 @@ export function SettingsPanel({
                                         value={opt.value}
                                         checked={active}
                                         onChange={() => onChangeLanguage(opt.value)}
+                                    />
+                                    <span>{opt.label}</span>
+                                </label>
+                            );
+                        })}
+                    </div>
+                </fieldset>
+            </div>
+
+            <div className="settings-group">
+                <fieldset className="settings-fieldset">
+                    <legend className="settings-fieldset__legend">{messages.settingsMusic || 'Background Music'}</legend>
+                    <div className="segmented-options segmented-options--2" role="radiogroup" aria-label={messages.settingsMusic || 'Background Music'}>
+                        {musicOptions.map((opt) => {
+                            const active = Boolean(musicEnabled) === opt.value;
+                            return (
+                                <label
+                                    key={String(opt.value)}
+                                    className={`segmented-label ${active ? 'segmented-label--active' : ''}`}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="sudoku-music"
+                                        value={String(opt.value)}
+                                        checked={active}
+                                        onChange={() => onChangeMusicEnabled(opt.value)}
                                     />
                                     <span>{opt.label}</span>
                                 </label>

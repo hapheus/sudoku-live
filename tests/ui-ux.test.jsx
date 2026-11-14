@@ -1,4 +1,6 @@
 import React from 'react';
+import fs from 'node:fs';
+import path from 'node:path';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { ModeTabs } from '../src/components/ModeTabs.jsx';
@@ -69,16 +71,19 @@ describe('UI/UX components & Solo persistence', () => {
         expect(onSelectMode).toHaveBeenCalledWith('watch');
     });
 
-    it('emits theme, language, and guide callbacks in SettingsPanel', () => {
+    it('emits theme, language, music, and guide callbacks in SettingsPanel', () => {
         const onChangeTheme = vi.fn();
         const onChangeLanguage = vi.fn();
+        const onChangeMusicEnabled = vi.fn();
         const onOpenGuide = vi.fn();
         render(
             <SettingsPanel
                 theme="dark"
                 language="en"
+                musicEnabled
                 onChangeTheme={onChangeTheme}
                 onChangeLanguage={onChangeLanguage}
+                onChangeMusicEnabled={onChangeMusicEnabled}
                 onOpenGuide={onOpenGuide}
             />,
         );
@@ -88,6 +93,9 @@ describe('UI/UX components & Solo persistence', () => {
 
         fireEvent.click(screen.getByRole('radio', { name: 'Deutsch' }));
         expect(onChangeLanguage).toHaveBeenCalledWith('de');
+
+        fireEvent.click(screen.getByRole('radio', { name: 'Off' }));
+        expect(onChangeMusicEnabled).toHaveBeenCalledWith(false);
 
         fireEvent.click(screen.getByRole('button', { name: 'Open Guide' }));
         expect(onOpenGuide).toHaveBeenCalledTimes(1);
@@ -337,5 +345,21 @@ describe('UI/UX components & Solo persistence', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Clear Notes' }));
         expect(onClearNotes).toHaveBeenCalledTimes(1);
+    });
+
+    it('locks iOS and PWA app configuration strictly to portrait orientation', () => {
+        const root = process.cwd();
+        const infoPlist = fs.readFileSync(path.join(root, 'ios/App/App/Info.plist'), 'utf8');
+        const appDelegate = fs.readFileSync(path.join(root, 'ios/App/App/AppDelegate.swift'), 'utf8');
+        const manifest = JSON.parse(fs.readFileSync(path.join(root, 'public/manifest.webmanifest'), 'utf8'));
+
+        expect(infoPlist).toContain('UIInterfaceOrientationPortrait');
+        expect(infoPlist).not.toContain('UIInterfaceOrientationLandscapeLeft');
+        expect(infoPlist).not.toContain('UIInterfaceOrientationLandscapeRight');
+        expect(infoPlist).not.toContain('UIInterfaceOrientationPortraitUpsideDown');
+        expect(infoPlist).toContain('<key>UIRequiresFullScreen</key>');
+
+        expect(appDelegate).toMatch(/supportedInterfaceOrientationsFor[\s\S]*return \.portrait/);
+        expect(manifest.orientation).toBe('portrait');
     });
 });

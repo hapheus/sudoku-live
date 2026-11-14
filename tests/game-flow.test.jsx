@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { App } from '../src/App.jsx';
 import { createSudokuGame, setCellValue } from '../src/domain/sudoku-engine.js';
+import { OnlineGameClient } from '../src/services/online-game-client.js';
 import { saveSoloGameSnapshot } from '../src/services/online-state-storage.js';
 
 beforeEach(() => {
@@ -13,6 +14,7 @@ beforeEach(() => {
     window.history.replaceState({}, '', '/');
 });
 afterEach(() => {
+    vi.restoreAllMocks();
     vi.useRealTimers();
     cleanup();
 });
@@ -129,4 +131,62 @@ it('briefly highlights a completed row as a reward when the player fills its las
 
     const clearedCells = screen.getAllByRole('gridcell');
     expect(clearedCells[0]).not.toHaveClass('sudoku-cell--unit-complete');
+});
+
+it('does not publish a game to the live lobby during Setup selection, only once started', () => {
+    vi.useFakeTimers();
+
+    const joinLobbySpy = vi.spyOn(OnlineGameClient.prototype, 'joinLobby').mockImplementation(() => null);
+    const joinGameSpy = vi.spyOn(OnlineGameClient.prototype, 'joinGameChannel').mockImplementation(() => null);
+    const broadcastLobbySpy = vi.spyOn(OnlineGameClient.prototype, 'broadcastLobbyUpdate').mockImplementation(() => {});
+    const leaveLobbySpy = vi.spyOn(OnlineGameClient.prototype, 'leaveLobby').mockImplementation(() => {});
+
+    render(<App />);
+
+    // Selecting variant/difficulty on Setup and letting heartbeat run must NOT publish a game
+    fireEvent.click(screen.getByRole('radio', { name: '2×3 (6×6)' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Hard' }));
+    act(() => {
+        vi.advanceTimersByTime(6000);
+    });
+
+    expect(joinGameSpy).not.toHaveBeenCalled();
+    expect(joinLobbySpy).not.toHaveBeenCalled();
+    expect(broadcastLobbySpy).not.toHaveBeenCalled();
+
+    // Switching to Watch and back to Play Setup must still NOT host/publish a game
+    fireEvent.click(screen.getByRole('tab', { name: 'Watch' }));
+    expect(joinLobbySpy).toHaveBeenCalledTimes(1);
+    expect(joinLobbySpy.mock.calls[0][0].gameId).toBeUndefined();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Play' }));
+    expect(joinGameSpy).not.toHaveBeenCalled();
+    expect(broadcastLobbySpy).not.toHaveBeenCalled();
+
+    // Pressing Play starts the game and publishes it to the live lobby
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    expect(joinGameSpy).toHaveBeenCalledTimes(1);
+    expect(joinLobbySpy).toHaveBeenCalledTimes(2);
+    expect(joinLobbySpy.mock.calls[1][0]).toMatchObject({
+        status: 'in_progress',
+        gameMode: 'solo',
+        difficulty: 'hard',
+        variant: '2x3',
+    });
+
+    // Returning to Setup withdraws the unpartnered game from the live lobby
+    const hostedRoomId = joinLobbySpy.mock.calls[1][0].gameId;
+    fireEvent.click(document.getElementById('back-to-setup-btn'));
+    expect(leaveLobbySpy).toHaveBeenCalled();
+    broadcastLobbySpy.mockClear();
+
+    act(() => {
+        vi.advanceTimersByTime(6000);
+    });
+    expect(broadcastLobbySpy).not.toHaveBeenCalled();
+
+    // Pressing Play again re-publishes the active game
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    expect(joinLobbySpy).toHaveBeenCalledTimes(3);
+    expect(joinLobbySpy.mock.calls[2][0].gameId).toBe(hostedRoomId);
 });
