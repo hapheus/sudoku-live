@@ -1,5 +1,5 @@
 {
-  "gameTitle": "Sudoku Live",
+  "gameTitle": "Sudoku Shift",
   "splashTagline": "Echtzeit-Sudoku, allein oder gemeinsam.",
   "navPlay": "Spielen",
   "navWatch": "Zuschauen",
@@ -109,6 +109,8 @@
   "helpToolsNotesText": "Aktiviere Notizen, um mögliche Kandidaten im Feld vorzumerken. Mit Kandidaten füllen oder Notizen leeren verwaltest du sie im Handumdrehen.",
   "helpToolsActionsLabel": "Zurück, Löschen & Hinweis:",
   "helpToolsActionsText": "Mit Zurück machst du Züge rückgängig, Löschen leert ein Feld und Hinweis deckt eine Zahl auf.",
+  "helpToolsShiftLabel": "Shift:",
+  "helpToolsShiftText": "Wähle ein Feld und nutze die Shift-Pfeile unter dem Zahlenfeld (oder Shift + ↑↓←→), um Zeilen oder Spalten innerhalb desselben Blocks zu verschieben, ohne die Lösbarkeit zu verändern.",
   "helpLiveHeading": "Live zusehen & Co-op",
   "helpLiveWatchText": "Unter Zuschauen siehst du alle gestarteten Live-Spiele. Tippe auf eine Partie, um live zuzusehen, schlage über ein leeres Feld eine Zahl oder Feld markieren vor und sende Emoji-Reaktionen.",
   "helpLiveCoopText": "Über Beitreten spielt ihr gemeinsam in Echtzeit: Deine Zahlen erscheinen in Blau, die Züge und das aktive Feld deines Partners in Violett.",
@@ -133,5 +135,11 @@
   "legalLinksLabel": "Rechtliche Hinweise",
   "privacyTitle": "Datenschutz",
   "impressumTitle": "Impressum",
-  "legalBackToApp": "Zurück zu Sudoku Live"
+  "legalBackToApp": "Zurück zu Sudoku Shift",
+  "shiftLabel": "Shift",
+  "shiftToolbarLabel": "Zeile oder Spalte im Block verschieben",
+  "shiftRowUp": "Zeile nach oben schieben",
+  "shiftRowDown": "Zeile nach unten schieben",
+  "shiftColLeft": "Spalte nach links schieben",
+  "shiftColRight": "Spalte nach rechts schieben"
 }

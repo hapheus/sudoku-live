@@ -15,6 +15,7 @@ ios/fastlane/.env
 /dist
 /dist-itch
 sudoku-live-itch.zip
+sudoku-shift-itch.zip
 /node_modules
 /ios/App/App/public
 /ios/App/Pods

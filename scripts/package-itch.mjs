@@ -9,7 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const REPO_ROOT = path.resolve(__dirname, '..');
 const DIST_ITCH_DIR = path.join(REPO_ROOT, 'dist-itch');
-const ZIP_PATH = path.join(REPO_ROOT, 'sudoku-live-itch.zip');
+const ZIP_PATH = path.join(REPO_ROOT, 'sudoku-shift-itch.zip');
 const DEFAULT_WS_URL = 'wss://sudoku-ws.fraha.dev/connection/websocket';
 
 /**

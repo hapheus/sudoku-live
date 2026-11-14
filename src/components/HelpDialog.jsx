@@ -72,6 +72,9 @@ export function HelpDialog({ isOpen, onClose, messages = enMessages }) {
                         <p className="help-section__text">
                             <strong>{messages.helpToolsActionsLabel}</strong> {messages.helpToolsActionsText}
                         </p>
+                        <p className="help-section__text">
+                            <strong>{messages.helpToolsShiftLabel}</strong> {messages.helpToolsShiftText}
+                        </p>
                     </div>
 
                     <div className="help-section">

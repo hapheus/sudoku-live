@@ -1,6 +1,6 @@
 {
     "$schema": "https://www.schemastore.org/package.json",
-    "name": "sudoku-live",
+    "name": "sudoku-shift",
     "private": true,
     "license": "PolyForm-Noncommercial-1.0.0",
     "type": "module",

@@ -1,6 +1,6 @@
 {
-  "name": "Sudoku Live",
-  "short_name": "Sudoku Live",
+  "name": "Sudoku Shift",
+  "short_name": "Sudoku Shift",
   "description": "Real-time Co-op & Spectator Sudoku powered by Centrifugo",
   "start_url": "/",
   "display": "standalone",

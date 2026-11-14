@@ -1,5 +1,5 @@
 {
-  "gameTitle": "Sudoku Live",
+  "gameTitle": "Sudoku Shift",
   "splashTagline": "Real-time Sudoku, solo or together.",
   "navPlay": "Play",
   "navWatch": "Watch",
@@ -109,6 +109,8 @@
   "helpToolsNotesText": "Turn on Notes to jot down small candidates in a cell. Use Fill Candidates or Clear Notes to manage them quickly.",
   "helpToolsActionsLabel": "Undo, Erase & Hint:",
   "helpToolsActionsText": "Step back with Undo, clear a cell with Erase, or reveal one number with Hint.",
+  "helpToolsShiftLabel": "Shift:",
+  "helpToolsShiftText": "Select a cell and use the Shift arrows below the number pad (or Shift + ↑↓←→) to swap rows or columns within the same box without breaking solvability.",
   "helpLiveHeading": "Watch Live & Co-op",
   "helpLiveWatchText": "Open Watch to see active games once players have started. Tap a match to spectate, tap an empty cell to suggest a digit or nudge players, and send emoji reactions.",
   "helpLiveCoopText": "Tap Join to solve together in real time: your digits appear in blue, and your partner's digits and selected cell appear in violet.",
@@ -133,5 +135,11 @@
   "legalLinksLabel": "Legal notices",
   "privacyTitle": "Privacy Policy",
   "impressumTitle": "Legal Notice (Impressum)",
-  "legalBackToApp": "Back to Sudoku Live"
+  "legalBackToApp": "Back to Sudoku Shift",
+  "shiftLabel": "Shift",
+  "shiftToolbarLabel": "Shift row or column within box",
+  "shiftRowUp": "Shift row up",
+  "shiftRowDown": "Shift row down",
+  "shiftColLeft": "Shift column left",
+  "shiftColRight": "Shift column right"
 }

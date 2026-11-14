@@ -100,6 +100,13 @@ describe('SoundEffectsPlayer', () => {
         const afterCheer = mockCtx.__oscillators.length;
         expect(afterCheer - afterSolved).toBe(3);
 
+        expect(player.playShift()).toBe(true);
+        const afterShift = mockCtx.__oscillators.length;
+        expect(afterShift - afterCheer).toBe(3);
+
+        expect(player.play('shift')).toBe(true);
+        expect(mockCtx.__oscillators.length - afterShift).toBe(3);
+
         player.destroy();
         expect(mockCtx.close).toHaveBeenCalledTimes(1);
     });
