@@ -13,6 +13,7 @@ export function StatusBanner({
     mode,
     isSpectating,
     myRole,
+    myClientId = null,
     currentMembers,
     spectatedGameMode,
     gameState,
@@ -29,9 +30,11 @@ export function StatusBanner({
     };
     const diffLabel = diffLabels[gameState.difficulty] || messages.diffMedium;
 
-    const partnerOnline = currentMembers.some(
-        (m) => m.role !== myRole && (m.role === 'host' || m.role === 'guest'),
-    );
+    const partnerCount = currentMembers.filter((m) => (
+        (m.role === 'host' || m.role === 'guest')
+        && (myClientId ? m.id !== myClientId : m.role !== myRole)
+    )).length;
+    const partnerOnline = partnerCount > 0;
     const isCoopActive = !isSpectating && (mode === 'online' || partnerOnline || myRole === 'guest');
 
     let statusText = `${spec.shortLabel} ${diffLabel} • ${messages.soloLabel}`;
@@ -85,13 +88,16 @@ export function StatusBanner({
 
     if (!isSpectating) {
         if (isCoopActive && (myRole === 'host' || myRole === 'guest')) {
+            const partnerStatusLabel = partnerCount > 1
+                ? (messages.partnersOnline || '{count} Partners online').replace('{count}', String(partnerCount))
+                : (partnerOnline ? messages.partnerOnline : messages.partnerDisconnected);
             opponentBadge = (
                 <span
                     id="opponent-status"
                     className={`presence-badge ${partnerOnline ? 'presence-badge--online' : 'presence-badge--offline'}`}
                     aria-live="polite"
                 >
-                    {partnerOnline ? messages.partnerOnline : messages.partnerDisconnected}
+                    {partnerStatusLabel}
                 </span>
             );
 
@@ -119,14 +125,17 @@ export function StatusBanner({
     } else {
         const hostMember = currentMembers.find((m) => m.role === 'host');
         const hostOnline = Boolean(hostMember);
-        const guestOnline = currentMembers.some((m) => m.role === 'guest');
+        const guestCount = currentMembers.filter((m) => m.role === 'guest').length;
+        const guestOnline = guestCount > 0;
         const resolvedMode = guestOnline ? 'online' : (hostMember?.game_mode || spectatedGameMode);
 
         opponentBadge = (
             <span id="opponent-status" className="presence-badge" aria-live="polite">
                 {resolvedMode === 'solo' && !guestOnline
                     ? `Solo Player: ${hostOnline ? 'Online' : 'Offline'}`
-                    : `Host: ${hostOnline ? 'Online' : 'Offline'} | Partner: ${guestOnline ? 'Online' : 'Offline'}`}
+                    : guestCount > 1
+                        ? `Host: ${hostOnline ? 'Online' : 'Offline'} | Partners: ${guestCount} Online`
+                        : `Host: ${hostOnline ? 'Online' : 'Offline'} | Partner: ${guestOnline ? 'Online' : 'Offline'}`}
             </span>
         );
 

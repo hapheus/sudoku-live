@@ -8,6 +8,7 @@ export function getSudokuCellAriaLabel(index, value, {
     hint = null,
     isPartnerOwned = false,
     isPartnerFocused = false,
+    isPlayerFocused = false,
 } = {}) {
     const { row, col } = getCellCoords(index, variant);
     const parts = [`Row ${row + 1}, Column ${col + 1}`];
@@ -35,6 +36,10 @@ export function getSudokuCellAriaLabel(index, value, {
         parts.push(`spectator hint ${hint.topValue}`);
     } else if (hint) {
         parts.push('spectator nudge');
+    }
+
+    if (isPlayerFocused) {
+        parts.push('player cursor');
     }
 
     if (isPartnerFocused) {

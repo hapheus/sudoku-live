@@ -11,6 +11,7 @@ export function PlayerControls({
     activeDigit = null,
     highlightedDigit = null,
     isSolved = false,
+    isHintArmed = false,
     onUndo,
     onErase,
     onToggleNotes,
@@ -75,9 +76,9 @@ export function PlayerControls({
                 <button
                     type="button"
                     id="hint-btn"
-                    className="tool-btn"
+                    className={`tool-btn ${isHintArmed ? 'tool-btn--hint-armed' : ''}`}
                     disabled={isSolved}
-                    title="Fill one valid digit"
+                    title={isHintArmed ? 'Tap again to fill the highlighted cell' : 'Highlight a logically solvable cell'}
                     onClick={onLocalHint}
                 >
                     <svg className="tool-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

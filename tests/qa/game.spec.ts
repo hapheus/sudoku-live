@@ -97,8 +97,12 @@ test('completion offers another game and reload restores actual progress', async
     await checkAccessibility(page, testInfo, 'completed');
     await page.getByRole('button', { name: 'Play Again', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Puzzle Solved', exact: true })).toHaveCount(0);
+    const boardBeforeHint = await page.getByRole('gridcell').allTextContents();
+    await page.getByRole('button', { name: 'Hint', exact: true }).click();
+    expect(await page.getByRole('gridcell').allTextContents()).toEqual(boardBeforeHint);
     await page.getByRole('button', { name: 'Hint', exact: true }).click();
     const board = await page.getByRole('gridcell').allTextContents();
+    expect(board).not.toEqual(boardBeforeHint);
     await page.reload();
     await page.getByRole('button', { name: 'Resume Current Game', exact: true }).click();
     expect(await page.getByRole('gridcell').allTextContents()).toEqual(board);

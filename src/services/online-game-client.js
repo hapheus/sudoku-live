@@ -1,4 +1,5 @@
 import { Centrifuge } from 'centrifuge';
+import { normalizeJoinPolicy } from './join-settings.js';
 
 const VALID_GAME_ID_RE = /^[A-Za-z0-9_-]{6,64}$/;
 const MAX_SEEN_EVENT_IDS = 200;
@@ -65,6 +66,9 @@ export class OnlineGameClient {
         this.activeServerClients = new Set();
         this.gameMembersByServerClient = new Map();
         this.gamePresenceReady = false;
+        this.gameRole = 'spectator';
+        this.gameMode = 'online';
+        this.gameJoinPolicy = 'confirm';
         this.presenceSettleTimer = null;
         this.lobbyActiveServerClients = new Set();
         this.lobbyRoomsByGameId = new Map();
@@ -184,10 +188,12 @@ export class OnlineGameClient {
     joinGameChannel(gameId, {
         role = 'spectator',
         gameMode = 'online',
+        joinPolicy = 'confirm',
         onEvent = () => {},
         onPresenceChange = () => {},
         onMemberJoin = () => {},
         onMemberLeave = () => {},
+        onSubscribed = null,
     } = {}) {
         if (!isValidGameId(gameId)) {
             throw new Error('Invalid game room identifier.');
@@ -203,6 +209,10 @@ export class OnlineGameClient {
 
         const normalizedRole = normalizeRole(role);
         const normalizedMode = normalizeGameMode(gameMode);
+        const normalizedJoinPolicy = normalizeJoinPolicy(joinPolicy);
+        this.gameRole = normalizedRole;
+        this.gameMode = normalizedMode;
+        this.gameJoinPolicy = normalizedJoinPolicy;
 
         const client = this.ensureClient();
         const channel = `sudoku:game.${gameId}`;
@@ -215,16 +225,18 @@ export class OnlineGameClient {
             this.gameMembersByServerClient.set(selfKey, {
                 id: this.clientId,
                 serverClientId: selfKey,
-                role: normalizedRole,
-                game_mode: normalizedMode,
+                role: this.gameRole,
+                game_mode: this.gameMode,
+                join_policy: this.gameJoinPolicy,
             });
             Promise.resolve(sub.publish({
                 type: 'presence-announce',
                 data: {
                     id: this.clientId,
                     serverClientId: selfKey,
-                    role: normalizedRole,
-                    game_mode: normalizedMode,
+                    role: this.gameRole,
+                    game_mode: this.gameMode,
+                    join_policy: this.gameJoinPolicy,
                 },
             })).catch(() => {});
         };
@@ -252,6 +264,9 @@ export class OnlineGameClient {
             }
 
             announceSelf();
+            if (typeof onSubscribed === 'function') {
+                onSubscribed();
+            }
 
             // Replay recent room history so late joiners / reconnects catch up cleanly
             try {
@@ -266,7 +281,7 @@ export class OnlineGameClient {
                         if (eventId && this.rememberEvent(eventId)) {
                             continue;
                         }
-                        if (payload.type === 'init' || payload.type === 'sync' || payload.type === 'cell-update' || payload.type === 'new-puzzle-accept' || payload.type === 'new-puzzle-request') {
+                        if (payload.type === 'init' || payload.type === 'sync' || payload.type === 'cell-update' || payload.type === 'new-puzzle-accept' || payload.type === 'new-puzzle-request' || payload.type === 'join-policy') {
                             onEvent(payload.type, payload.data || {});
                         }
                     }
@@ -324,6 +339,7 @@ export class OnlineGameClient {
                     serverClientId: sc,
                     role: normalizeRole(payload.data?.role),
                     game_mode: normalizeGameMode(payload.data?.game_mode),
+                    join_policy: normalizeJoinPolicy(payload.data?.join_policy),
                 };
 
                 this.activeServerClients.add(sc);
@@ -394,6 +410,31 @@ export class OnlineGameClient {
         }
     }
 
+    updateGameJoinPolicy(joinPolicy) {
+        const normalized = normalizeJoinPolicy(joinPolicy);
+        this.gameJoinPolicy = normalized;
+        if (!this.gameChannel) return;
+
+        const selfKey = this.serverClientId || this.clientId;
+        const currentSelf = this.gameMembersByServerClient.get(selfKey);
+        if (currentSelf) {
+            this.gameMembersByServerClient.set(selfKey, {
+                ...currentSelf,
+                join_policy: normalized,
+            });
+        }
+        this.sendWhisperEvent('presence-announce', {
+            id: this.clientId,
+            serverClientId: selfKey,
+            role: this.gameRole,
+            game_mode: this.gameMode,
+            join_policy: normalized,
+        });
+        this.sendWhisperEvent('join-policy', {
+            joinPolicy: normalized,
+        });
+    }
+
     joinLobby({
         gameId = null,
         status = 'waiting',
@@ -403,6 +444,7 @@ export class OnlineGameClient {
         totalCells = null,
         hasGuest = false,
         filledCount = 0,
+        joinPolicy = 'confirm',
         onLobbyPresenceChange = () => {},
         onLobbyMemberJoin = () => {},
         onLobbyMemberLeave = () => {},
@@ -416,6 +458,7 @@ export class OnlineGameClient {
 
         const resolvedVariant = variant === '2x3' || variant === '6x6' ? '2x3' : '3x3';
         const resolvedTotalCells = totalCells || (resolvedVariant === '2x3' ? 36 : 81);
+        const resolvedJoinPolicy = normalizeJoinPolicy(joinPolicy);
 
         this.hostedLobbyMeta = safeGameId
             ? {
@@ -428,6 +471,7 @@ export class OnlineGameClient {
                 total_cells: resolvedTotalCells,
                 has_guest: Boolean(hasGuest),
                 filled_count: filledCount,
+                join_policy: resolvedJoinPolicy,
             }
             : null;
 
@@ -570,12 +614,13 @@ export class OnlineGameClient {
         filledCount,
         difficulty = 'medium',
         gameMode = 'solo',
-        { variant = '3x3', totalCells = null, hasGuest = false } = {},
+        { variant = '3x3', totalCells = null, hasGuest = false, joinPolicy = 'confirm' } = {},
     ) {
         if (!isValidGameId(gameId)) return;
 
         const resolvedVariant = variant === '2x3' || variant === '6x6' ? '2x3' : '3x3';
         const resolvedTotalCells = totalCells || (resolvedVariant === '2x3' ? 36 : 81);
+        const resolvedJoinPolicy = normalizeJoinPolicy(joinPolicy);
 
         const payload = {
             id: this.clientId,
@@ -588,6 +633,7 @@ export class OnlineGameClient {
             total_cells: resolvedTotalCells,
             has_guest: Boolean(hasGuest),
             filled_count: filledCount,
+            join_policy: resolvedJoinPolicy,
             updated_at: Date.now(),
         };
 
@@ -601,6 +647,7 @@ export class OnlineGameClient {
             total_cells: resolvedTotalCells,
             has_guest: Boolean(hasGuest),
             filled_count: filledCount,
+            join_policy: resolvedJoinPolicy,
         };
 
         if (this.lobbyChannel) {

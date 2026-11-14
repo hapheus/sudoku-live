@@ -11,22 +11,35 @@ export function SudokuBoard({
     cellRefs,
     onCellSelect,
     myRole = null,
+    playerCursorIndex = null,
     partnerCursorIndex = null,
+    partnerCursorIndices = null,
     unitCelebration = null,
+    hintHighlight = null,
 }) {
     const variant = gameState.variant || inferVariantFromBoardLength(gameState.board?.length);
     const spec = getVariantSpec(variant);
     const { gridSize, boxRows, boxCols, maxDigit } = spec;
     const is6x6 = gridSize === 6;
 
-    const selectedCoords = selectedIndex !== null ? getCellCoords(selectedIndex, spec.id) : null;
-    const selectedValue = selectedIndex !== null ? gameState.board[selectedIndex] : 0;
-    const highlightedDigit = selectedValue > 0 ? selectedValue : (activeDigit || 0);
+    const focusAnchorIndex = selectedIndex !== null ? selectedIndex : playerCursorIndex;
+    const focusCoords = focusAnchorIndex !== null ? getCellCoords(focusAnchorIndex, spec.id) : null;
+    const focusValue = focusAnchorIndex !== null ? gameState.board[focusAnchorIndex] : 0;
+    const highlightedDigit = focusValue > 0 ? focusValue : (activeDigit || 0);
+    const partnerCursorSet = new Set(Array.isArray(partnerCursorIndices) ? partnerCursorIndices : []);
+    if (partnerCursorIndex !== null && partnerCursorIndex !== undefined) {
+        partnerCursorSet.add(partnerCursorIndex);
+    }
     const conflictSet = new Set(gameState.conflicts || []);
     const activeTabStop = selectedIndex !== null && selectedIndex < spec.totalCells ? selectedIndex : 0;
     const isSolved = gameState.status === 'solved';
     const celebrationId = unitCelebration?.id || 0;
     const celebrationDelays = unitCelebration?.cellDelays || null;
+    const hintHighlightId = hintHighlight?.id || 0;
+    const hintHighlightMode = hintHighlight?.mode || 'solve';
+    const isHintPreview = hintHighlightMode === 'preview';
+    const hintHighlightTarget = hintHighlight?.targetIndex ?? null;
+    const hintHighlightDelays = hintHighlight?.contextDelays || null;
 
     const digitsList = Array.from({ length: maxDigit }, (_, i) => i + 1);
     const axisIndices = Array.from({ length: gridSize }, (_, i) => i + 1);
@@ -89,19 +102,24 @@ export function SudokuBoard({
                                             || (myRole === 'spectator' && owner === 'guest')
                                         ),
                                     );
-                                    const isPartnerFocused = partnerCursorIndex === idx;
+                                    const isPlayerFocused = playerCursorIndex === idx;
+                                    const isPartnerFocused = partnerCursorSet.has(idx);
 
-                                    const isPeer = selectedCoords !== null && !isSelected && (
-                                        coords.row === selectedCoords.row
-                                        || coords.col === selectedCoords.col
-                                        || coords.box === selectedCoords.box
+                                    const isFocusAnchor = isSelected || (selectedIndex === null && isPlayerFocused);
+                                    const isPeer = focusCoords !== null && !isFocusAnchor && (
+                                        coords.row === focusCoords.row
+                                        || coords.col === focusCoords.col
+                                        || coords.box === focusCoords.box
                                     );
-                                    const isSameDigit = highlightedDigit > 0 && value === highlightedDigit && !isSelected;
+                                    const isSameDigit = highlightedDigit > 0 && value === highlightedDigit && !isFocusAnchor;
 
                                     const isBoxRight = (c + 1) % boxCols === 0 && c < gridSize - 1;
                                     const isBoxBottom = (r + 1) % boxRows === 0 && r < gridSize - 1;
                                     const celebrateDelay = celebrationDelays?.get(idx);
                                     const isUnitCelebrating = celebrateDelay !== undefined;
+                                    const hintDelay = hintHighlightDelays?.get(idx);
+                                    const isHintTarget = hintHighlightTarget === idx && hintDelay !== undefined;
+                                    const isHintContext = hintDelay !== undefined && !isHintTarget;
 
                                     const classNames = [
                                         'sudoku-cell',
@@ -111,12 +129,16 @@ export function SudokuBoard({
                                                 ? (isPartnerOwned ? 'sudoku-cell--partner' : 'sudoku-cell--user')
                                                 : ''),
                                         isSelected ? 'sudoku-cell--selected' : '',
+                                        isPlayerFocused ? 'sudoku-cell--player-cursor' : '',
                                         isPartnerFocused ? 'sudoku-cell--partner-cursor' : '',
                                         isPeer ? 'sudoku-cell--peer' : '',
                                         isSameDigit ? 'sudoku-cell--same-digit' : '',
                                         isConflict ? 'sudoku-cell--conflict' : '',
                                         hint ? 'sudoku-cell--hinted' : '',
                                         isUnitCelebrating ? 'sudoku-cell--unit-complete' : '',
+                                        isHintTarget ? 'sudoku-cell--hint-target' : '',
+                                        isHintContext ? 'sudoku-cell--hint-context' : '',
+                                        (isHintTarget || isHintContext) && isHintPreview ? 'sudoku-cell--hint-preview' : '',
                                         isBoxRight ? 'sudoku-cell--box-right' : '',
                                         isBoxBottom ? 'sudoku-cell--box-bottom' : '',
                                     ].filter(Boolean).join(' ');
@@ -145,6 +167,7 @@ export function SudokuBoard({
                                                 hint,
                                                 isPartnerOwned,
                                                 isPartnerFocused,
+                                                isPlayerFocused,
                                             })}
                                             onClick={() => onCellSelect(idx)}
                                         >
@@ -153,6 +176,14 @@ export function SudokuBoard({
                                                     key={`celebrate-${celebrationId}`}
                                                     className="sudoku-cell__celebrate"
                                                     style={{ '--complete-delay': `${celebrateDelay}ms` }}
+                                                    aria-hidden="true"
+                                                />
+                                            )}
+                                            {(isHintTarget || isHintContext) && (
+                                                <span
+                                                    key={`hint-hl-${hintHighlightId}-${hintHighlightMode}`}
+                                                    className={isHintTarget ? 'sudoku-cell__hint-flash sudoku-cell__hint-flash--target' : 'sudoku-cell__hint-flash'}
+                                                    style={{ '--hint-delay': `${hintDelay}ms` }}
                                                     aria-hidden="true"
                                                 />
                                             )}
@@ -185,6 +216,9 @@ export function SudokuBoard({
                                                         </span>
                                                     )}
                                                 </>
+                                            )}
+                                            {isPlayerFocused && (
+                                                <span className="sudoku-cell__player-pip" aria-hidden="true" />
                                             )}
                                             {isPartnerFocused && (
                                                 <span className="sudoku-cell__partner-pip" aria-hidden="true" />

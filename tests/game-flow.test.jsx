@@ -2,7 +2,7 @@ import React from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { App } from '../src/App.jsx';
-import { createSudokuGame, setCellValue } from '../src/domain/sudoku-engine.js';
+import { createSudokuGame, serializeGameState, setCellValue } from '../src/domain/sudoku-engine.js';
 import { OnlineGameClient } from '../src/services/online-game-client.js';
 import { saveSoloGameSnapshot } from '../src/services/online-state-storage.js';
 
@@ -317,3 +317,735 @@ it('triggers distinct sound effects for wrong/correct digits, unit completion, p
         window.AudioContext = OriginalAudioContext;
     }
 });
+
+it('enforces join approval settings defaults, persists changes, and handles host accept/decline/auto/disabled requests', () => {
+    const joinEventHandlers = [];
+    vi.spyOn(OnlineGameClient.prototype, 'joinLobby').mockImplementation(() => null);
+    vi.spyOn(OnlineGameClient.prototype, 'joinGameChannel').mockImplementation((_gameId, callbacks) => {
+        if (callbacks?.onEvent) {
+            joinEventHandlers.push(callbacks.onEvent);
+        }
+        return null;
+    });
+    const broadcastGameSpy = vi.spyOn(OnlineGameClient.prototype, 'broadcastGameEvent').mockImplementation(() => {});
+    const updatePolicySpy = vi.spyOn(OnlineGameClient.prototype, 'updateGameJoinPolicy').mockImplementation(() => {});
+
+    render(<App />);
+
+    // Defaults in Settings: Allow Joins ON, Auto-accept Joins OFF
+    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+    const allowGroup = screen.getByRole('radiogroup', { name: 'Allow Joins' });
+    const autoGroup = screen.getByRole('radiogroup', { name: 'Auto-accept Joins' });
+    expect(allowGroup.querySelector('input[value="true"]')).toBeChecked();
+    expect(autoGroup.querySelector('input[value="false"]')).toBeChecked();
+    expect(autoGroup.querySelector('input[value="true"]')).not.toBeDisabled();
+
+    // Start game as host (default policy: 'confirm')
+    fireEvent.click(screen.getByRole('tab', { name: 'Play' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    expect(joinEventHandlers.length).toBeGreaterThan(0);
+    const hostOnEvent = joinEventHandlers[joinEventHandlers.length - 1];
+
+    // 1. Confirm policy: incoming request prompts host -> Accept
+    act(() => {
+        hostOnEvent('join-request', { requestId: 'req-accept', requesterId: 'guest-1' });
+    });
+    expect(document.getElementById('join-request-banner')).toBeVisible();
+    expect(document.getElementById('join-request-title')).toHaveTextContent('Player wants to join');
+    fireEvent.click(document.getElementById('accept-join-btn'));
+    expect(document.getElementById('join-request-banner')).not.toBeInTheDocument();
+    expect(broadcastGameSpy).toHaveBeenCalledWith(expect.any(String), 'join-response', {
+        requestId: 'req-accept',
+        requesterId: 'guest-1',
+        accepted: true,
+        reason: undefined,
+    });
+
+    // 2. Confirm policy: incoming request -> Decline
+    broadcastGameSpy.mockClear();
+    act(() => {
+        hostOnEvent('join-request', { requestId: 'req-decline', requesterId: 'guest-2' });
+    });
+    expect(document.getElementById('join-request-banner')).toBeVisible();
+    fireEvent.click(document.getElementById('decline-join-btn'));
+    expect(document.getElementById('join-request-banner')).not.toBeInTheDocument();
+    expect(broadcastGameSpy).toHaveBeenCalledWith(expect.any(String), 'join-response', {
+        requestId: 'req-decline',
+        requesterId: 'guest-2',
+        accepted: false,
+        reason: 'declined',
+    });
+
+    // 3. Auto-accept ON: incoming request auto-approved without banner
+    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+    fireEvent.click(screen.getByRole('radiogroup', { name: 'Auto-accept Joins' }).querySelector('input[value="true"]'));
+    expect(localStorage.getItem('sudoku_joins_auto_accept')).toBe('true');
+    expect(updatePolicySpy).toHaveBeenCalledWith('auto');
+
+    broadcastGameSpy.mockClear();
+    act(() => {
+        hostOnEvent('join-request', { requestId: 'req-auto', requesterId: 'guest-3' });
+    });
+    expect(document.getElementById('join-request-banner')).not.toBeInTheDocument();
+    expect(broadcastGameSpy).toHaveBeenCalledWith(expect.any(String), 'join-response', {
+        requestId: 'req-auto',
+        requesterId: 'guest-3',
+        accepted: true,
+    });
+
+    // 4. Allow Joins OFF: Auto-accept inputs disabled and requests rejected with reason 'disabled'
+    fireEvent.click(screen.getByRole('radiogroup', { name: 'Allow Joins' }).querySelector('input[value="false"]'));
+    expect(localStorage.getItem('sudoku_joins_allowed')).toBe('false');
+    expect(updatePolicySpy).toHaveBeenCalledWith('disabled');
+    expect(screen.getByRole('radiogroup', { name: 'Auto-accept Joins' }).querySelector('input[value="true"]')).toBeDisabled();
+
+    broadcastGameSpy.mockClear();
+    act(() => {
+        hostOnEvent('join-request', { requestId: 'req-disabled', requesterId: 'guest-4' });
+    });
+    expect(document.getElementById('join-request-banner')).not.toBeInTheDocument();
+    expect(broadcastGameSpy).toHaveBeenCalledWith(expect.any(String), 'join-response', {
+        requestId: 'req-disabled',
+        requesterId: 'guest-4',
+        accepted: false,
+        reason: 'disabled',
+    });
+});
+
+it('handles requester join approval, decline, and cancel flow from Watch Directory', () => {
+    let lobbyCallbacks = null;
+    const gameJoinCalls = [];
+
+    vi.spyOn(OnlineGameClient.prototype, 'joinLobby').mockImplementation((callbacks) => {
+        lobbyCallbacks = callbacks;
+        return null;
+    });
+    vi.spyOn(OnlineGameClient.prototype, 'leaveLobby').mockImplementation(() => {});
+    vi.spyOn(OnlineGameClient.prototype, 'leaveGameChannel').mockImplementation(() => {});
+    vi.spyOn(OnlineGameClient.prototype, 'joinGameChannel').mockImplementation(function (gameId, callbacks) {
+        this.currentGameId = gameId;
+        this.gameChannel = { name: `sudoku:game.${gameId}` };
+        gameJoinCalls.push({ client: this, gameId, callbacks });
+        callbacks?.onSubscribed?.();
+        return this.gameChannel;
+    });
+    const broadcastGameSpy = vi.spyOn(OnlineGameClient.prototype, 'broadcastGameEvent').mockImplementation(() => {});
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Watch' }));
+
+    act(() => {
+        lobbyCallbacks?.onLobbyPresenceChange?.([
+            {
+                id: 'host-client-1',
+                game_id: 'roomjoin01',
+                status: 'in_progress',
+                game_mode: 'solo',
+                difficulty: 'medium',
+                variant: '3x3',
+                total_cells: 81,
+                filled_count: 35,
+                has_guest: false,
+                join_policy: 'confirm',
+            },
+        ]);
+    });
+
+    // Click Join -> sends join-request and displays pending banner
+    fireEvent.click(screen.getByRole('button', { name: 'Join' }));
+    expect(document.querySelector('.join-pending-banner')).toBeVisible();
+    const firstReqCall = broadcastGameSpy.mock.calls.find((c) => c[1] === 'join-request');
+    expect(firstReqCall).toBeTruthy();
+    const [, , firstReqPayload] = firstReqCall;
+
+    // Cancel pending request -> emits join-cancel and keeps user in Watch Directory
+    fireEvent.click(document.querySelector('.join-pending-banner__cancel-btn'));
+    expect(document.querySelector('.join-pending-banner')).not.toBeInTheDocument();
+    expect(broadcastGameSpy).toHaveBeenCalledWith('roomjoin01', 'join-cancel', {
+        requestId: firstReqPayload.requestId,
+        requesterId: firstReqPayload.requesterId,
+    });
+    expect(screen.getByRole('heading', { name: 'Live Sudoku Matches' })).toBeVisible();
+
+    // Repopulate lobby room after returning to Watch Directory
+    act(() => {
+        lobbyCallbacks?.onLobbyPresenceChange?.([
+            {
+                id: 'host-client-1',
+                game_id: 'roomjoin01',
+                status: 'in_progress',
+                game_mode: 'solo',
+                difficulty: 'medium',
+                variant: '3x3',
+                total_cells: 81,
+                filled_count: 35,
+                has_guest: false,
+                join_policy: 'confirm',
+            },
+        ]);
+    });
+
+    // Request again and receive host decline -> stays in Watch Directory with feedback
+    broadcastGameSpy.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Join' }));
+    const secondReqPayload = broadcastGameSpy.mock.calls.find((c) => c[1] === 'join-request')[2];
+    const secondJoinEntry = gameJoinCalls[gameJoinCalls.length - 1];
+    act(() => {
+        secondJoinEntry.callbacks.onEvent('join-response', {
+            requestId: secondReqPayload.requestId,
+            requesterId: secondReqPayload.requesterId,
+            accepted: false,
+            reason: 'declined',
+        });
+    });
+    expect(document.querySelector('.join-pending-banner')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Live Sudoku Matches' })).toBeVisible();
+
+    // Repopulate lobby room and request again -> host accepts -> enters Co-op Play as guest
+    act(() => {
+        lobbyCallbacks?.onLobbyPresenceChange?.([
+            {
+                id: 'host-client-1',
+                game_id: 'roomjoin01',
+                status: 'in_progress',
+                game_mode: 'solo',
+                difficulty: 'medium',
+                variant: '3x3',
+                total_cells: 81,
+                filled_count: 35,
+                has_guest: false,
+                join_policy: 'confirm',
+            },
+        ]);
+    });
+    broadcastGameSpy.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Join' }));
+    const thirdReqPayload = broadcastGameSpy.mock.calls.find((c) => c[1] === 'join-request')[2];
+    const thirdJoinEntry = gameJoinCalls[gameJoinCalls.length - 1];
+    act(() => {
+        thirdJoinEntry.callbacks.onEvent('join-response', {
+            requestId: thirdReqPayload.requestId,
+            requesterId: thirdReqPayload.requesterId,
+            accepted: true,
+        });
+    });
+
+    expect(screen.getByRole('grid')).toBeVisible();
+    expect(gameJoinCalls[gameJoinCalls.length - 1].callbacks.role).toBe('guest');
+    expect(document.getElementById('game-status-text')).toHaveTextContent(/Co-op/i);
+});
+
+it('shows Spectating Live Match — Read-only board only when host allows joins', () => {
+    let lobbyCallbacks = null;
+    let spectateCallbacks = null;
+
+    vi.spyOn(OnlineGameClient.prototype, 'joinLobby').mockImplementation((callbacks) => {
+        lobbyCallbacks = callbacks;
+        return null;
+    });
+    vi.spyOn(OnlineGameClient.prototype, 'leaveLobby').mockImplementation(() => {});
+    vi.spyOn(OnlineGameClient.prototype, 'joinGameChannel').mockImplementation((_gameId, callbacks) => {
+        spectateCallbacks = callbacks;
+        return null;
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Watch' }));
+
+    act(() => {
+        lobbyCallbacks?.onLobbyPresenceChange?.([
+            {
+                id: 'host-client-1',
+                game_id: 'roomclosed1',
+                status: 'in_progress',
+                game_mode: 'solo',
+                difficulty: 'medium',
+                variant: '3x3',
+                total_cells: 81,
+                filled_count: 20,
+                has_guest: false,
+                join_policy: 'disabled',
+            },
+        ]);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Watch Live' }));
+    expect(document.getElementById('spectator-bar')).toBeVisible();
+    expect(document.getElementById('exit-watch-btn')).toBeVisible();
+    expect(screen.queryByText(/Spectating Live Match/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Read-only board/i)).not.toBeInTheDocument();
+
+    // When host enables joins live, the notice appears
+    act(() => {
+        spectateCallbacks?.onEvent?.('join-policy', { joinPolicy: 'confirm' });
+    });
+    expect(screen.getByText(/Spectating Live Match/i)).toBeVisible();
+    expect(screen.getByText(/Read-only board/i)).toBeVisible();
+
+    // When host disables joins live again, the notice hides while Back to Lobby stays visible
+    act(() => {
+        spectateCallbacks?.onEvent?.('join-policy', { joinPolicy: 'disabled' });
+    });
+    expect(screen.queryByText(/Spectating Live Match/i)).not.toBeInTheDocument();
+    expect(document.getElementById('exit-watch-btn')).toBeVisible();
+});
+
+it('first Hint click highlights the logically deduced cell without filling it, and second click solves it', () => {
+    vi.useFakeTimers();
+
+    const solution2x3 = [
+        1, 2, 3, 4, 5, 6,
+        4, 5, 6, 1, 2, 3,
+        2, 3, 1, 6, 4, 5,
+        5, 6, 4, 2, 3, 1,
+        3, 1, 2, 5, 6, 4,
+        6, 4, 5, 3, 1, 2,
+    ];
+    const puzzle2x3 = [...solution2x3];
+    // Clear idx 0 (unique Full House in col 0), plus 2x2 blocks in box 0 (1,2,7,8) and cols 4-5 (22,23,28,29)
+    // so every other open box/row/column has >=2 empties.
+    puzzle2x3[0] = 0; // R1C1 = 1 (only empty cell in column 0)
+    puzzle2x3[1] = 0;
+    puzzle2x3[2] = 0;
+    puzzle2x3[7] = 0;
+    puzzle2x3[8] = 0;
+    puzzle2x3[13] = 0; // filled below as saved user progress
+    puzzle2x3[22] = 0;
+    puzzle2x3[23] = 0;
+    puzzle2x3[28] = 0;
+    puzzle2x3[29] = 0;
+
+    let savedState = createSudokuGame({
+        difficulty: 'medium',
+        variant: '2x3',
+        puzzle: puzzle2x3,
+        solution: solution2x3,
+    });
+    savedState = setCellValue(savedState, 13, 3);
+    saveSoloGameSnapshot(savedState, 'roomhint1');
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Resume Current Game' }));
+
+    // Select a different empty cell (R4C5 idx 22) to prove Hint prioritizes logical Full House at R1C1 (idx 0)
+    const initialCells = screen.getAllByRole('gridcell');
+    fireEvent.click(initialCells[22]);
+
+    const hintBtn = screen.getByRole('button', { name: 'Hint' });
+
+    // 1st click: only highlights target & explaining context cells, selects R1C1, does NOT fill yet
+    fireEvent.click(hintBtn);
+    const previewCells = screen.getAllByRole('gridcell');
+    expect(previewCells[0]).toHaveTextContent('');
+    expect(previewCells[0]).toHaveAttribute('aria-selected', 'true');
+    expect(previewCells[0]).toHaveClass('sudoku-cell--hint-target', 'sudoku-cell--hint-preview');
+    expect(previewCells[6]).toHaveClass('sudoku-cell--hint-context', 'sudoku-cell--hint-preview');
+    expect(previewCells[30]).toHaveClass('sudoku-cell--hint-context', 'sudoku-cell--hint-preview');
+    expect(hintBtn).toHaveClass('tool-btn--hint-armed');
+    expect(document.getElementById('action-feedback')).toHaveTextContent('Hint: Check R1 C1 (last empty cell in column). Tap Hint again to fill.');
+
+    // Preview highlight persists past 2200ms while player thinks
+    act(() => {
+        vi.advanceTimersByTime(2200);
+    });
+    expect(screen.getAllByRole('gridcell')[0]).toHaveClass('sudoku-cell--hint-target', 'sudoku-cell--hint-preview');
+
+    // 2nd click: fills the highlighted cell, shows full explanation, and disarms button
+    fireEvent.click(hintBtn);
+    const afterCells = screen.getAllByRole('gridcell');
+    expect(afterCells[0]).toHaveTextContent('1');
+    expect(afterCells[0]).toHaveClass('sudoku-cell--hint-target');
+    expect(afterCells[0]).not.toHaveClass('sudoku-cell--hint-preview');
+    expect(afterCells[22]).toHaveTextContent('');
+    expect(hintBtn).not.toHaveClass('tool-btn--hint-armed');
+    expect(document.getElementById('action-feedback')).toHaveTextContent('Hint: R1 C1 = 1 (last empty cell in column).');
+
+    // Solve highlights clear automatically after animation duration
+    act(() => {
+        vi.advanceTimersByTime(2200);
+    });
+    const clearedCells = screen.getAllByRole('gridcell');
+    expect(clearedCells[0]).not.toHaveClass('sudoku-cell--hint-target');
+    expect(clearedCells[6]).not.toHaveClass('sudoku-cell--hint-context');
+
+    // Another 1st Hint click previews next logical deduction; solving it manually clears the preview cleanly
+    fireEvent.click(hintBtn);
+    expect(hintBtn).toHaveClass('tool-btn--hint-armed');
+    const targetCell = screen.getAllByRole('gridcell').find((cell) => cell.classList.contains('sudoku-cell--hint-target'));
+    expect(targetCell).toBeTruthy();
+    const targetIdx = Number(targetCell.dataset.index);
+    const expectedDigit = String(solution2x3[targetIdx]);
+    fireEvent.click(document.querySelector(`.numpad-btn[data-digit="${expectedDigit}"]`));
+    expect(hintBtn).not.toHaveClass('tool-btn--hint-armed');
+    expect(screen.getAllByRole('gridcell')[targetIdx]).toHaveTextContent(expectedDigit);
+    expect(screen.getAllByRole('gridcell')[targetIdx]).not.toHaveClass('sudoku-cell--hint-preview');
+});
+
+it('broadcasts cursor, activeDigit lock, Escape clear, and hint-highlight events in Solo mode for watchers', () => {
+    vi.useFakeTimers();
+
+    const broadcastGameSpy = vi.spyOn(OnlineGameClient.prototype, 'broadcastGameEvent').mockImplementation(() => {});
+    const sendPingSpy = vi.spyOn(OnlineGameClient.prototype, 'sendGamePing').mockImplementation(() => {});
+    vi.spyOn(OnlineGameClient.prototype, 'joinLobby').mockImplementation(() => null);
+    vi.spyOn(OnlineGameClient.prototype, 'joinGameChannel').mockImplementation(function (gameId) {
+        this.currentGameId = gameId;
+        this.gameChannel = { name: `sudoku:game.${gameId}` };
+        return this.gameChannel;
+    });
+
+    const solution2x3 = [
+        1, 2, 3, 4, 5, 6,
+        4, 5, 6, 1, 2, 3,
+        2, 3, 1, 6, 4, 5,
+        5, 6, 4, 2, 3, 1,
+        3, 1, 2, 5, 6, 4,
+        6, 4, 5, 3, 1, 2,
+    ];
+    const puzzle2x3 = [...solution2x3];
+    puzzle2x3[0] = 0; // R1C1 = 1 (Full House in col 0)
+    puzzle2x3[1] = 0;
+    puzzle2x3[2] = 0;
+    puzzle2x3[7] = 0;
+    puzzle2x3[8] = 0;
+    puzzle2x3[13] = 0; // saved user move below
+    puzzle2x3[22] = 0;
+    puzzle2x3[23] = 0;
+    puzzle2x3[28] = 0;
+    puzzle2x3[29] = 0;
+
+    let savedState = createSudokuGame({
+        difficulty: 'medium',
+        variant: '2x3',
+        puzzle: puzzle2x3,
+        solution: solution2x3,
+    });
+    savedState = setCellValue(savedState, 13, 3);
+    saveSoloGameSnapshot(savedState, 'roomsolowatch1');
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Resume Current Game' }));
+
+    // Initial resume focuses and broadcasts cell 0
+    expect(broadcastGameSpy).toHaveBeenCalledWith('roomsolowatch1', 'cursor', expect.objectContaining({
+        role: 'host',
+        index: 0,
+    }));
+
+    broadcastGameSpy.mockClear();
+    const cells = screen.getAllByRole('gridcell');
+    fireEvent.click(cells[3]); // given cell 3
+    expect(broadcastGameSpy).toHaveBeenCalledWith('roomsolowatch1', 'cursor', expect.objectContaining({
+        role: 'host',
+        index: 3,
+    }));
+
+    // Arrow key navigation broadcasts updated cell
+    fireEvent.keyDown(document, { key: 'ArrowRight' });
+    expect(broadcastGameSpy).toHaveBeenCalledWith('roomsolowatch1', 'cursor', expect.objectContaining({
+        role: 'host',
+        index: 4,
+    }));
+
+    // Escape clears remote cursor and active digit
+    broadcastGameSpy.mockClear();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(broadcastGameSpy).toHaveBeenCalledWith('roomsolowatch1', 'cursor', expect.objectContaining({
+        role: 'host',
+        index: null,
+    }));
+    expect(broadcastGameSpy).toHaveBeenCalledWith('roomsolowatch1', 'active-digit', expect.objectContaining({
+        role: 'host',
+        digit: null,
+    }));
+
+    // Locking digit 2 broadcasts active-digit
+    broadcastGameSpy.mockClear();
+    fireEvent.click(document.querySelector('.numpad-btn[data-digit="2"]'));
+    expect(broadcastGameSpy).toHaveBeenCalledWith('roomsolowatch1', 'active-digit', expect.objectContaining({
+        role: 'host',
+        digit: 2,
+    }));
+
+    // 1st Hint click broadcasts cursor + hint-highlight preview, and 5s ping includes both
+    broadcastGameSpy.mockClear();
+    const hintBtn = screen.getByRole('button', { name: 'Hint' });
+    fireEvent.click(hintBtn);
+    expect(broadcastGameSpy).toHaveBeenCalledWith('roomsolowatch1', 'cursor', expect.objectContaining({
+        role: 'host',
+        index: 0,
+    }));
+    expect(broadcastGameSpy).toHaveBeenCalledWith('roomsolowatch1', 'hint-highlight', expect.objectContaining({
+        role: 'host',
+        mode: 'preview',
+        index: 0,
+    }));
+
+    act(() => {
+        vi.advanceTimersByTime(5100);
+    });
+    expect(sendPingSpy).toHaveBeenCalledWith(expect.objectContaining({
+        hostCursorIndex: 0,
+        hostActiveDigit: 2,
+        hintPreview: expect.objectContaining({ mode: 'preview', index: 0 }),
+    }));
+
+    // 2nd Hint click broadcasts hint-highlight solve and cell-update
+    broadcastGameSpy.mockClear();
+    fireEvent.click(hintBtn);
+    expect(broadcastGameSpy).toHaveBeenCalledWith('roomsolowatch1', 'hint-highlight', expect.objectContaining({
+        role: 'host',
+        mode: 'solve',
+        index: 0,
+    }));
+    expect(broadcastGameSpy).toHaveBeenCalledWith('roomsolowatch1', 'cell-update', expect.objectContaining({
+        index: 0,
+        value: 1,
+    }));
+});
+
+it('renders host/partner cursors, locked digit highlights, hint previews/solves, and cell updates live in Watch mode', () => {
+    let spectateCallbacks = null;
+    vi.spyOn(OnlineGameClient.prototype, 'joinLobby').mockImplementation(() => null);
+    vi.spyOn(OnlineGameClient.prototype, 'joinGameChannel').mockImplementation((_gameId, callbacks) => {
+        spectateCallbacks = callbacks;
+        return null;
+    });
+
+    window.history.replaceState({}, '', '/games/roomwatchlive?watch=1');
+    render(<App />);
+
+    const solution2x3 = [
+        1, 2, 3, 4, 5, 6,
+        4, 5, 6, 1, 2, 3,
+        2, 3, 1, 6, 4, 5,
+        5, 6, 4, 2, 3, 1,
+        3, 1, 2, 5, 6, 4,
+        6, 4, 5, 3, 1, 2,
+    ];
+    const puzzle2x3 = [...solution2x3];
+    puzzle2x3[0] = 0; // empty target
+    puzzle2x3[1] = 0; // empty host cursor target
+    puzzle2x3[2] = 0; // empty guest cursor target
+    const remoteState = createSudokuGame({
+        difficulty: 'easy',
+        variant: '2x3',
+        puzzle: puzzle2x3,
+        solution: solution2x3,
+    });
+
+    // Initial sync with hostCursorIndex = 3 (given 4)
+    act(() => {
+        spectateCallbacks?.onEvent?.('sync', {
+            gameState: serializeGameState(remoteState),
+            rematchRequestedBy: null,
+            hints: [],
+            hostCursorIndex: 3,
+            hostActiveDigit: null,
+            hintPreview: null,
+        });
+    });
+
+    let cells = screen.getAllByRole('gridcell');
+    expect(cells).toHaveLength(36);
+    expect(cells[3]).toHaveClass('sudoku-cell--player-cursor');
+    expect(cells[3].querySelector('.sudoku-cell__player-pip')).not.toBeNull();
+    expect(cells[4]).toHaveClass('sudoku-cell--peer');
+    // Same-digit highlighting mirrors host's focused digit (4)
+    expect(cells.filter((c) => c.classList.contains('sudoku-cell--same-digit'))).toHaveLength(5);
+
+    // Live cursor moves from host and co-op partner
+    act(() => {
+        spectateCallbacks?.onEvent?.('cursor', { senderId: 'host-1', role: 'host', index: 1 });
+        spectateCallbacks?.onEvent?.('cursor', { senderId: 'guest-1', role: 'guest', index: 2 });
+    });
+    cells = screen.getAllByRole('gridcell');
+    expect(cells[3]).not.toHaveClass('sudoku-cell--player-cursor');
+    expect(cells[1]).toHaveClass('sudoku-cell--player-cursor');
+    expect(cells[2]).toHaveClass('sudoku-cell--partner-cursor');
+    expect(cells[2].querySelector('.sudoku-cell__partner-pip')).not.toBeNull();
+
+    // Host locks digit 5 -> watcher sees all 5s highlighted even when host cursor is on empty cell 1
+    act(() => {
+        spectateCallbacks?.onEvent?.('active-digit', { senderId: 'host-1', role: 'host', digit: 5 });
+    });
+    cells = screen.getAllByRole('gridcell');
+    expect(cells.filter((c) => c.classList.contains('sudoku-cell--same-digit'))).toHaveLength(6);
+
+    // Host previews logical hint on cell 0 -> watcher sees preview highlight on target and context
+    act(() => {
+        spectateCallbacks?.onEvent?.('hint-highlight', {
+            senderId: 'host-1',
+            role: 'host',
+            mode: 'preview',
+            index: 0,
+            contextEntries: [[0, 0], [6, 30]],
+        });
+    });
+    cells = screen.getAllByRole('gridcell');
+    expect(cells[0]).toHaveClass('sudoku-cell--hint-target', 'sudoku-cell--hint-preview');
+    expect(cells[6]).toHaveClass('sudoku-cell--hint-context', 'sudoku-cell--hint-preview');
+
+    // Host confirms hint -> watcher receives cell value and solve highlight
+    act(() => {
+        spectateCallbacks?.onEvent?.('cell-update', { index: 0, value: 1, notes: [], owner: 'host' });
+        spectateCallbacks?.onEvent?.('hint-highlight', {
+            senderId: 'host-1',
+            role: 'host',
+            mode: 'solve',
+            index: 0,
+            contextEntries: [[0, 0], [6, 30]],
+        });
+    });
+    cells = screen.getAllByRole('gridcell');
+    expect(cells[0]).toHaveTextContent('1');
+    expect(cells[0]).toHaveClass('sudoku-cell--hint-target');
+    expect(cells[0]).not.toHaveClass('sudoku-cell--hint-preview');
+});
+
+it('allows 3+ players to join the same match, queues simultaneous requests, and shows multiple guest cursors', () => {
+    let hostCallbacks = null;
+    vi.spyOn(OnlineGameClient.prototype, 'joinLobby').mockImplementation(() => null);
+    vi.spyOn(OnlineGameClient.prototype, 'joinGameChannel').mockImplementation((_gameId, callbacks) => {
+        hostCallbacks = callbacks;
+        return null;
+    });
+    const broadcastGameSpy = vi.spyOn(OnlineGameClient.prototype, 'broadcastGameEvent').mockImplementation(() => {});
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+
+    // Guest 1 already joined the match
+    act(() => {
+        hostCallbacks?.onMemberJoin?.({ id: 'guest-1', role: 'guest' });
+    });
+
+    // Two more players request to join while guest-1 is active
+    broadcastGameSpy.mockClear();
+    act(() => {
+        hostCallbacks?.onEvent?.('join-request', { requestId: 'req-g2', requesterId: 'guest-2' });
+        hostCallbacks?.onEvent?.('join-request', { requestId: 'req-g3', requesterId: 'guest-3' });
+    });
+    expect(document.getElementById('join-request-banner')).toBeVisible();
+
+    // Host approves guest-2 -> banner immediately advances to queued guest-3
+    fireEvent.click(document.getElementById('accept-join-btn'));
+    expect(broadcastGameSpy).toHaveBeenCalledWith(expect.any(String), 'join-response', {
+        requestId: 'req-g2',
+        requesterId: 'guest-2',
+        accepted: true,
+        reason: undefined,
+    });
+    expect(document.getElementById('join-request-banner')).toBeVisible();
+
+    // Host approves guest-3 -> queue is now empty and banner closes
+    fireEvent.click(document.getElementById('accept-join-btn'));
+    expect(broadcastGameSpy).toHaveBeenCalledWith(expect.any(String), 'join-response', {
+        requestId: 'req-g3',
+        requesterId: 'guest-3',
+        accepted: true,
+        reason: undefined,
+    });
+    expect(document.getElementById('join-request-banner')).not.toBeInTheDocument();
+
+    // Multiple guests move their cursors simultaneously
+    act(() => {
+        hostCallbacks?.onEvent?.('cursor', { senderId: 'guest-1', role: 'guest', index: 1 });
+        hostCallbacks?.onEvent?.('cursor', { senderId: 'guest-2', role: 'guest', index: 4 });
+    });
+    let cells = screen.getAllByRole('gridcell');
+    expect(cells[1]).toHaveClass('sudoku-cell--partner-cursor');
+    expect(cells[4]).toHaveClass('sudoku-cell--partner-cursor');
+
+    // Leaving guest-1 removes only guest-1's cursor while keeping guest-2's cursor
+    act(() => {
+        hostCallbacks?.onMemberLeave?.({ id: 'guest-1', role: 'guest' });
+    });
+    cells = screen.getAllByRole('gridcell');
+    expect(cells[1]).not.toHaveClass('sudoku-cell--partner-cursor');
+    expect(cells[4]).toHaveClass('sudoku-cell--partner-cursor');
+});
+
+it('lets a 3rd player join an active co-op game without spectator downgrade and keeps Join Game visible while watching', () => {
+    let lobbyCallbacks = null;
+    const joinCalls = [];
+
+    vi.spyOn(OnlineGameClient.prototype, 'joinLobby').mockImplementation((callbacks) => {
+        lobbyCallbacks = callbacks;
+        return null;
+    });
+    vi.spyOn(OnlineGameClient.prototype, 'leaveLobby').mockImplementation(() => {});
+    vi.spyOn(OnlineGameClient.prototype, 'getGameMembers').mockImplementation(function () {
+        const last = joinCalls[joinCalls.length - 1];
+        return [
+            { id: 'host-client-1', role: 'host', game_mode: 'online', join_policy: 'auto' },
+            { id: 'guest-existing-1', role: 'guest', game_mode: 'online' },
+            ...(last?.callbacks?.role === 'guest' ? [{ id: this.clientId, role: 'guest', game_mode: 'online' }] : []),
+        ];
+    });
+    vi.spyOn(OnlineGameClient.prototype, 'joinGameChannel').mockImplementation(function (gameId, callbacks) {
+        this.currentGameId = gameId;
+        this.gameChannel = { name: `sudoku:game.${gameId}` };
+        joinCalls.push({ client: this, gameId, callbacks });
+        callbacks?.onSubscribed?.();
+        callbacks?.onPresenceChange?.([
+            { id: 'host-client-1', role: 'host', game_mode: 'online', join_policy: 'auto' },
+            { id: 'guest-existing-1', role: 'guest', game_mode: 'online' },
+            ...(callbacks?.role === 'guest' ? [{ id: this.clientId, role: 'guest', game_mode: 'online' }] : []),
+        ]);
+        return this.gameChannel;
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Watch' }));
+
+    act(() => {
+        lobbyCallbacks?.onLobbyPresenceChange?.([
+            {
+                id: 'host-client-1',
+                game_id: 'coopmulti1',
+                status: 'in_progress',
+                game_mode: 'online',
+                difficulty: 'medium',
+                variant: '3x3',
+                total_cells: 81,
+                filled_count: 35,
+                has_guest: true,
+                join_policy: 'confirm',
+            },
+        ]);
+    });
+
+    // Spectating a room that already has a guest still offers Join Game when policy !== disabled
+    fireEvent.click(screen.getByRole('button', { name: 'Watch Live' }));
+    expect(document.getElementById('join-from-watch-btn')).toBeVisible();
+
+    // Return to lobby and join a co-op room with auto-accept while another guest is already in it
+    fireEvent.click(document.getElementById('exit-watch-btn'));
+    act(() => {
+        lobbyCallbacks?.onLobbyPresenceChange?.([
+            {
+                id: 'host-client-1',
+                game_id: 'coopmulti2',
+                status: 'in_progress',
+                game_mode: 'online',
+                difficulty: 'medium',
+                variant: '3x3',
+                total_cells: 81,
+                filled_count: 35,
+                has_guest: true,
+                join_policy: 'auto',
+            },
+        ]);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Join' }));
+    expect(joinCalls[joinCalls.length - 1].callbacks.role).toBe('guest');
+    expect(screen.getByRole('grid')).toBeVisible();
+    expect(document.getElementById('game-status-text')).toHaveTextContent(/Co-op/i);
+    expect(screen.getByText('2 Partners online')).toBeVisible();
+    expect(document.getElementById('spectator-bar')).not.toBeInTheDocument();
+});
+
+
+
+

@@ -20,6 +20,11 @@ import {
     loadSoloGameSnapshot,
     saveSoloGameSnapshot,
 } from '../src/services/online-state-storage.js';
+import {
+    loadJoinsAllowed,
+    loadJoinsAutoAccept,
+    resolveJoinPolicy,
+} from '../src/services/join-settings.js';
 
 const SAMPLE_SOLUTION = [
     5, 3, 4, 6, 7, 8, 9, 1, 2,
@@ -72,9 +77,17 @@ describe('UI/UX components & Solo persistence', () => {
         expect(onSelectMode).toHaveBeenCalledWith('watch');
     });
 
-    it('emits theme, language, music, sound, volume, and guide callbacks in SettingsPanel', () => {
+    it('emits theme, language, join rules, music, sound, volume, and guide callbacks in SettingsPanel', () => {
+        expect(loadJoinsAllowed()).toBe(true);
+        expect(loadJoinsAutoAccept()).toBe(false);
+        expect(resolveJoinPolicy(true, false)).toBe('confirm');
+        expect(resolveJoinPolicy(true, true)).toBe('auto');
+        expect(resolveJoinPolicy(false, true)).toBe('disabled');
+
         const onChangeTheme = vi.fn();
         const onChangeLanguage = vi.fn();
+        const onChangeJoinsAllowed = vi.fn();
+        const onChangeJoinsAutoAccept = vi.fn();
         const onChangeMusicEnabled = vi.fn();
         const onChangeMusicVolume = vi.fn();
         const onChangeSoundEnabled = vi.fn();
@@ -84,12 +97,16 @@ describe('UI/UX components & Solo persistence', () => {
             <SettingsPanel
                 theme="dark"
                 language="en"
+                joinsAllowed
+                joinsAutoAccept={false}
                 musicEnabled
                 musicVolume={0.45}
                 soundEnabled
                 soundVolume={0.65}
                 onChangeTheme={onChangeTheme}
                 onChangeLanguage={onChangeLanguage}
+                onChangeJoinsAllowed={onChangeJoinsAllowed}
+                onChangeJoinsAutoAccept={onChangeJoinsAutoAccept}
                 onChangeMusicEnabled={onChangeMusicEnabled}
                 onChangeMusicVolume={onChangeMusicVolume}
                 onChangeSoundEnabled={onChangeSoundEnabled}
@@ -103,6 +120,16 @@ describe('UI/UX components & Solo persistence', () => {
 
         fireEvent.click(screen.getByRole('radio', { name: 'Deutsch' }));
         expect(onChangeLanguage).toHaveBeenCalledWith('de');
+
+        const joinsAllowedGroup = screen.getByRole('radiogroup', { name: 'Allow Joins' });
+        expect(joinsAllowedGroup.querySelector('input[value="true"]')).toBeChecked();
+        fireEvent.click(joinsAllowedGroup.querySelector('input[value="false"]'));
+        expect(onChangeJoinsAllowed).toHaveBeenCalledWith(false);
+
+        const joinsAutoGroup = screen.getByRole('radiogroup', { name: 'Auto-accept Joins' });
+        expect(joinsAutoGroup.querySelector('input[value="false"]')).toBeChecked();
+        fireEvent.click(joinsAutoGroup.querySelector('input[value="true"]'));
+        expect(onChangeJoinsAutoAccept).toHaveBeenCalledWith(true);
 
         const musicGroup = screen.getByRole('radiogroup', { name: 'Background Music' });
         fireEvent.click(musicGroup.querySelector('input[value="false"]'));
@@ -128,12 +155,16 @@ describe('UI/UX components & Solo persistence', () => {
             <SettingsPanel
                 theme="dark"
                 language="en"
+                joinsAllowed={false}
+                joinsAutoAccept={false}
                 musicEnabled={false}
                 musicVolume={0.8}
                 soundEnabled={false}
                 soundVolume={0.3}
                 onChangeTheme={onChangeTheme}
                 onChangeLanguage={onChangeLanguage}
+                onChangeJoinsAllowed={onChangeJoinsAllowed}
+                onChangeJoinsAutoAccept={onChangeJoinsAutoAccept}
                 onChangeMusicEnabled={onChangeMusicEnabled}
                 onChangeMusicVolume={onChangeMusicVolume}
                 onChangeSoundEnabled={onChangeSoundEnabled}
@@ -141,6 +172,9 @@ describe('UI/UX components & Solo persistence', () => {
                 onOpenGuide={onOpenGuide}
             />,
         );
+        const disabledAutoGroup = screen.getByRole('radiogroup', { name: 'Auto-accept Joins' });
+        expect(disabledAutoGroup.querySelector('input[value="true"]')).toBeDisabled();
+        expect(disabledAutoGroup.querySelector('input[value="false"]')).toBeDisabled();
         expect(screen.getByRole('slider', { name: 'Volume: Background Music' })).toBeDisabled();
         expect(screen.getByRole('slider', { name: 'Volume: Sound Effects' })).toBeDisabled();
         expect(screen.getByText('80%')).toBeInTheDocument();
@@ -226,6 +260,57 @@ describe('UI/UX components & Solo persistence', () => {
         const retryBtn = screen.getByRole('button', { name: 'Reconnect' });
         fireEvent.click(retryBtn);
         expect(onReconnect).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows plural partner counts in StatusBanner when 3+ players are in Co-op', () => {
+        const puzzle = [...SAMPLE_2X3_SOLUTION];
+        puzzle[0] = 0;
+        const gameState = createSudokuGame({
+            difficulty: 'medium',
+            variant: '2x3',
+            puzzle,
+            solution: SAMPLE_2X3_SOLUTION,
+        });
+
+        const { rerender } = render(
+            <StatusBanner
+                connectionStatus="connected"
+                mode="online"
+                isSpectating={false}
+                myRole="guest"
+                myClientId="g1"
+                currentMembers={[
+                    { id: 'h1', role: 'host' },
+                    { id: 'g1', role: 'guest' },
+                    { id: 'g2', role: 'guest' },
+                ]}
+                spectatedGameMode={null}
+                gameState={gameState}
+                onReconnect={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByText('2 Partners online')).toBeInTheDocument();
+
+        rerender(
+            <StatusBanner
+                connectionStatus="connected"
+                mode="watch"
+                isSpectating
+                myRole="spectator"
+                myClientId="s1"
+                currentMembers={[
+                    { id: 'h1', role: 'host' },
+                    { id: 'g1', role: 'guest' },
+                    { id: 'g2', role: 'guest' },
+                ]}
+                spectatedGameMode="online"
+                gameState={gameState}
+                onReconnect={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByText('Host: Online | Partners: 2 Online')).toBeInTheDocument();
     });
 
     it('disables completed digits outside notes mode and renders 6 digits for 2x3 in PlayerControls', () => {

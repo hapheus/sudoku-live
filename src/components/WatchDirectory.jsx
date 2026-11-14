@@ -10,6 +10,8 @@ export function WatchDirectory({
     onRefresh,
     onWatchGame,
     onJoinGame = null,
+    pendingJoinGameId = null,
+    onCancelJoinRequest = null,
     messages = enMessages,
 }) {
     const difficultyLabels = {
@@ -69,6 +71,22 @@ export function WatchDirectory({
                     </button>
                 </div>
             </div>
+            {pendingJoinGameId && (
+                <div className="join-pending-banner" role="status">
+                    <span className="join-pending-banner__text">
+                        {messages.joinPendingLabel || 'Waiting for host approval...'}
+                    </span>
+                    {onCancelJoinRequest && (
+                        <button
+                            type="button"
+                            className="join-pending-banner__cancel-btn"
+                            onClick={onCancelJoinRequest}
+                        >
+                            {messages.cancelJoinRequest || 'Cancel'}
+                        </button>
+                    )}
+                </div>
+            )}
             <div id="live-games-list" className="live-games-list" role="feed">
                 {liveGames.length === 0 ? (
                     <div className="watch-empty">
@@ -92,7 +110,25 @@ export function WatchDirectory({
                         );
                         const diffLabel = difficultyLabels[game.difficulty] || messages.diffMedium;
                         const hasGuest = Boolean(game.has_guest);
-                        const statusLabel = hasGuest ? messages.watchCoop : messages.watchOpen;
+                        const joinPolicy = game.join_policy || 'auto';
+                        const joinsDisabled = joinPolicy === 'disabled';
+                        const isPendingJoin = pendingJoinGameId === game.game_id;
+
+                        let statusLabel = messages.watchOpen;
+                        if (hasGuest) {
+                            statusLabel = messages.watchCoop;
+                        } else if (joinPolicy === 'disabled') {
+                            statusLabel = messages.watchJoinsClosed || 'Watching only';
+                        } else if (joinPolicy === 'confirm') {
+                            statusLabel = messages.watchOpenConfirm || 'Approval needed';
+                        }
+
+                        let joinBtnLabel = messages.watchJoin;
+                        if (joinsDisabled) {
+                            joinBtnLabel = messages.watchJoinsDisabled || 'Closed';
+                        } else if (isPendingJoin) {
+                            joinBtnLabel = messages.watchJoinPending || 'Waiting...';
+                        }
 
                         return (
                             <div key={game.game_id} className="live-game-card">
@@ -110,10 +146,10 @@ export function WatchDirectory({
                                             type="button"
                                             className="live-game-card__join-btn"
                                             data-join-id={game.game_id}
-                                            disabled={hasGuest}
+                                            disabled={joinsDisabled || Boolean(pendingJoinGameId)}
                                             onClick={() => onJoinGame(game.game_id)}
                                         >
-                                            {hasGuest ? messages.watchFull : messages.watchJoin}
+                                            {joinBtnLabel}
                                         </button>
                                     )}
                                     <button

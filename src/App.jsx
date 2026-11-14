@@ -11,15 +11,24 @@ import {
     createSudokuGame,
     detectNewlyCompletedUnits,
     fillCandidateNotes,
+    findLogicalHint,
     hydrateGameState,
     serializeGameState,
     setCellValue,
     toggleCellNote,
     undoLastMove,
 } from './domain/sudoku-engine.js';
-import { generateGameId, isValidGameId, OnlineGameClient } from './services/online-game-client.js';
+import { generateEventId, generateGameId, isValidGameId, OnlineGameClient } from './services/online-game-client.js';
 import { createBackgroundMusicPlayer, loadMusicEnabled, loadMusicVolume } from './services/background-music.js';
 import { createSoundEffectsPlayer, loadSoundEnabled, loadSoundVolume } from './services/sound-effects.js';
+import {
+    loadJoinsAllowed,
+    loadJoinsAutoAccept,
+    normalizeJoinPolicy,
+    resolveJoinPolicy,
+    saveJoinsAllowed,
+    saveJoinsAutoAccept,
+} from './services/join-settings.js';
 import {
     loadOnlineGameSnapshot,
     loadParticipantSession,
@@ -104,6 +113,9 @@ export function App() {
     const [language, setLanguage] = useState(() => (
         localStorage.getItem('sudoku_lang') === 'de' ? 'de' : 'en'
     ));
+    const [joinsAllowed, setJoinsAllowed] = useState(() => loadJoinsAllowed());
+    const [joinsAutoAccept, setJoinsAutoAccept] = useState(() => loadJoinsAutoAccept());
+    const joinPolicy = useMemo(() => resolveJoinPolicy(joinsAllowed, joinsAutoAccept), [joinsAllowed, joinsAutoAccept]);
     const [musicEnabled, setMusicEnabled] = useState(() => loadMusicEnabled());
     const [musicVolume, setMusicVolume] = useState(() => loadMusicVolume());
     const [soundEnabled, setSoundEnabled] = useState(() => loadSoundEnabled());
@@ -117,13 +129,16 @@ export function App() {
     const [onlineGameId, setOnlineGameId] = useState(initialRoute.initialGameId);
     const [myRole, setMyRole] = useState(null);
     const [spectatedGameMode, setSpectatedGameMode] = useState(null);
+    const [hostJoinPolicy, setHostJoinPolicy] = useState('confirm');
     const [gameState, setGameState] = useState(() => createSudokuGame({
         difficulty: localStorage.getItem('sudoku_difficulty') || 'medium',
         variant: normalizeVariant(localStorage.getItem('sudoku_variant') || '3x3'),
     }));
     const [selectedIndex, setSelectedIndex] = useState(null);
     const [activeDigit, setActiveDigit] = useState(null);
-    const [partnerCursorIndex, setPartnerCursorIndex] = useState(null);
+    const [hostCursorIndex, setHostCursorIndex] = useState(null);
+    const [guestCursors, setGuestCursors] = useState(() => new Map());
+    const [remoteActiveDigit, setRemoteActiveDigit] = useState(null);
     const [notesMode, setNotesMode] = useState(false);
     const [rematchRequestedBy, setRematchRequestedBy] = useState(null);
     const [currentMembers, setCurrentMembers] = useState([]);
@@ -133,14 +148,21 @@ export function App() {
     const [actionFeedback, setActionFeedback] = useState('');
     const [isHelpOpen, setIsHelpOpen] = useState(false);
     const [pendingConfirm, setPendingConfirm] = useState(null);
+    const [incomingJoinRequests, setIncomingJoinRequests] = useState([]);
+    const incomingJoinRequest = incomingJoinRequests[0] || null;
+    const [pendingJoinRequest, setPendingJoinRequest] = useState(null);
     const [hintsMap, setHintsMap] = useState(() => new Map());
     const [floatingReactions, setFloatingReactions] = useState([]);
     const [unitCelebration, setUnitCelebration] = useState(() => ({ id: 0, cellDelays: new Map() }));
+    const [hintHighlight, setHintHighlight] = useState(() => ({ id: 0, mode: 'solve', targetIndex: null, contextDelays: new Map() }));
+    const [pendingHint, setPendingHint] = useState(null);
 
     const cellRefs = useRef([]);
     const reactionSeq = useRef(0);
     const feedbackTimerRef = useRef(null);
     const unitCelebrationTimerRef = useRef(null);
+    const hintHighlightTimerRef = useRef(null);
+    const pendingJoinTimerRef = useRef(null);
     const confirmCancelRef = useRef(null);
     const onlineClientRef = useRef(null);
     const musicPlayerRef = useRef(null);
@@ -156,13 +178,19 @@ export function App() {
         isSpectating,
         onlineGameId,
         myRole,
+        joinPolicy,
         gameState,
         rematchRequestedBy,
         currentMembers,
         hintsMap,
+        selectedIndex,
         activeDigit,
         isHelpOpen,
         pendingConfirm,
+        incomingJoinRequests,
+        pendingJoinRequest,
+        pendingHint,
+        activeLobbyRooms,
         messages,
     });
     stateRef.current = {
@@ -174,13 +202,19 @@ export function App() {
         isSpectating,
         onlineGameId,
         myRole,
+        joinPolicy,
         gameState,
         rematchRequestedBy,
         currentMembers,
         hintsMap,
+        selectedIndex,
         activeDigit,
         isHelpOpen,
         pendingConfirm,
+        incomingJoinRequests,
+        pendingJoinRequest,
+        pendingHint,
+        activeLobbyRooms,
         messages,
     };
 
@@ -198,6 +232,14 @@ export function App() {
         document.documentElement.lang = language;
         localStorage.setItem('sudoku_lang', language);
     }, [language]);
+
+    useEffect(() => {
+        saveJoinsAllowed(joinsAllowed);
+    }, [joinsAllowed]);
+
+    useEffect(() => {
+        saveJoinsAutoAccept(joinsAutoAccept);
+    }, [joinsAutoAccept]);
 
     useEffect(() => {
         const player = createBackgroundMusicPlayer();
@@ -238,8 +280,14 @@ export function App() {
         if (unitCelebrationTimerRef.current) {
             clearTimeout(unitCelebrationTimerRef.current);
         }
+        if (hintHighlightTimerRef.current) {
+            clearTimeout(hintHighlightTimerRef.current);
+        }
         if (feedbackTimerRef.current) {
             clearTimeout(feedbackTimerRef.current);
+        }
+        if (pendingJoinTimerRef.current) {
+            clearTimeout(pendingJoinTimerRef.current);
         }
     }, []);
 
@@ -264,7 +312,55 @@ export function App() {
             clearTimeout(unitCelebrationTimerRef.current);
             unitCelebrationTimerRef.current = null;
         }
+        if (hintHighlightTimerRef.current) {
+            clearTimeout(hintHighlightTimerRef.current);
+            hintHighlightTimerRef.current = null;
+        }
+        setPendingHint(null);
+        stateRef.current.pendingHint = null;
         setUnitCelebration((prev) => (prev.cellDelays.size > 0 ? { id: prev.id, cellDelays: new Map() } : prev));
+        setHintHighlight((prev) => (prev.contextDelays.size > 0 || prev.targetIndex !== null
+            ? { id: prev.id, mode: 'solve', targetIndex: null, contextDelays: new Map() }
+            : prev));
+    }, []);
+
+    const clearPendingHint = useCallback((shouldBroadcast = true) => {
+        const hadPending = Boolean(stateRef.current.pendingHint);
+        if (hadPending) {
+            setPendingHint(null);
+            stateRef.current.pendingHint = null;
+        }
+        setHintHighlight((prev) => (prev.mode === 'preview' && (prev.contextDelays.size > 0 || prev.targetIndex !== null)
+            ? { id: prev.id, mode: 'solve', targetIndex: null, contextDelays: new Map() }
+            : prev));
+        if (shouldBroadcast && hadPending) {
+            const cur = stateRef.current;
+            if (!cur.isSpectating && (cur.myRole === 'host' || cur.myRole === 'guest') && cur.onlineGameId) {
+                onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'hint-highlight', { mode: 'clear' });
+            }
+        }
+    }, []);
+
+    const triggerHintHighlight = useCallback((hintResult, highlightMode = 'solve') => {
+        if (!hintResult || !Number.isInteger(hintResult.index)) return;
+        if (hintHighlightTimerRef.current) {
+            clearTimeout(hintHighlightTimerRef.current);
+            hintHighlightTimerRef.current = null;
+        }
+        const delays = hintResult.contextDelays instanceof Map ? hintResult.contextDelays : new Map([[hintResult.index, 0]]);
+        const maxDelay = delays.size > 0 ? Math.max(0, ...delays.values()) : 0;
+        setHintHighlight((prev) => ({
+            id: prev.id + 1,
+            mode: highlightMode,
+            targetIndex: hintResult.index,
+            contextDelays: delays,
+        }));
+        if (highlightMode !== 'preview') {
+            hintHighlightTimerRef.current = setTimeout(() => {
+                hintHighlightTimerRef.current = null;
+                setHintHighlight((prev) => ({ id: prev.id, mode: 'solve', targetIndex: null, contextDelays: new Map() }));
+            }, maxDelay + 1650);
+        }
     }, []);
 
     const triggerUnitCelebration = useCallback((prevBoard, nextState, pivotIndex = null) => {
@@ -344,6 +440,7 @@ export function App() {
             currentMembers: members,
             gameState: curState,
             isSpectating: spec,
+            joinPolicy: curJoinPolicy,
         } = stateRef.current;
         const targetState = overrideState || curState;
         const targetMode = overrideMode || curMode;
@@ -369,9 +466,82 @@ export function App() {
                 variant: specInfo.id,
                 totalCells: specInfo.totalCells,
                 hasGuest: guestOnline,
+                joinPolicy: curJoinPolicy,
             },
         );
     }, []);
+
+    const joinActionsRef = useRef({
+        approveJoin: () => {},
+        rejectJoin: () => {},
+    });
+
+    const openWatchDirectory = useCallback(() => {
+        setActiveLobbyRooms([]);
+        onlineClientRef.current?.joinLobby({
+            onLobbyPresenceChange: (rooms) => setActiveLobbyRooms(rooms || []),
+            onLobbyMemberJoin: (room) => {
+                setActiveLobbyRooms((prev) => {
+                    if (prev.some((r) => r.game_id === room.game_id)) {
+                        return prev.map((r) => (r.game_id === room.game_id ? room : r));
+                    }
+                    return [...prev, room];
+                });
+            },
+            onLobbyMemberLeave: (room) => {
+                setActiveLobbyRooms((prev) => prev.filter((r) => r.game_id !== room.game_id && r.id !== room.id));
+            },
+            onLobbyUpdate: (update) => {
+                setActiveLobbyRooms((prev) => {
+                    if (update.status === 'solved' || update.status === 'finished') {
+                        return prev.filter((r) => r.game_id !== update.game_id);
+                    }
+                    const exists = prev.some((r) => r.game_id === update.game_id);
+                    if (!exists) return [...prev, update];
+                    return prev.map((r) => (r.game_id === update.game_id ? { ...r, ...update } : r));
+                });
+            },
+        });
+    }, []);
+
+    const handleRespondJoinRequest = useCallback((accepted) => {
+        const queue = stateRef.current.incomingJoinRequests;
+        if (!queue || queue.length === 0) return;
+
+        const [req, ...rest] = queue;
+        setIncomingJoinRequests(rest);
+        stateRef.current.incomingJoinRequests = rest;
+
+        onlineClientRef.current?.broadcastGameEvent(req.gameId, 'join-response', {
+            requestId: req.requestId,
+            requesterId: req.requesterId,
+            accepted: Boolean(accepted),
+            reason: accepted ? undefined : 'declined',
+        });
+    }, []);
+
+    useEffect(() => {
+        const cur = stateRef.current;
+        if (cur.myRole === 'host' && !cur.isSpectating && cur.isPlayingGame) {
+            onlineClientRef.current?.updateGameJoinPolicy(joinPolicy);
+            syncLobbyProgress();
+
+            if (cur.incomingJoinRequests.length > 0 && (joinPolicy === 'disabled' || joinPolicy === 'auto')) {
+                const queued = cur.incomingJoinRequests;
+                setIncomingJoinRequests([]);
+                stateRef.current.incomingJoinRequests = [];
+                const accepted = joinPolicy === 'auto';
+                for (const req of queued) {
+                    onlineClientRef.current?.broadcastGameEvent(req.gameId, 'join-response', {
+                        requestId: req.requestId,
+                        requesterId: req.requesterId,
+                        accepted,
+                        reason: accepted ? undefined : 'disabled',
+                    });
+                }
+            }
+        }
+    }, [joinPolicy, syncLobbyProgress]);
 
     const clearHintsForCell = useCallback((index) => {
         setHintsMap((prev) => {
@@ -389,6 +559,27 @@ export function App() {
 
     const handleRemoteGameEvent = useCallback((type, data) => {
         const cur = stateRef.current;
+
+        const applySyncedVisuals = (payload, boardLen) => {
+            if (payload.hostCursorIndex !== undefined) {
+                const nextHostIdx = Number.isInteger(payload.hostCursorIndex) && payload.hostCursorIndex >= 0 && payload.hostCursorIndex < boardLen
+                    ? payload.hostCursorIndex
+                    : null;
+                setHostCursorIndex(nextHostIdx);
+            }
+            if (cur.isSpectating && payload.hostActiveDigit !== undefined) {
+                const nextDigit = Number.isInteger(payload.hostActiveDigit) && payload.hostActiveDigit >= 1
+                    ? payload.hostActiveDigit
+                    : null;
+                setRemoteActiveDigit(nextDigit);
+            }
+            if (payload.hintPreview && Number.isInteger(payload.hintPreview.index)) {
+                const delays = Array.isArray(payload.hintPreview.contextEntries)
+                    ? new Map(payload.hintPreview.contextEntries)
+                    : new Map([[payload.hintPreview.index, 0]]);
+                triggerHintHighlight({ index: payload.hintPreview.index, contextDelays: delays }, 'preview');
+            }
+        };
 
         if (type === 'init' || type === 'sync') {
             if (!data || !data.gameState) return;
@@ -409,7 +600,106 @@ export function App() {
                 });
                 setHintsMap(nextHints);
             }
+            applySyncedVisuals(data, hydrated.board.length);
             persistSnapshotIfNeeded(hydrated, data.rematchRequestedBy);
+            return;
+        }
+
+        if (type === 'join-policy') {
+            if (data?.joinPolicy && cur.isSpectating) {
+                setHostJoinPolicy(normalizeJoinPolicy(data.joinPolicy));
+            }
+            return;
+        }
+
+        if (type === 'join-request') {
+            const myClientId = onlineClientRef.current?.clientId;
+            if (
+                cur.myRole !== 'host'
+                || cur.isSpectating
+                || !cur.isPlayingGame
+                || !cur.onlineGameId
+                || !data?.requestId
+                || !data?.requesterId
+                || data.requesterId === myClientId
+            ) {
+                return;
+            }
+
+            if (cur.gameState.status === 'solved') {
+                onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'join-response', {
+                    requestId: data.requestId,
+                    requesterId: data.requesterId,
+                    accepted: false,
+                    reason: 'solved',
+                });
+                return;
+            }
+
+            if (cur.joinPolicy === 'disabled') {
+                onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'join-response', {
+                    requestId: data.requestId,
+                    requesterId: data.requesterId,
+                    accepted: false,
+                    reason: 'disabled',
+                });
+                return;
+            }
+
+            if (cur.joinPolicy === 'auto') {
+                onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'join-response', {
+                    requestId: data.requestId,
+                    requesterId: data.requesterId,
+                    accepted: true,
+                });
+                return;
+            }
+
+            const nextReq = {
+                requestId: data.requestId,
+                requesterId: data.requesterId,
+                gameId: cur.onlineGameId,
+            };
+            const alreadyQueued = cur.incomingJoinRequests.some(
+                (r) => r.requestId === nextReq.requestId || r.requesterId === nextReq.requesterId,
+            );
+            if (!alreadyQueued) {
+                const nextQueue = [...cur.incomingJoinRequests, nextReq];
+                setIncomingJoinRequests(nextQueue);
+                stateRef.current.incomingJoinRequests = nextQueue;
+                announce(cur.messages?.joinRequestTitle || 'Player wants to join');
+            }
+            return;
+        }
+
+        if (type === 'join-cancel') {
+            if (data?.requestId && cur.incomingJoinRequests.some((r) => r.requestId === data.requestId)) {
+                const nextQueue = cur.incomingJoinRequests.filter((r) => r.requestId !== data.requestId);
+                setIncomingJoinRequests(nextQueue);
+                stateRef.current.incomingJoinRequests = nextQueue;
+            }
+            return;
+        }
+
+        if (type === 'join-response') {
+            const myClientId = onlineClientRef.current?.clientId;
+            const pending = cur.pendingJoinRequest;
+            if (!pending || data?.requestId !== pending.requestId || data?.requesterId !== myClientId) {
+                return;
+            }
+
+            if (pendingJoinTimerRef.current) {
+                clearTimeout(pendingJoinTimerRef.current);
+                pendingJoinTimerRef.current = null;
+            }
+            setPendingJoinRequest(null);
+            stateRef.current.pendingJoinRequest = null;
+
+            if (data.accepted) {
+                joinActionsRef.current.approveJoin(pending);
+            } else {
+                joinActionsRef.current.rejectJoin(pending, data.reason || 'declined');
+            }
             return;
         }
 
@@ -422,6 +712,9 @@ export function App() {
             setGameState(patched);
             stateRef.current.gameState = patched;
 
+            if (typeof data.value === 'number') {
+                clearPendingHint(false);
+            }
             if (typeof data.value === 'number' && data.value > 0) {
                 clearHintsForCell(data.index);
                 const unitCompleted = triggerUnitCelebration(prevBoard, patched, data.index);
@@ -439,7 +732,51 @@ export function App() {
             if (data.role === 'host' || data.role === 'guest') {
                 const totalCells = cur.gameState.board?.length || 81;
                 const nextIdx = Number.isInteger(data.index) && data.index >= 0 && data.index < totalCells ? data.index : null;
-                setPartnerCursorIndex(nextIdx);
+                if (data.role === 'host') {
+                    setHostCursorIndex(nextIdx);
+                } else {
+                    const senderKey = data.senderId || 'guest';
+                    setGuestCursors((prev) => {
+                        const next = new Map(prev);
+                        if (nextIdx === null) {
+                            next.delete(senderKey);
+                        } else {
+                            next.set(senderKey, nextIdx);
+                        }
+                        return next;
+                    });
+                }
+            }
+            return;
+        }
+
+        if (type === 'active-digit') {
+            const myClientId = onlineClientRef.current?.clientId;
+            if (!data || data.senderId === myClientId || !cur.isSpectating) return;
+            const nextDigit = Number.isInteger(data.digit) && data.digit >= 1 ? data.digit : null;
+            setRemoteActiveDigit(nextDigit);
+            return;
+        }
+
+        if (type === 'hint-highlight') {
+            const myClientId = onlineClientRef.current?.clientId;
+            if (!data || data.senderId === myClientId) return;
+            if (data.mode === 'clear') {
+                if (hintHighlightTimerRef.current) {
+                    clearTimeout(hintHighlightTimerRef.current);
+                    hintHighlightTimerRef.current = null;
+                }
+                setHintHighlight((prev) => ({ id: prev.id, mode: 'solve', targetIndex: null, contextDelays: new Map() }));
+                return;
+            }
+            if (Number.isInteger(data.index)) {
+                const delays = Array.isArray(data.contextEntries)
+                    ? new Map(data.contextEntries)
+                    : new Map([[data.index, 0]]);
+                triggerHintHighlight(
+                    { index: data.index, contextDelays: delays },
+                    data.mode === 'preview' ? 'preview' : 'solve',
+                );
             }
             return;
         }
@@ -501,7 +838,9 @@ export function App() {
             clearUnitCelebration();
             setSelectedIndex(null);
             setActiveDigit(null);
-            setPartnerCursorIndex(null);
+            setHostCursorIndex(null);
+            setGuestCursors(new Map());
+            setRemoteActiveDigit(null);
             setRematchRequestedBy(null);
             setHintsMap(new Map());
             persistSnapshotIfNeeded(nextState, null);
@@ -542,9 +881,32 @@ export function App() {
                         setRematchRequestedBy(data.rematchRequestedBy);
                     }
                 }
+                if (cur.myRole !== 'host') {
+                    applySyncedVisuals(data, cur.gameState.board?.length || 81);
+                }
             }
         }
-    }, [announce, clearHintsForCell, clearUnitCelebration, persistSnapshotIfNeeded, playMoveSoundFeedback, showFeedback, syncLobbyProgress, triggerFloatingReaction, triggerUnitCelebration]);
+    }, [announce, clearHintsForCell, clearPendingHint, clearUnitCelebration, persistSnapshotIfNeeded, playMoveSoundFeedback, showFeedback, syncLobbyProgress, triggerFloatingReaction, triggerHintHighlight, triggerUnitCelebration]);
+
+    const buildSyncPayload = useCallback(() => {
+        const cur = stateRef.current;
+        return {
+            gameState: serializeGameState(cur.gameState),
+            rematchRequestedBy: cur.rematchRequestedBy,
+            hints: Array.from(cur.hintsMap.entries()),
+            hostCursorIndex: cur.myRole === 'host' ? cur.selectedIndex : undefined,
+            hostActiveDigit: cur.myRole === 'host' ? cur.activeDigit : undefined,
+            hintPreview: cur.pendingHint ? {
+                mode: 'preview',
+                index: cur.pendingHint.index,
+                digit: cur.pendingHint.digit,
+                technique: cur.pendingHint.technique,
+                unitType: cur.pendingHint.unitType,
+                unitIndex: cur.pendingHint.unitIndex,
+                contextEntries: Array.from(cur.pendingHint.contextDelays.entries()),
+            } : null,
+        };
+    }, []);
 
     const handleGamePresenceChange = useCallback((members) => {
         const resolved = onlineClientRef.current?.getGameMembers() || members || [];
@@ -552,15 +914,17 @@ export function App() {
         stateRef.current.currentMembers = resolved;
 
         const cur = stateRef.current;
+        if (cur.isSpectating) {
+            const host = resolved.find((m) => m.role === 'host');
+            if (host?.join_policy) {
+                setHostJoinPolicy(normalizeJoinPolicy(host.join_policy));
+            }
+        }
         if (cur.myRole === 'host' && resolved.length > 1) {
-            onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'sync', {
-                gameState: serializeGameState(cur.gameState),
-                rematchRequestedBy: cur.rematchRequestedBy,
-                hints: Array.from(cur.hintsMap.entries()),
-            });
+            onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'sync', buildSyncPayload());
             syncLobbyProgress();
         }
-    }, [syncLobbyProgress]);
+    }, [buildSyncPayload, syncLobbyProgress]);
 
     const handleGameMemberJoin = useCallback((member) => {
         const prevMembers = stateRef.current.currentMembers;
@@ -570,18 +934,22 @@ export function App() {
         stateRef.current.currentMembers = nextMembers;
 
         const cur = stateRef.current;
+        if (cur.isSpectating && member?.role === 'host' && member.join_policy) {
+            setHostJoinPolicy(normalizeJoinPolicy(member.join_policy));
+        }
         if (member?.role === 'guest' && cur.myRole === 'host') {
+            if (member?.id && cur.incomingJoinRequests.some((r) => r.requesterId === member.id)) {
+                const nextReqs = cur.incomingJoinRequests.filter((r) => r.requesterId !== member.id);
+                setIncomingJoinRequests(nextReqs);
+                stateRef.current.incomingJoinRequests = nextReqs;
+            }
             showFeedback('A partner joined your game!');
         }
         if (cur.myRole === 'host') {
-            onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'sync', {
-                gameState: serializeGameState(cur.gameState),
-                rematchRequestedBy: cur.rematchRequestedBy,
-                hints: Array.from(cur.hintsMap.entries()),
-            });
+            onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'sync', buildSyncPayload());
             syncLobbyProgress();
         }
-    }, [showFeedback, syncLobbyProgress]);
+    }, [buildSyncPayload, showFeedback, syncLobbyProgress]);
 
     const handleGameMemberLeave = useCallback((member) => {
         const authoritative = onlineClientRef.current?.getGameMembers();
@@ -592,8 +960,24 @@ export function App() {
             setCurrentMembers((prev) => prev.filter((m) => m.id !== member.id));
         }
 
-        if (member?.role === 'host' || member?.role === 'guest') {
-            setPartnerCursorIndex(null);
+        if (member?.role === 'host') {
+            setHostCursorIndex(null);
+            setRemoteActiveDigit(null);
+        } else if (member?.role === 'guest') {
+            const senderKey = member.id || 'guest';
+            setGuestCursors((prev) => {
+                if (!prev.has(senderKey)) return prev;
+                const next = new Map(prev);
+                next.delete(senderKey);
+                return next;
+            });
+        }
+
+        const cur = stateRef.current;
+        if (member?.id && cur.incomingJoinRequests.some((r) => r.requesterId === member.id)) {
+            const nextReqs = cur.incomingJoinRequests.filter((r) => r.requesterId !== member.id);
+            setIncomingJoinRequests(nextReqs);
+            stateRef.current.incomingJoinRequests = nextReqs;
         }
 
         if (member?.id) {
@@ -605,39 +989,10 @@ export function App() {
             });
         }
 
-        const cur = stateRef.current;
         if (cur.myRole === 'host') {
             syncLobbyProgress();
         }
     }, [syncLobbyProgress]);
-
-    const openWatchDirectory = useCallback(() => {
-        setActiveLobbyRooms([]);
-        onlineClientRef.current?.joinLobby({
-            onLobbyPresenceChange: (rooms) => setActiveLobbyRooms(rooms || []),
-            onLobbyMemberJoin: (room) => {
-                setActiveLobbyRooms((prev) => {
-                    if (prev.some((r) => r.game_id === room.game_id)) {
-                        return prev.map((r) => (r.game_id === room.game_id ? room : r));
-                    }
-                    return [...prev, room];
-                });
-            },
-            onLobbyMemberLeave: (room) => {
-                setActiveLobbyRooms((prev) => prev.filter((r) => r.game_id !== room.game_id && r.id !== room.id));
-            },
-            onLobbyUpdate: (update) => {
-                setActiveLobbyRooms((prev) => {
-                    if (update.status === 'solved' || update.status === 'finished') {
-                        return prev.filter((r) => r.game_id !== update.game_id);
-                    }
-                    const exists = prev.some((r) => r.game_id === update.game_id);
-                    if (!exists) return [...prev, update];
-                    return prev.map((r) => (r.game_id === update.game_id ? { ...r, ...update } : r));
-                });
-            },
-        });
-    }, []);
 
     const enterSpectatorView = useCallback((gameId, announcementText = null) => {
         setNavTab('watch');
@@ -660,11 +1015,20 @@ export function App() {
     const spectateGame = useCallback((gameId) => {
         if (!isValidGameId(gameId)) return;
 
+        if (pendingJoinTimerRef.current) {
+            clearTimeout(pendingJoinTimerRef.current);
+            pendingJoinTimerRef.current = null;
+        }
+        setPendingJoinRequest(null);
+        stateRef.current.pendingJoinRequest = null;
+
         clearUnitCelebration();
         onlineClientRef.current?.leaveLobby();
         setCurrentMembers([]);
         setHintsMap(new Map());
         setRematchRequestedBy(null);
+        const lobbyRoom = stateRef.current.activeLobbyRooms.find((r) => r.game_id === gameId);
+        setHostJoinPolicy(normalizeJoinPolicy(lobbyRoom?.join_policy));
 
         const snapshot = loadOnlineGameSnapshot(gameId);
         if (snapshot?.gameState) {
@@ -682,6 +1046,9 @@ export function App() {
                 const host = members?.find((m) => m.role === 'host');
                 if (host?.game_mode) {
                     setSpectatedGameMode(host.game_mode);
+                }
+                if (host?.join_policy) {
+                    setHostJoinPolicy(normalizeJoinPolicy(host.join_policy));
                 }
                 handleGamePresenceChange(members);
             },
@@ -712,19 +1079,9 @@ export function App() {
         onlineClientRef.current?.joinGameChannel(gameId, {
             role,
             gameMode: 'online',
+            joinPolicy: stateRef.current.joinPolicy,
             onEvent: handleRemoteGameEvent,
-            onPresenceChange: (members) => {
-                const resolved = onlineClientRef.current?.getGameMembers() || members || [];
-                const otherGuestPresent = role === 'guest' && resolved.some(
-                    (m) => m.role === 'guest' && m.id !== onlineClientRef.current?.clientId,
-                );
-                if (otherGuestPresent) {
-                    enterSpectatorView(gameId, 'Room already has two co-op players. Joined as spectator.');
-                    replaceBrowserUrl(`/games/${gameId}?watch=1`);
-                    return;
-                }
-                handleGamePresenceChange(members);
-            },
+            onPresenceChange: handleGamePresenceChange,
             onMemberJoin: handleGameMemberJoin,
             onMemberLeave: handleGameMemberLeave,
         });
@@ -739,29 +1096,26 @@ export function App() {
                 totalCells: specInfo.totalCells,
                 hasGuest: false,
                 filledCount: targetState.filledCount,
+                joinPolicy: stateRef.current.joinPolicy,
             });
         }
-    }, [enterSpectatorView, handleGameMemberJoin, handleGameMemberLeave, handleGamePresenceChange, handleRemoteGameEvent]);
+    }, [handleGameMemberJoin, handleGameMemberLeave, handleGamePresenceChange, handleRemoteGameEvent]);
 
-    const joinWatchGame = useCallback((gameId) => {
-        if (!isValidGameId(gameId)) return;
-
+    const completeApprovedJoin = useCallback((gameId, initialGameState = null) => {
         clearUnitCelebration();
         onlineClientRef.current?.leaveLobby();
         setSelectedIndex(null);
         setActiveDigit(null);
-        setPartnerCursorIndex(null);
+        setHostCursorIndex(null);
+        setGuestCursors(new Map());
+        setRemoteActiveDigit(null);
         setNotesMode(false);
         setHintsMap(new Map());
         setRematchRequestedBy(null);
 
-        const cur = stateRef.current;
-        const fromSpectatingSameRoom = cur.isSpectating && cur.onlineGameId === gameId;
-        const snapshot = !fromSpectatingSameRoom ? loadOnlineGameSnapshot(gameId) : null;
-        if (snapshot?.gameState) {
-            setGameState(snapshot.gameState);
-            setRematchRequestedBy(snapshot.rematchRequestedBy);
-            stateRef.current.gameState = snapshot.gameState;
+        if (initialGameState) {
+            setGameState(initialGameState);
+            stateRef.current.gameState = initialGameState;
         }
 
         saveParticipantSession(gameId, 'guest');
@@ -770,9 +1124,133 @@ export function App() {
         setIsPlayingGame(true);
         stateRef.current.navTab = 'play';
         stateRef.current.isPlayingGame = true;
-        joinAsOnlinePlayer(gameId, 'guest', fromSpectatingSameRoom ? cur.gameState : snapshot?.gameState);
-        showFeedback('Joined live match as co-op partner!');
+        joinAsOnlinePlayer(gameId, 'guest', initialGameState);
+        showFeedback(stateRef.current.messages?.joinApprovedFeedback || 'Joined live match as co-op partner!');
     }, [clearUnitCelebration, joinAsOnlinePlayer, showFeedback]);
+
+    joinActionsRef.current.approveJoin = (pending) => {
+        completeApprovedJoin(pending.gameId, pending.gameStateSnapshot);
+    };
+    joinActionsRef.current.rejectJoin = (pending, reason) => {
+        if (!pending.fromSpectating) {
+            onlineClientRef.current?.leaveGameChannel();
+            openWatchDirectory();
+        }
+        const m = stateRef.current.messages;
+        if (reason === 'disabled') {
+            showFeedback(m?.joinDisabledFeedback || 'The host does not allow joins right now.');
+        } else if (reason === 'solved') {
+            showFeedback('Puzzle is already solved.');
+        } else {
+            showFeedback(m?.joinDeclinedFeedback || 'Host declined your join request.');
+        }
+    };
+
+    const cancelPendingJoinRequest = useCallback(() => {
+        if (pendingJoinTimerRef.current) {
+            clearTimeout(pendingJoinTimerRef.current);
+            pendingJoinTimerRef.current = null;
+        }
+        const pending = stateRef.current.pendingJoinRequest;
+        if (!pending) return;
+
+        setPendingJoinRequest(null);
+        stateRef.current.pendingJoinRequest = null;
+
+        onlineClientRef.current?.broadcastGameEvent(pending.gameId, 'join-cancel', {
+            requestId: pending.requestId,
+            requesterId: onlineClientRef.current?.clientId,
+        });
+
+        if (!pending.fromSpectating) {
+            onlineClientRef.current?.leaveGameChannel();
+            openWatchDirectory();
+        }
+    }, [openWatchDirectory]);
+
+    const joinWatchGame = useCallback((gameId, knownJoinPolicy = null) => {
+        if (!isValidGameId(gameId)) return;
+
+        const cur = stateRef.current;
+        const fromSpectatingSameRoom = cur.isSpectating && cur.onlineGameId === gameId;
+        const lobbyRoom = cur.activeLobbyRooms.find((r) => r.game_id === gameId);
+        const effectivePolicy = fromSpectatingSameRoom
+            ? hostJoinPolicy
+            : normalizeJoinPolicy(knownJoinPolicy || lobbyRoom?.join_policy);
+
+        if (effectivePolicy === 'disabled') {
+            showFeedback(cur.messages?.joinDisabledFeedback || 'The host does not allow joins right now.');
+            return;
+        }
+
+        const snapshot = !fromSpectatingSameRoom ? loadOnlineGameSnapshot(gameId) : null;
+        if (snapshot?.rematchRequestedBy !== undefined) {
+            setRematchRequestedBy(snapshot.rematchRequestedBy);
+        }
+        const initialSnapshot = fromSpectatingSameRoom ? cur.gameState : snapshot?.gameState;
+
+        if (effectivePolicy === 'auto') {
+            completeApprovedJoin(gameId, initialSnapshot);
+            return;
+        }
+
+        if (cur.pendingJoinRequest) return;
+
+        const requestId = generateEventId();
+        const req = {
+            gameId,
+            requestId,
+            fromSpectating: fromSpectatingSameRoom,
+            gameStateSnapshot: initialSnapshot,
+        };
+        setPendingJoinRequest(req);
+        stateRef.current.pendingJoinRequest = req;
+
+        if (pendingJoinTimerRef.current) {
+            clearTimeout(pendingJoinTimerRef.current);
+        }
+        pendingJoinTimerRef.current = setTimeout(() => {
+            pendingJoinTimerRef.current = null;
+            const activeReq = stateRef.current.pendingJoinRequest;
+            if (!activeReq || activeReq.requestId !== requestId) return;
+            setPendingJoinRequest(null);
+            stateRef.current.pendingJoinRequest = null;
+            onlineClientRef.current?.broadcastGameEvent(activeReq.gameId, 'join-cancel', {
+                requestId: activeReq.requestId,
+                requesterId: onlineClientRef.current?.clientId,
+            });
+            if (!activeReq.fromSpectating) {
+                onlineClientRef.current?.leaveGameChannel();
+                openWatchDirectory();
+            }
+            showFeedback(stateRef.current.messages?.joinTimeoutFeedback || 'No response from the host. Try again later.');
+        }, 30000);
+
+        const sendJoinRequest = () => {
+            onlineClientRef.current?.broadcastGameEvent(gameId, 'join-request', {
+                requestId,
+                requesterId: onlineClientRef.current?.clientId,
+            });
+        };
+
+        showFeedback(cur.messages?.joinPendingLabel || 'Waiting for host approval...');
+
+        if (fromSpectatingSameRoom && onlineClientRef.current?.currentGameId === gameId && onlineClientRef.current?.gameChannel) {
+            sendJoinRequest();
+        } else {
+            onlineClientRef.current?.leaveLobby();
+            onlineClientRef.current?.joinGameChannel(gameId, {
+                role: 'spectator',
+                gameMode: 'online',
+                joinPolicy: cur.joinPolicy,
+                onEvent: handleRemoteGameEvent,
+                onPresenceChange: handleGamePresenceChange,
+                onMemberJoin: handleGameMemberJoin,
+                onMemberLeave: handleGameMemberLeave,
+                onSubscribed: sendJoinRequest,
+            });
+        }
+    }, [completeApprovedJoin, handleGameMemberJoin, handleGameMemberLeave, handleGamePresenceChange, handleRemoteGameEvent, hostJoinPolicy, openWatchDirectory, showFeedback]);
 
     const ensureHostOnlineSession = useCallback((targetState, roomId, targetMode = stateRef.current.mode) => {
         if (!targetState || !roomId || !onlineClientRef.current) return;
@@ -786,6 +1264,7 @@ export function App() {
             client.joinGameChannel(roomId, {
                 role: 'host',
                 gameMode: resolvedMode,
+                joinPolicy: stateRef.current.joinPolicy,
                 onEvent: handleRemoteGameEvent,
                 onPresenceChange: handleGamePresenceChange,
                 onMemberJoin: handleGameMemberJoin,
@@ -803,6 +1282,7 @@ export function App() {
                 totalCells: specInfo.totalCells,
                 hasGuest: guestOnline,
                 filledCount: targetState.filledCount,
+                joinPolicy: stateRef.current.joinPolicy,
             });
         } else {
             syncLobbyProgress(targetState, resolvedMode);
@@ -847,10 +1327,14 @@ export function App() {
         setMyRole('host');
         setSelectedIndex(null);
         setActiveDigit(null);
-        setPartnerCursorIndex(null);
+        setHostCursorIndex(null);
+        setGuestCursors(new Map());
+        setRemoteActiveDigit(null);
         setNotesMode(false);
         setHintsMap(new Map());
         setRematchRequestedBy(null);
+        setIncomingJoinRequests([]);
+        stateRef.current.incomingJoinRequests = [];
         setGameState(nextState);
         if (!hadExistingSoloRoom) {
             setCurrentMembers([]);
@@ -910,13 +1394,15 @@ export function App() {
                 setCurrentMembers(resolved);
                 stateRef.current.currentMembers = resolved;
 
-                const hasGuest = resolved.some((m) => m.role === 'guest');
+                const host = resolved.find((m) => m.role === 'host');
+                const resolvedPolicy = normalizeJoinPolicy(host?.join_policy);
+                setHostJoinPolicy(resolvedPolicy);
 
-                if (!hasGuest) {
+                if (resolvedPolicy === 'auto' && stateRef.current.gameState?.status !== 'solved') {
                     saveParticipantSession(gameId, 'guest');
                     joinAsOnlinePlayer(gameId, 'guest', stateRef.current.gameState);
                 } else {
-                    enterSpectatorView(gameId, 'Room already has two co-op players. Joined as spectator.');
+                    enterSpectatorView(gameId, 'Joined live match as spectator. Tap Join Game to request co-op.');
                     replaceBrowserUrl(`/games/${gameId}?watch=1`);
                 }
             },
@@ -989,6 +1475,17 @@ export function App() {
                 role: cur.myRole,
                 gameState: serializeGameState(cur.gameState),
                 rematchRequestedBy: cur.rematchRequestedBy,
+                hostCursorIndex: cur.myRole === 'host' ? cur.selectedIndex : undefined,
+                hostActiveDigit: cur.myRole === 'host' ? cur.activeDigit : undefined,
+                hintPreview: cur.myRole === 'host' && cur.pendingHint ? {
+                    mode: 'preview',
+                    index: cur.pendingHint.index,
+                    digit: cur.pendingHint.digit,
+                    technique: cur.pendingHint.technique,
+                    unitType: cur.pendingHint.unitType,
+                    unitIndex: cur.pendingHint.unitIndex,
+                    contextEntries: Array.from(cur.pendingHint.contextDelays.entries()),
+                } : null,
                 timestamp: Date.now(),
             });
 
@@ -1011,6 +1508,49 @@ export function App() {
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
     }, [pendingConfirm]);
+
+    const broadcastCursor = useCallback((idx) => {
+        const cur = stateRef.current;
+        if (!cur.isSpectating && (cur.myRole === 'host' || cur.myRole === 'guest') && cur.onlineGameId) {
+            onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'cursor', {
+                senderId: onlineClientRef.current?.clientId,
+                role: cur.myRole,
+                index: idx,
+            });
+        }
+    }, []);
+
+    const broadcastActiveDigit = useCallback((digit) => {
+        const cur = stateRef.current;
+        if (!cur.isSpectating && (cur.myRole === 'host' || cur.myRole === 'guest') && cur.onlineGameId) {
+            onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'active-digit', {
+                senderId: onlineClientRef.current?.clientId,
+                role: cur.myRole,
+                digit: digit ?? null,
+            });
+        }
+    }, []);
+
+    const broadcastHintHighlight = useCallback((hint, highlightMode = 'solve') => {
+        const cur = stateRef.current;
+        if (!hint || !Number.isInteger(hint.index)) return;
+        if (!cur.isSpectating && (cur.myRole === 'host' || cur.myRole === 'guest') && cur.onlineGameId) {
+            const contextEntries = hint.contextDelays instanceof Map
+                ? Array.from(hint.contextDelays.entries())
+                : [[hint.index, 0]];
+            onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'hint-highlight', {
+                senderId: onlineClientRef.current?.clientId,
+                role: cur.myRole,
+                mode: highlightMode,
+                index: hint.index,
+                digit: hint.digit ?? null,
+                technique: hint.technique ?? null,
+                unitType: hint.unitType ?? null,
+                unitIndex: hint.unitIndex ?? null,
+                contextEntries,
+            });
+        }
+    }, []);
 
     const writeDigitToCell = useCallback((targetIndex, digit) => {
         const cur = stateRef.current;
@@ -1049,6 +1589,9 @@ export function App() {
                 const nextState = setCellValue(prevGameState, targetIndex, digit, { owner });
                 setGameState(nextState);
                 stateRef.current.gameState = nextState;
+                if (nextState !== prevGameState) {
+                    clearPendingHint();
+                }
                 if (digit !== 0) {
                     clearHintsForCell(targetIndex);
                     const unitCompleted = triggerUnitCelebration(prevBoard, nextState, targetIndex);
@@ -1058,6 +1601,7 @@ export function App() {
                     const totalPlaced = nextState.board.filter((v) => v === digit).length;
                     if (totalPlaced >= specInfo.gridSize && cur.activeDigit === digit) {
                         setActiveDigit(null);
+                        broadcastActiveDigit(null);
                     }
                 }
                 if (isBroadcaster) {
@@ -1074,7 +1618,7 @@ export function App() {
         } catch (err) {
             showFeedback(err.message);
         }
-    }, [clearHintsForCell, notesMode, persistSnapshotIfNeeded, playMoveSoundFeedback, showFeedback, syncLobbyProgress, triggerUnitCelebration]);
+    }, [broadcastActiveDigit, clearHintsForCell, clearPendingHint, notesMode, persistSnapshotIfNeeded, playMoveSoundFeedback, showFeedback, syncLobbyProgress, triggerUnitCelebration]);
 
     const applyPlayerDigit = useCallback((digit) => {
         const cur = stateRef.current;
@@ -1094,6 +1638,7 @@ export function App() {
                     showFeedback('Fixed starting clue — choose an empty cell.');
                 } else if (cur.activeDigit !== null) {
                     setActiveDigit(null);
+                    broadcastActiveDigit(null);
                     showFeedback('Digit lock cleared.');
                 } else {
                     showFeedback('Select a cell to erase.');
@@ -1104,12 +1649,15 @@ export function App() {
             if (isGivenSelected) {
                 setSelectedIndex(null);
                 setActiveDigit(digit);
+                broadcastCursor(null);
+                broadcastActiveDigit(digit);
                 showFeedback(`Digit ${digit} locked — tap an empty cell to place it.`);
                 return;
             }
 
             const nextActive = cur.activeDigit === digit ? null : digit;
             setActiveDigit(nextActive);
+            broadcastActiveDigit(nextActive);
             showFeedback(
                 nextActive
                     ? `Digit ${nextActive} locked — tap an empty cell to place it.`
@@ -1119,21 +1667,7 @@ export function App() {
         }
 
         writeDigitToCell(selectedIndex, digit);
-    }, [selectedIndex, showFeedback, writeDigitToCell]);
-
-    const broadcastCursor = useCallback((idx) => {
-        const cur = stateRef.current;
-        const hasPartner = cur.currentMembers.some(
-            (m) => m.role !== cur.myRole && (m.role === 'host' || m.role === 'guest'),
-        );
-        if ((cur.mode === 'online' || hasPartner) && !cur.isSpectating && (cur.myRole === 'host' || cur.myRole === 'guest') && cur.onlineGameId) {
-            onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'cursor', {
-                senderId: onlineClientRef.current?.clientId,
-                role: cur.myRole,
-                index: idx,
-            });
-        }
-    }, []);
+    }, [broadcastActiveDigit, broadcastCursor, selectedIndex, showFeedback, writeDigitToCell]);
 
     const focusCell = useCallback((idx) => {
         setSelectedIndex(idx);
@@ -1151,9 +1685,10 @@ export function App() {
             } else {
                 // Selecting an already-filled cell exits digit-lock so all matching digits highlight cleanly
                 setActiveDigit(null);
+                broadcastActiveDigit(null);
             }
         }
-    }, [broadcastCursor, writeDigitToCell]);
+    }, [broadcastActiveDigit, broadcastCursor, writeDigitToCell]);
 
     const broadcastNoteChanges = useCallback((prevNotes, nextState) => {
         const cur = stateRef.current;
@@ -1212,6 +1747,7 @@ export function App() {
         const nextState = undoLastMove(cur.gameState);
         setGameState(nextState);
         stateRef.current.gameState = nextState;
+        clearPendingHint();
 
         const isBroadcaster = (cur.mode === 'solo' || cur.mode === 'online') && Boolean(cur.onlineGameId) && !cur.isSpectating;
         if (isBroadcaster) {
@@ -1232,7 +1768,7 @@ export function App() {
         }
 
         persistSnapshotIfNeeded(nextState);
-    }, [persistSnapshotIfNeeded, syncLobbyProgress]);
+    }, [clearPendingHint, persistSnapshotIfNeeded, syncLobbyProgress]);
 
     const handleLocalHint = useCallback(() => {
         const cur = stateRef.current;
@@ -1240,33 +1776,84 @@ export function App() {
 
         const totalCells = cur.gameState.board.length;
         const activeVariant = cur.gameState.variant || inferVariantFromBoardLength(totalCells);
-        let targetIdx = selectedIndex;
-        if (
-            targetIdx === null
-            || targetIdx >= totalCells
-            || cur.gameState.givens[targetIdx]
-            || (cur.gameState.board[targetIdx] !== 0 && cur.gameState.board[targetIdx] === cur.gameState.solution[targetIdx])
-        ) {
-            const candidateIndices = [];
-            for (let i = 0; i < totalCells; i++) {
-                if (!cur.gameState.givens[i] && cur.gameState.board[i] !== cur.gameState.solution[i]) {
-                    candidateIndices.push(i);
+        const m = cur.messages;
+
+        const formatHintMessage = (hint, isPreview) => {
+            const { row, col } = getCellCoords(hint.index, activeVariant);
+            const unitLabel = hint.unitType === 'box'
+                ? (m?.hintUnitBox || 'box')
+                : (hint.unitType === 'row'
+                    ? (m?.hintUnitRow || 'row')
+                    : (m?.hintUnitCol || 'column'));
+
+            let template;
+            if (isPreview) {
+                template = m?.hintPreviewFallback || 'Hint: Check R{row} C{col}. Tap Hint again to fill.';
+                if (hint.technique === 'full_house') {
+                    template = m?.hintPreviewFullHouse || 'Hint: Check R{row} C{col} (last empty cell in {unit}). Tap Hint again to fill.';
+                } else if (hint.technique === 'hidden_single') {
+                    template = m?.hintPreviewHiddenSingle || 'Hint: Check R{row} C{col} (only spot for one digit in {unit}). Tap Hint again to fill.';
+                } else if (hint.technique === 'naked_single') {
+                    template = m?.hintPreviewNakedSingle || 'Hint: Check R{row} C{col} (only one candidate left here). Tap Hint again to fill.';
+                }
+            } else {
+                template = m?.hintReasonFallback || 'Hint: R{row} C{col} = {digit}.';
+                if (hint.technique === 'full_house') {
+                    template = m?.hintReasonFullHouse || 'Hint: R{row} C{col} = {digit} (last empty cell in {unit}).';
+                } else if (hint.technique === 'hidden_single') {
+                    template = m?.hintReasonHiddenSingle || 'Hint: R{row} C{col} = {digit} (only spot for {digit} in {unit}).';
+                } else if (hint.technique === 'naked_single') {
+                    template = m?.hintReasonNakedSingle || 'Hint: R{row} C{col} = {digit} (only possible candidate for this cell).';
                 }
             }
-            if (candidateIndices.length === 0) return;
-            targetIdx = candidateIndices[Math.floor(Math.random() * candidateIndices.length)];
+
+            return template
+                .replaceAll('{row}', String(row + 1))
+                .replaceAll('{col}', String(col + 1))
+                .replaceAll('{digit}', String(hint.digit))
+                .replaceAll('{unit}', unitLabel);
+        };
+
+        const activePending = cur.pendingHint;
+        const canResolvePending = Boolean(
+            activePending
+            && activePending.index >= 0
+            && activePending.index < totalCells
+            && !cur.gameState.givens[activePending.index]
+            && cur.gameState.board[activePending.index] !== activePending.digit,
+        );
+
+        if (!canResolvePending) {
+            const hint = findLogicalHint(cur.gameState, { preferredIndex: selectedIndex });
+            if (!hint || !hint.digit) return;
+
+            setPendingHint(hint);
+            stateRef.current.pendingHint = hint;
+            setSelectedIndex(hint.index);
+            broadcastCursor(hint.index);
+            triggerHintHighlight(hint, 'preview');
+            broadcastHintHighlight(hint, 'preview');
+            showFeedback(formatHintMessage(hint, true));
+            return;
         }
 
-        const correctDigit = cur.gameState.solution[targetIdx];
-        if (!correctDigit) return;
+        const hint = activePending;
+        const targetIdx = hint.index;
+        const correctDigit = hint.digit;
+
+        setPendingHint(null);
+        stateRef.current.pendingHint = null;
 
         const owner = (cur.myRole === 'host' || cur.myRole === 'guest') ? cur.myRole : null;
         const prevBoard = cur.gameState.board;
         setSelectedIndex(targetIdx);
+        broadcastCursor(targetIdx);
         const nextState = setCellValue(cur.gameState, targetIdx, correctDigit, { owner });
         setGameState(nextState);
         stateRef.current.gameState = nextState;
         clearHintsForCell(targetIdx);
+        triggerHintHighlight(hint, 'solve');
+        broadcastHintHighlight(hint, 'solve');
         const unitCompleted = triggerUnitCelebration(prevBoard, nextState, targetIdx);
         playMoveSoundFeedback(nextState, targetIdx, correctDigit, unitCompleted);
 
@@ -1281,10 +1868,9 @@ export function App() {
             syncLobbyProgress(nextState);
         }
 
-        const { row, col } = getCellCoords(targetIdx, activeVariant);
-        showFeedback(`Hint filled R${row + 1} C${col + 1} with ${correctDigit}.`);
+        showFeedback(formatHintMessage(hint, false));
         persistSnapshotIfNeeded(nextState);
-    }, [clearHintsForCell, persistSnapshotIfNeeded, playMoveSoundFeedback, selectedIndex, showFeedback, syncLobbyProgress, triggerUnitCelebration]);
+    }, [broadcastCursor, broadcastHintHighlight, clearHintsForCell, persistSnapshotIfNeeded, playMoveSoundFeedback, selectedIndex, showFeedback, syncLobbyProgress, triggerHintHighlight, triggerUnitCelebration]);
 
     const sendSpectatorHint = useCallback((value) => {
         const cur = stateRef.current;
@@ -1332,9 +1918,38 @@ export function App() {
 
     const executeSwitchMode = useCallback((newMode) => {
         clearUnitCelebration();
+        if (pendingJoinTimerRef.current) {
+            clearTimeout(pendingJoinTimerRef.current);
+            pendingJoinTimerRef.current = null;
+        }
+        const pending = stateRef.current.pendingJoinRequest;
+        if (pending) {
+            onlineClientRef.current?.broadcastGameEvent(pending.gameId, 'join-cancel', {
+                requestId: pending.requestId,
+                requesterId: onlineClientRef.current?.clientId,
+            });
+            setPendingJoinRequest(null);
+            stateRef.current.pendingJoinRequest = null;
+        }
+        if (stateRef.current.incomingJoinRequests.length > 0) {
+            const pendingReqs = stateRef.current.incomingJoinRequests;
+            setIncomingJoinRequests([]);
+            stateRef.current.incomingJoinRequests = [];
+            for (const incoming of pendingReqs) {
+                onlineClientRef.current?.broadcastGameEvent(incoming.gameId, 'join-response', {
+                    requestId: incoming.requestId,
+                    requesterId: incoming.requesterId,
+                    accepted: false,
+                    reason: 'declined',
+                });
+            }
+        }
         onlineClientRef.current?.disconnect();
-        setPartnerCursorIndex(null);
+        setHostCursorIndex(null);
+        setGuestCursors(new Map());
+        setRemoteActiveDigit(null);
         setActiveDigit(null);
+        setHostJoinPolicy('confirm');
 
         if (newMode === 'watch') {
             setNavTab('watch');
@@ -1413,12 +2028,28 @@ export function App() {
     }, [switchMode]);
 
     const exitSpectating = useCallback(() => {
+        if (pendingJoinTimerRef.current) {
+            clearTimeout(pendingJoinTimerRef.current);
+            pendingJoinTimerRef.current = null;
+        }
+        const pending = stateRef.current.pendingJoinRequest;
+        if (pending) {
+            onlineClientRef.current?.broadcastGameEvent(pending.gameId, 'join-cancel', {
+                requestId: pending.requestId,
+                requesterId: onlineClientRef.current?.clientId,
+            });
+            setPendingJoinRequest(null);
+            stateRef.current.pendingJoinRequest = null;
+        }
         onlineClientRef.current?.leaveGameChannel();
         setOnlineGameId(null);
         setIsSpectating(false);
+        setHostJoinPolicy('confirm');
         setNavTab('watch');
         setMode('watch');
-        setPartnerCursorIndex(null);
+        setHostCursorIndex(null);
+        setGuestCursors(new Map());
+        setRemoteActiveDigit(null);
         setCurrentMembers([]);
         setHintsMap(new Map());
         updateBrowserUrl('/');
@@ -1455,7 +2086,9 @@ export function App() {
             stateRef.current.gameState = nextState;
             setSelectedIndex(null);
             setActiveDigit(null);
-            setPartnerCursorIndex(null);
+            setHostCursorIndex(null);
+            setGuestCursors(new Map());
+            setRemoteActiveDigit(null);
             setNotesMode(false);
             setRematchRequestedBy(null);
             setHintsMap(new Map());
@@ -1583,8 +2216,11 @@ export function App() {
                 stateRef.current.navTab = 'play';
                 stateRef.current.isPlayingGame = true;
                 setSelectedIndex(0);
+                stateRef.current.selectedIndex = 0;
                 saveSoloGameSnapshot(curState, stateRef.current.onlineGameId);
                 ensureHostOnlineSession(curState, stateRef.current.onlineGameId, 'solo');
+                broadcastCursor(0);
+                broadcastActiveDigit(null);
                 requestAnimationFrame(() => cellRefs.current[0]?.focus());
                 return;
             }
@@ -1605,6 +2241,9 @@ export function App() {
             stateRef.current.isPlayingGame = true;
             startNewSoloGame(cur.difficulty, cur.variant, { startSession: true });
             setSelectedIndex(0);
+            stateRef.current.selectedIndex = 0;
+            broadcastCursor(0);
+            broadcastActiveDigit(null);
             requestAnimationFrame(() => cellRefs.current[0]?.focus());
         };
 
@@ -1620,7 +2259,7 @@ export function App() {
         }
 
         launchGame();
-    }, [ensureHostOnlineSession, startNewSoloGame]);
+    }, [broadcastActiveDigit, broadcastCursor, ensureHostOnlineSession, startNewSoloGame]);
 
     const handleResumeFromSetup = useCallback(() => {
         const curState = stateRef.current.gameState;
@@ -1636,11 +2275,14 @@ export function App() {
         stateRef.current.navTab = 'play';
         stateRef.current.isPlayingGame = true;
         setSelectedIndex(0);
+        stateRef.current.selectedIndex = 0;
         if (stateRef.current.myRole === 'host' && !stateRef.current.isSpectating && stateRef.current.onlineGameId) {
             ensureHostOnlineSession(curState, stateRef.current.onlineGameId, stateRef.current.mode);
+            broadcastCursor(0);
+            broadcastActiveDigit(null);
         }
         requestAnimationFrame(() => cellRefs.current[0]?.focus());
-    }, [ensureHostOnlineSession]);
+    }, [broadcastActiveDigit, broadcastCursor, ensureHostOnlineSession]);
 
     const handleBackToSetup = useCallback(() => {
         setIsPlayingGame(false);
@@ -1649,6 +2291,19 @@ export function App() {
         const hasPartner = cur.currentMembers.some(
             (m) => m.role !== cur.myRole && (m.role === 'host' || m.role === 'guest'),
         );
+        if (cur.incomingJoinRequests.length > 0) {
+            const pendingReqs = cur.incomingJoinRequests;
+            setIncomingJoinRequests([]);
+            stateRef.current.incomingJoinRequests = [];
+            for (const req of pendingReqs) {
+                onlineClientRef.current?.broadcastGameEvent(req.gameId, 'join-response', {
+                    requestId: req.requestId,
+                    requesterId: req.requesterId,
+                    accepted: false,
+                    reason: 'declined',
+                });
+            }
+        }
         if (!hasPartner && cur.myRole === 'host') {
             onlineClientRef.current?.leaveLobby();
         }
@@ -1677,6 +2332,10 @@ export function App() {
                     e.preventDefault();
                     setSelectedIndex(null);
                     setActiveDigit(null);
+                    if (!isSpectating) {
+                        broadcastCursor(null);
+                        broadcastActiveDigit(null);
+                    }
                 }
                 return;
             }
@@ -1738,7 +2397,7 @@ export function App() {
 
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [applyPlayerDigit, focusCell, handleUndo, isHelpOpen, isPlayingGame, isSpectating, navTab, pendingConfirm, selectedIndex, sendSpectatorHint]);
+    }, [applyPlayerDigit, broadcastActiveDigit, broadcastCursor, focusCell, handleUndo, isHelpOpen, isPlayingGame, isSpectating, navTab, pendingConfirm, selectedIndex, sendSpectatorHint]);
 
     const showHints = mode === 'solo' || mode === 'online' || isSpectating;
     const hintsByCell = useMemo(
@@ -1749,14 +2408,26 @@ export function App() {
         ? gameState.board[selectedIndex]
         : activeDigit;
 
+    const myClientId = onlineClientRef.current?.clientId || null;
     const partnerOnline = currentMembers.some(
-        (m) => m.role !== myRole && (m.role === 'host' || m.role === 'guest'),
+        (m) => (m.role === 'host' || m.role === 'guest') && (myClientId && m.id ? m.id !== myClientId : m.role !== myRole),
     );
     const isCoopSession = !isSpectating && (mode === 'online' || partnerOnline || myRole === 'guest');
     const hostOnline = currentMembers.some((m) => m.role === 'host');
-    const guestOnline = currentMembers.some((m) => m.role === 'guest');
-    const canJoinSpectated = isSpectating && hostOnline && !guestOnline && gameState.status !== 'solved' && Boolean(onlineGameId);
+    const canJoinSpectated = isSpectating && hostOnline && hostJoinPolicy !== 'disabled' && gameState.status !== 'solved' && Boolean(onlineGameId);
     const canResumeGame = !isSpectating && mode !== 'watch' && (hasUnsavedProgress(gameState) || isCoopSession);
+
+    const watchPartnerCursorIndices = useMemo(
+        () => Array.from(guestCursors.values()),
+        [guestCursors],
+    );
+    const playPartnerCursorIndices = useMemo(() => {
+        const indices = Array.from(guestCursors.values());
+        if (myRole !== 'host' && hostCursorIndex !== null) {
+            indices.push(hostCursorIndex);
+        }
+        return indices;
+    }, [guestCursors, hostCursorIndex, myRole]);
 
     const activeBoardVariant = gameState.variant || inferVariantFromBoardLength(gameState.board?.length);
 
@@ -1812,6 +2483,43 @@ export function App() {
                                 }}
                             >
                                 {pendingConfirm.confirmLabel}
+                            </button>
+                        </div>
+                    </section>
+                )}
+
+                {incomingJoinRequest && myRole === 'host' && !isSpectating && (
+                    <section
+                        id="join-request-banner"
+                        className="confirm-banner"
+                        role="alertdialog"
+                        aria-modal="false"
+                        aria-labelledby="join-request-title"
+                    >
+                        <div className="confirm-banner__copy">
+                            <h2 id="join-request-title" className="confirm-banner__title">
+                                {messages.joinRequestTitle || 'Player wants to join'}
+                            </h2>
+                            <p className="confirm-banner__message">
+                                {messages.joinRequestMessage || 'Another player would like to join this puzzle in Co-op mode.'}
+                            </p>
+                        </div>
+                        <div className="confirm-banner__actions">
+                            <button
+                                type="button"
+                                id="decline-join-btn"
+                                className="confirm-banner__btn confirm-banner__btn--cancel"
+                                onClick={() => handleRespondJoinRequest(false)}
+                            >
+                                {messages.joinRequestDecline || 'Decline'}
+                            </button>
+                            <button
+                                type="button"
+                                id="accept-join-btn"
+                                className="confirm-banner__btn confirm-banner__btn--accept"
+                                onClick={() => handleRespondJoinRequest(true)}
+                            >
+                                {messages.joinRequestAccept || 'Allow'}
                             </button>
                         </div>
                     </section>
@@ -1905,6 +2613,7 @@ export function App() {
                             mode={mode}
                             isSpectating={false}
                             myRole={myRole}
+                            myClientId={onlineClientRef.current?.clientId || null}
                             currentMembers={currentMembers}
                             spectatedGameMode={spectatedGameMode}
                             gameState={gameState}
@@ -1921,8 +2630,10 @@ export function App() {
                             cellRefs={cellRefs}
                             onCellSelect={handleCellSelect}
                             myRole={myRole}
-                            partnerCursorIndex={partnerCursorIndex}
+                            playerCursorIndex={null}
+                            partnerCursorIndices={playPartnerCursorIndices}
                             unitCelebration={unitCelebration}
+                            hintHighlight={hintHighlight}
                         />
 
                         {actionFeedback && (
@@ -1959,9 +2670,13 @@ export function App() {
                                 const prevGameState = cur.gameState;
                                 const prevBoard = prevGameState.board;
                                 setSelectedIndex(idx);
+                                broadcastCursor(idx);
                                 const nextState = setCellValue(prevGameState, idx, digit, { owner });
                                 setGameState(nextState);
                                 stateRef.current.gameState = nextState;
+                                if (nextState !== prevGameState) {
+                                    clearPendingHint();
+                                }
                                 clearHintsForCell(idx);
                                 const unitCompleted = triggerUnitCelebration(prevBoard, nextState, idx);
                                 if (nextState !== prevGameState) {
@@ -1990,6 +2705,7 @@ export function App() {
                             activeDigit={activeDigit}
                             highlightedDigit={highlightedDigit}
                             isSolved={gameState.status === 'solved'}
+                            isHintArmed={Boolean(pendingHint)}
                             onUndo={handleUndo}
                             onErase={() => applyPlayerDigit(0)}
                             onToggleNotes={() => setNotesMode((prev) => !prev)}
@@ -2010,6 +2726,8 @@ export function App() {
                         onRefresh={openWatchDirectory}
                         onWatchGame={spectateGame}
                         onJoinGame={joinWatchGame}
+                        pendingJoinGameId={pendingJoinRequest?.gameId || null}
+                        onCancelJoinRequest={cancelPendingJoinRequest}
                         messages={messages}
                     />
                 )}
@@ -2017,19 +2735,33 @@ export function App() {
                 {navTab === 'watch' && isSpectating && (
                     <main className="watch-screen" aria-label={messages.navWatch}>
                         <div id="spectator-bar" className="spectator-bar">
-                            <span>
-                                <strong>{messages.spectatingBar}</strong> — {messages.spectatingReadOnly}
-                            </span>
+                            {hostJoinPolicy !== 'disabled' && (
+                                <span>
+                                    <strong>{messages.spectatingBar}</strong> — {messages.spectatingReadOnly}
+                                </span>
+                            )}
                             <div className="spectator-bar__actions">
                                 {canJoinSpectated && (
-                                    <button
-                                        type="button"
-                                        id="join-from-watch-btn"
-                                        className="spectator-bar__join-btn"
-                                        onClick={() => joinWatchGame(onlineGameId)}
-                                    >
-                                        {messages.joinGame}
-                                    </button>
+                                    pendingJoinRequest?.gameId === onlineGameId ? (
+                                        <button
+                                            type="button"
+                                            id="cancel-join-from-watch-btn"
+                                            className="spectator-bar__back-btn"
+                                            onClick={cancelPendingJoinRequest}
+                                        >
+                                            {`${messages.watchJoinPending || 'Waiting...'} (${messages.cancelJoinRequest || 'Cancel'})`}
+                                        </button>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            id="join-from-watch-btn"
+                                            className="spectator-bar__join-btn"
+                                            disabled={Boolean(pendingJoinRequest)}
+                                            onClick={() => joinWatchGame(onlineGameId)}
+                                        >
+                                            {messages.joinGame}
+                                        </button>
+                                    )
                                 )}
                                 <button
                                     type="button"
@@ -2047,6 +2779,7 @@ export function App() {
                             mode={mode}
                             isSpectating
                             myRole={myRole}
+                            myClientId={onlineClientRef.current?.clientId || null}
                             currentMembers={currentMembers}
                             spectatedGameMode={spectatedGameMode}
                             gameState={gameState}
@@ -2057,14 +2790,16 @@ export function App() {
                         <SudokuBoard
                             gameState={gameState}
                             selectedIndex={selectedIndex}
-                            activeDigit={activeDigit}
+                            activeDigit={selectedIndex === null ? remoteActiveDigit : activeDigit}
                             hintsByCell={hintsByCell}
                             floatingReactions={floatingReactions}
                             cellRefs={cellRefs}
                             onCellSelect={handleCellSelect}
                             myRole={myRole}
-                            partnerCursorIndex={partnerCursorIndex}
+                            playerCursorIndex={hostCursorIndex}
+                            partnerCursorIndices={watchPartnerCursorIndices}
                             unitCelebration={unitCelebration}
+                            hintHighlight={hintHighlight}
                         />
 
                         {actionFeedback && (
@@ -2121,12 +2856,16 @@ export function App() {
                     <SettingsPanel
                         theme={theme}
                         language={language}
+                        joinsAllowed={joinsAllowed}
+                        joinsAutoAccept={joinsAutoAccept}
                         musicEnabled={musicEnabled}
                         musicVolume={musicVolume}
                         soundEnabled={soundEnabled}
                         soundVolume={soundVolume}
                         onChangeTheme={setTheme}
                         onChangeLanguage={setLanguage}
+                        onChangeJoinsAllowed={setJoinsAllowed}
+                        onChangeJoinsAutoAccept={setJoinsAutoAccept}
                         onChangeMusicEnabled={setMusicEnabled}
                         onChangeMusicVolume={setMusicVolume}
                         onChangeSoundEnabled={setSoundEnabled}

@@ -213,5 +213,118 @@ describe('SudokuBoard & SpectatorHintsFeed React components', () => {
         expect(overlay).not.toBeNull();
         expect(overlay.style.getPropertyValue('--complete-delay')).toBe('56ms');
     });
+
+    it('renders logical hint target and context highlight overlays with staggered --hint-delay', () => {
+        const puzzle = [...SAMPLE_SOLUTION];
+        puzzle[0] = 0;
+        const state = setCellValue(createSudokuGame({ difficulty: 'easy', puzzle, solution: SAMPLE_SOLUTION }), 0, 5);
+        const contextDelays = new Map([[0, 0], [1, 28], [9, 28], [10, 56]]);
+
+        const { rerender } = render(
+            <SudokuBoard
+                gameState={state}
+                selectedIndex={0}
+                hintsByCell={new Map()}
+                floatingReactions={[]}
+                hintHighlight={{ id: 3, mode: 'preview', targetIndex: 0, contextDelays }}
+                onCellSelect={vi.fn()}
+            />,
+        );
+
+        const cells = screen.getAllByRole('gridcell');
+        expect(cells[0]).toHaveClass('sudoku-cell--hint-target', 'sudoku-cell--hint-preview');
+        expect(cells[0]).not.toHaveClass('sudoku-cell--hint-context');
+        expect(cells[1]).toHaveClass('sudoku-cell--hint-context', 'sudoku-cell--hint-preview');
+        expect(cells[10]).toHaveClass('sudoku-cell--hint-context', 'sudoku-cell--hint-preview');
+        expect(cells[3]).not.toHaveClass('sudoku-cell--hint-context');
+
+        const targetFlash = cells[0].querySelector('.sudoku-cell__hint-flash--target');
+        expect(targetFlash).not.toBeNull();
+        expect(targetFlash.style.getPropertyValue('--hint-delay')).toBe('0ms');
+
+        const contextFlash = cells[10].querySelector('.sudoku-cell__hint-flash');
+        expect(contextFlash).not.toBeNull();
+        expect(contextFlash).not.toHaveClass('sudoku-cell__hint-flash--target');
+        expect(contextFlash.style.getPropertyValue('--hint-delay')).toBe('56ms');
+
+        rerender(
+            <SudokuBoard
+                gameState={state}
+                selectedIndex={0}
+                hintsByCell={new Map()}
+                floatingReactions={[]}
+                hintHighlight={{ id: 4, mode: 'solve', targetIndex: 0, contextDelays }}
+                onCellSelect={vi.fn()}
+            />,
+        );
+        expect(screen.getAllByRole('gridcell')[0]).toHaveClass('sudoku-cell--hint-target');
+        expect(screen.getAllByRole('gridcell')[0]).not.toHaveClass('sudoku-cell--hint-preview');
+    });
+
+    it('renders playerCursorIndex crosshair, player pip, aria-label, and same-digit highlights when spectator has no local selection', () => {
+        const puzzle = [...SAMPLE_SOLUTION];
+        puzzle[2] = 0; // empty cell for guest/partner cursor
+        const state = createSudokuGame({ difficulty: 'easy', puzzle, solution: SAMPLE_SOLUTION });
+        // Cell 0 is a given 5 (row 0, col 0, box 0)
+        render(
+            <SudokuBoard
+                gameState={state}
+                selectedIndex={null}
+                hintsByCell={new Map()}
+                floatingReactions={[]}
+                myRole="spectator"
+                playerCursorIndex={0}
+                partnerCursorIndex={2}
+                onCellSelect={vi.fn()}
+            />,
+        );
+
+        const cells = screen.getAllByRole('gridcell');
+        expect(cells[0]).toHaveClass('sudoku-cell--player-cursor');
+        expect(cells[0]).not.toHaveClass('sudoku-cell--peer');
+        expect(cells[0].querySelector('.sudoku-cell__player-pip')).not.toBeNull();
+        expect(cells[0]).toHaveAttribute('aria-label', expect.stringContaining('player cursor'));
+
+        // Partner cursor coexists cleanly
+        expect(cells[2]).toHaveClass('sudoku-cell--partner-cursor', 'sudoku-cell--peer');
+        expect(cells[2].querySelector('.sudoku-cell__partner-pip')).not.toBeNull();
+
+        // Crosshair peers from playerCursorIndex (row 0, col 0, box 0)
+        expect(cells[8]).toHaveClass('sudoku-cell--peer'); // same row
+        expect(cells[72]).toHaveClass('sudoku-cell--peer'); // same col
+        expect(cells[10]).toHaveClass('sudoku-cell--peer'); // same box
+        expect(cells[40]).not.toHaveClass('sudoku-cell--peer'); // outside
+
+        // All other cells with digit 5 highlight as same-digit based on host's focused cell
+        const sameDigitCells = cells.filter((c) => c.classList.contains('sudoku-cell--same-digit'));
+        expect(sameDigitCells).toHaveLength(8);
+    });
+
+    it('renders multiple partner cursors simultaneously via partnerCursorIndices', () => {
+        const puzzle = [...SAMPLE_SOLUTION];
+        puzzle[2] = 0;
+        puzzle[10] = 0;
+        const state = createSudokuGame({ difficulty: 'easy', puzzle, solution: SAMPLE_SOLUTION });
+
+        render(
+            <SudokuBoard
+                gameState={state}
+                selectedIndex={null}
+                hintsByCell={new Map()}
+                floatingReactions={[]}
+                myRole="spectator"
+                playerCursorIndex={0}
+                partnerCursorIndices={[2, 10]}
+                onCellSelect={vi.fn()}
+            />,
+        );
+
+        const cells = screen.getAllByRole('gridcell');
+        expect(cells[0]).toHaveClass('sudoku-cell--player-cursor');
+        expect(cells[2]).toHaveClass('sudoku-cell--partner-cursor');
+        expect(cells[10]).toHaveClass('sudoku-cell--partner-cursor');
+        expect(cells[2].querySelector('.sudoku-cell__partner-pip')).not.toBeNull();
+        expect(cells[10].querySelector('.sudoku-cell__partner-pip')).not.toBeNull();
+    });
 });
 

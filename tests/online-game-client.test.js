@@ -125,6 +125,19 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
             total_cells: 36,
             has_guest: true,
             filled_count: 16,
+            join_policy: 'confirm',
         });
+
+        const gamePublishSpy = vi.fn().mockResolvedValue({});
+        client.gameChannel = { publish: gamePublishSpy };
+        client.gameRole = 'host';
+        client.gameMode = 'online';
+        client.updateGameJoinPolicy('auto');
+
+        expect(client.gameJoinPolicy).toBe('auto');
+        expect(gamePublishSpy).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'join-policy',
+            data: { joinPolicy: 'auto' },
+        }));
     });
 });

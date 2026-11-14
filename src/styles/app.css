@@ -616,6 +616,50 @@ body {
     filter: brightness(1.08);
 }
 
+.confirm-banner__btn--accept {
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+}
+
+.confirm-banner__btn--accept:hover {
+    background: var(--color-primary-dark);
+}
+
+.join-pending-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+    padding: 0.65rem 0.85rem;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-elevated);
+    border: 1px solid var(--color-primary);
+}
+
+.join-pending-banner__text {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.join-pending-banner__cancel-btn {
+    min-height: var(--touch-min);
+    padding: 0.35rem 0.8rem;
+    border-radius: var(--radius-sm);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.join-pending-banner__cancel-btn:hover {
+    background: var(--color-surface-hover);
+}
+
 /* Status Banner */
 .status-banner {
     display: flex;
@@ -1045,14 +1089,27 @@ body {
     pointer-events: none;
 }
 
-.sudoku-cell__partner-pip {
+.sudoku-cell__player-pip {
     position: absolute;
     top: 3px;
+    left: 3px;
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-full);
+    background: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-surface);
+    pointer-events: none;
+}
+
+.sudoku-cell__partner-pip {
+    position: absolute;
+    bottom: 3px;
     left: 3px;
     width: 7px;
     height: 7px;
     border-radius: var(--radius-full);
     background: var(--color-partner);
+    box-shadow: 0 0 0 1.5px var(--color-surface);
     pointer-events: none;
 }
 
@@ -1618,6 +1675,7 @@ input:focus-visible {
     .sudoku-cell--partner {
         text-decoration: underline;
     }
+    .sudoku-cell--player-cursor,
     .sudoku-cell--partner-cursor {
         outline: 2px dashed Highlight;
         outline-offset: -4px;
@@ -1872,6 +1930,20 @@ body {
     padding: 0;
 }
 
+.settings-fieldset--sub {
+    margin-top: 0.85rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-border);
+}
+
+.settings-fieldset--disabled {
+    opacity: 0.6;
+}
+
+.settings-fieldset--disabled .segmented-label {
+    cursor: not-allowed;
+}
+
 .segmented-options {
     display: grid;
     gap: 0.25rem;
@@ -2088,7 +2160,15 @@ body {
 .sudoku-cell--given .sudoku-cell__digit { font-weight: 700; }
 .sudoku-cell__digit { font-size: clamp(1.15rem, 4.8vw, 1.65rem); }
 .sudoku-cell--peer { background: var(--color-peer); }
-.sudoku-cell--partner-cursor { background: var(--color-partner-bg); }
+.sudoku-cell--player-cursor {
+    background: var(--color-selected-cell);
+    box-shadow: inset 0 0 0 2px var(--color-primary);
+    z-index: 2;
+}
+.sudoku-cell--partner-cursor {
+    background: var(--color-partner-bg);
+    box-shadow: inset 0 0 0 2px var(--color-partner);
+}
 .sudoku-cell--hinted { background: var(--color-hint-bg); }
 .sudoku-cell--same-digit { background: var(--color-same-digit); outline-color: var(--color-same-digit-border); }
 .sudoku-cell--same-digit.sudoku-cell--given .sudoku-cell__digit,
@@ -2151,6 +2231,109 @@ body {
     }
 }
 
+.sudoku-cell--hint-preview.sudoku-cell--hint-context {
+    background-color: var(--color-hint-bg);
+    box-shadow: inset 0 0 0 1.5px var(--color-hint-border);
+}
+
+.sudoku-cell--hint-preview.sudoku-cell--hint-target {
+    background-color: var(--color-hint-bg);
+    box-shadow: inset 0 0 0 3px var(--color-hint);
+}
+
+.tool-btn--hint-armed {
+    background: var(--color-hint-bg);
+    border-color: var(--color-hint);
+    color: var(--color-hint);
+}
+
+.sudoku-cell__hint-flash {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 3;
+    animation: hintContextFlash 1400ms cubic-bezier(0.22, 1, 0.36, 1) var(--hint-delay, 0ms) both;
+}
+
+.sudoku-cell__hint-flash--target {
+    animation: hintTargetFlash 1550ms cubic-bezier(0.22, 1, 0.36, 1) var(--hint-delay, 0ms) both;
+}
+
+.sudoku-cell--hint-target .sudoku-cell__digit {
+    position: relative;
+    z-index: 4;
+    animation: hintTargetDigit 1200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.sudoku-cell--hint-context .sudoku-cell__digit {
+    position: relative;
+    z-index: 4;
+}
+
+@keyframes hintContextFlash {
+    0% {
+        opacity: 0;
+        background-color: transparent;
+        box-shadow: inset 0 0 0 1px var(--color-hint-border);
+    }
+    24% {
+        opacity: 1;
+        background-color: var(--color-hint-bg);
+        box-shadow: inset 0 0 0 2px var(--color-hint);
+    }
+    70% {
+        opacity: 0.72;
+        background-color: var(--color-hint-bg);
+        box-shadow: inset 0 0 0 1px var(--color-hint-border);
+    }
+    100% {
+        opacity: 0;
+        background-color: transparent;
+        box-shadow: inset 0 0 0 0 transparent;
+    }
+}
+
+@keyframes hintTargetFlash {
+    0% {
+        opacity: 0;
+        background-color: transparent;
+        box-shadow: inset 0 0 0 2px var(--color-hint);
+    }
+    20% {
+        opacity: 1;
+        background-color: var(--color-hint-bg);
+        box-shadow: inset 0 0 0 3px var(--color-hint);
+    }
+    72% {
+        opacity: 0.85;
+        background-color: var(--color-hint-bg);
+        box-shadow: inset 0 0 0 2px var(--color-hint);
+    }
+    100% {
+        opacity: 0;
+        background-color: transparent;
+        box-shadow: inset 0 0 0 0 transparent;
+    }
+}
+
+@keyframes hintTargetDigit {
+    0% {
+        transform: scale(0.85);
+        color: var(--color-hint);
+    }
+    28% {
+        transform: scale(1.22);
+        color: var(--color-hint);
+    }
+    72% {
+        transform: scale(1.06);
+        color: var(--color-hint);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
 @keyframes game-enter {
     from { opacity: 0; }
     to { opacity: 1; }
@@ -2163,7 +2346,16 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
     .app-container { animation: none; }
-    .sudoku-cell--unit-complete .sudoku-cell__digit { animation: none; }
+    .sudoku-cell--unit-complete .sudoku-cell__digit,
+    .sudoku-cell--hint-target .sudoku-cell__digit { animation: none; }
+    .sudoku-cell__hint-flash {
+        animation: none;
+        background-color: var(--color-hint-bg);
+        box-shadow: inset 0 0 0 2px var(--color-hint-border);
+    }
+    .sudoku-cell__hint-flash--target {
+        box-shadow: inset 0 0 0 3px var(--color-hint);
+    }
 }
 
 @media (forced-colors: active) {
@@ -2171,7 +2363,9 @@ body {
     .segmented-label--active {
         outline: 3px solid Highlight;
     }
-    .sudoku-cell--unit-complete {
+    .sudoku-cell--unit-complete,
+    .sudoku-cell--hint-target,
+    .sudoku-cell--hint-context {
         outline: 2px solid Highlight;
         outline-offset: -3px;
     }

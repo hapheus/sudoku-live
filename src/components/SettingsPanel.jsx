@@ -4,12 +4,16 @@ import enMessages from '../locales/en.json';
 export function SettingsPanel({
     theme,
     language,
+    joinsAllowed = true,
+    joinsAutoAccept = false,
     musicEnabled = true,
     musicVolume = 0.45,
     soundEnabled = true,
     soundVolume = 0.65,
     onChangeTheme,
     onChangeLanguage,
+    onChangeJoinsAllowed = () => {},
+    onChangeJoinsAutoAccept = () => {},
     onChangeMusicEnabled = () => {},
     onChangeMusicVolume = () => {},
     onChangeSoundEnabled = () => {},
@@ -35,6 +39,11 @@ export function SettingsPanel({
     const soundOptions = [
         { value: true, label: messages.soundOn || 'On' },
         { value: false, label: messages.soundOff || 'Off' },
+    ];
+
+    const joinOptions = [
+        { value: true, label: messages.joinOptOn || 'On' },
+        { value: false, label: messages.joinOptOff || 'Off' },
     ];
 
     const musicPercent = Math.round(Math.min(1, Math.max(0, Number(musicVolume) || 0)) * 100);
@@ -89,6 +98,60 @@ export function SettingsPanel({
                                         value={opt.value}
                                         checked={active}
                                         onChange={() => onChangeLanguage(opt.value)}
+                                    />
+                                    <span>{opt.label}</span>
+                                </label>
+                            );
+                        })}
+                    </div>
+                </fieldset>
+            </div>
+
+            <div className="settings-group">
+                <fieldset className="settings-fieldset">
+                    <legend className="settings-fieldset__legend">{messages.settingsJoinsAllowed || 'Allow Joins'}</legend>
+                    <div className="segmented-options segmented-options--2" role="radiogroup" aria-label={messages.settingsJoinsAllowed || 'Allow Joins'}>
+                        {joinOptions.map((opt) => {
+                            const active = Boolean(joinsAllowed) === opt.value;
+                            return (
+                                <label
+                                    key={String(opt.value)}
+                                    className={`segmented-label ${active ? 'segmented-label--active' : ''}`}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="sudoku-joins-allowed"
+                                        value={String(opt.value)}
+                                        checked={active}
+                                        onChange={() => onChangeJoinsAllowed(opt.value)}
+                                    />
+                                    <span>{opt.label}</span>
+                                </label>
+                            );
+                        })}
+                    </div>
+                </fieldset>
+
+                <fieldset
+                    className={`settings-fieldset settings-fieldset--sub ${!joinsAllowed ? 'settings-fieldset--disabled' : ''}`}
+                    disabled={!joinsAllowed}
+                >
+                    <legend className="settings-fieldset__legend">{messages.settingsJoinsAutoAccept || 'Auto-accept Joins'}</legend>
+                    <div className="segmented-options segmented-options--2" role="radiogroup" aria-label={messages.settingsJoinsAutoAccept || 'Auto-accept Joins'}>
+                        {joinOptions.map((opt) => {
+                            const active = Boolean(joinsAutoAccept) === opt.value;
+                            return (
+                                <label
+                                    key={String(opt.value)}
+                                    className={`segmented-label ${active ? 'segmented-label--active' : ''}`}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="sudoku-joins-auto"
+                                        value={String(opt.value)}
+                                        checked={active}
+                                        disabled={!joinsAllowed}
+                                        onChange={() => onChangeJoinsAutoAccept(opt.value)}
                                     />
                                     <span>{opt.label}</span>
                                 </label>

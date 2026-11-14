@@ -10,6 +10,8 @@
         "test": "vitest run",
         "cap:sync": "npm run build && cap sync ios",
         "cap:open:ios": "cap open ios",
+        "ios:archive": "cd ios && fastlane archive",
+        "ios:testflight": "cd ios && fastlane beta",
         "e2e": "playwright test",
         "e2e:headed": "playwright test --headed"
     },
