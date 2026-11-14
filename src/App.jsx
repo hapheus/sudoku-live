@@ -51,8 +51,14 @@ import { HelpDialog } from './components/HelpDialog.jsx';
 import { SolveSummary } from './components/SolveSummary.jsx';
 import { BottomNav } from './components/BottomNav.jsx';
 import { SettingsPanel } from './components/SettingsPanel.jsx';
+import { LegalPage } from './components/LegalPage.jsx';
 
 const GAME_PING_INTERVAL_MS = 5000;
+const APP_STORE_URL = 'https://apps.apple.com/app/id6834748729';
+
+function isNativeCapacitorApp() {
+    return typeof window !== 'undefined' && Boolean(window.Capacitor?.isNativePlatform?.());
+}
 
 function hasUnsavedProgress(state) {
     if (!state || state.status === 'solved') return false;
@@ -62,7 +68,16 @@ function hasUnsavedProgress(state) {
 
 function parseInitialRoute() {
     if (typeof window === 'undefined') {
-        return { initialMode: 'solo', initialGameId: null, initialWatch: false };
+        return { initialMode: 'solo', initialGameId: null, initialWatch: false, initialLegalPage: null };
+    }
+
+    const isNative = isNativeCapacitorApp();
+    const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
+    if (!isNative && pathname === '/privacy') {
+        return { initialMode: 'solo', initialGameId: null, initialWatch: false, initialLegalPage: 'privacy' };
+    }
+    if (!isNative && pathname === '/impressum') {
+        return { initialMode: 'solo', initialGameId: null, initialWatch: false, initialLegalPage: 'impressum' };
     }
 
     const params = new URLSearchParams(window.location.search);
@@ -72,17 +87,17 @@ function parseInitialRoute() {
     const watch = params.get('watch') === '1' && Boolean(gameId);
 
     if (watch && gameId) {
-        return { initialMode: 'watch', initialGameId: gameId, initialWatch: true };
+        return { initialMode: 'watch', initialGameId: gameId, initialWatch: true, initialLegalPage: null };
     }
     if (gameId) {
-        return { initialMode: 'online', initialGameId: gameId, initialWatch: false };
+        return { initialMode: 'online', initialGameId: gameId, initialWatch: false, initialLegalPage: null };
     }
-    return { initialMode: 'solo', initialGameId: null, initialWatch: false };
+    return { initialMode: 'solo', initialGameId: null, initialWatch: false, initialLegalPage: null };
 }
 
 function updateBrowserUrl(path) {
     if (typeof window === 'undefined') return;
-    const isNative = Boolean(window.Capacitor?.isNativePlatform?.());
+    const isNative = isNativeCapacitorApp();
     if (isNative || !window.location.protocol.startsWith('http')) {
         return;
     }
@@ -91,7 +106,7 @@ function updateBrowserUrl(path) {
 
 function replaceBrowserUrl(path) {
     if (typeof window === 'undefined') return;
-    const isNative = Boolean(window.Capacitor?.isNativePlatform?.());
+    const isNative = isNativeCapacitorApp();
     if (isNative || !window.location.protocol.startsWith('http')) {
         return;
     }
@@ -99,8 +114,12 @@ function replaceBrowserUrl(path) {
 }
 
 export function App() {
+    const isNativeApp = isNativeCapacitorApp();
     const initialRoute = useMemo(() => parseInitialRoute(), []);
 
+    const [legalPage, setLegalPage] = useState(() => (
+        isNativeApp ? null : (initialRoute.initialLegalPage || null)
+    ));
     const [navTab, setNavTab] = useState(() => (
         initialRoute.initialMode === 'watch' || initialRoute.initialWatch ? 'watch' : 'play'
     ));
@@ -2007,7 +2026,41 @@ export function App() {
         executeSwitchMode(newMode);
     }, [executeSwitchMode]);
 
+    const openLegalPage = useCallback((page) => {
+        if (isNativeApp) return;
+        setLegalPage(page);
+        updateBrowserUrl(page === 'privacy' ? '/privacy' : '/impressum');
+    }, [isNativeApp]);
+
+    const closeLegalPage = useCallback(() => {
+        setLegalPage(null);
+        updateBrowserUrl('/');
+    }, []);
+
+    useEffect(() => {
+        if (isNativeApp || typeof window === 'undefined') return undefined;
+        const onPopState = () => {
+            const path = window.location.pathname.replace(/\/+$/, '') || '/';
+            if (path === '/privacy') {
+                setLegalPage('privacy');
+            } else if (path === '/impressum') {
+                setLegalPage('impressum');
+            } else {
+                setLegalPage(null);
+            }
+        };
+        window.addEventListener('popstate', onPopState);
+        return () => window.removeEventListener('popstate', onPopState);
+    }, [isNativeApp]);
+
     const handleSelectNavTab = useCallback((targetTab) => {
+        setLegalPage(null);
+        if (!isNativeApp && typeof window !== 'undefined') {
+            const path = window.location.pathname.replace(/\/+$/, '') || '/';
+            if (path === '/privacy' || path === '/impressum') {
+                updateBrowserUrl('/');
+            }
+        }
         if (targetTab === 'settings') {
             setNavTab('settings');
             return;
@@ -2025,7 +2078,7 @@ export function App() {
         } else {
             setNavTab('play');
         }
-    }, [switchMode]);
+    }, [isNativeApp, switchMode]);
 
     const exitSpectating = useCallback(() => {
         if (pendingJoinTimerRef.current) {
@@ -2445,12 +2498,24 @@ export function App() {
         }
     }
 
+    const showLegalPage = !isNativeApp && Boolean(legalPage);
+
     return (
         <>
             <div id="sudoku-app" className="app-container app-container--with-nav">
                 <div id="game-announcements" className="sr-only" aria-live="polite" aria-atomic="true">
                     {announcement}
                 </div>
+
+                {showLegalPage && (
+                    <LegalPage
+                        page={legalPage}
+                        language={language}
+                        onBack={closeLegalPage}
+                        onSwitchPage={openLegalPage}
+                        messages={messages}
+                    />
+                )}
 
                 {pendingConfirm && (
                     <section
@@ -2525,7 +2590,7 @@ export function App() {
                     </section>
                 )}
 
-                {navTab === 'play' && !isPlayingGame && (
+                {!showLegalPage && navTab === 'play' && !isPlayingGame && (
                     <section id="play-setup" className="play-setup" aria-label={messages.setupTitle}>
                         <header className="play-setup__header">
                             <h1 className="play-setup__title">{messages.gameTitle}</h1>
@@ -2565,10 +2630,52 @@ export function App() {
                                 </button>
                             )}
                         </div>
+
+                        {!isNativeApp && (
+                            <footer id="web-start-footer" className="play-setup__web-footer" aria-label={messages.webFooterLabel}>
+                                <a
+                                    id="app-store-link"
+                                    className="app-store-link"
+                                    href={APP_STORE_URL}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                >
+                                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                        <path d="M16.365 1.43c0 1.14-.493 2.27-1.177 3.08-.744.9-1.99 1.57-2.987 1.57-.12 0-.23-.02-.3-.03-.01-.06-.04-.22-.04-.39 0-1.15.572-2.27 1.206-2.98.804-.94 2.142-1.64 3.248-1.68.03.13.05.28.05.43zm4.565 15.71c-.03.07-.463 1.58-1.518 3.12-.945 1.34-1.94 2.71-3.43 2.71-1.517 0-1.9-.88-3.63-.88-1.698 0-2.302.91-3.67.91-1.377 0-2.332-1.26-3.428-2.8-1.287-1.82-2.323-4.63-2.323-7.28 0-4.28 2.797-6.55 5.552-6.55 1.448 0 2.675.95 3.6.95.865 0 2.222-1.01 3.902-1.01.613 0 2.886.06 4.374 2.19-.13.09-2.383 1.37-2.383 4.19 0 3.26 2.854 4.42 2.955 4.45z" />
+                                    </svg>
+                                    <span>{messages.appStoreLinkLabel}</span>
+                                </a>
+                                <nav className="web-legal-links" aria-label={messages.legalLinksLabel}>
+                                    <a
+                                        id="privacy-link"
+                                        href="/privacy"
+                                        className="web-legal-link"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            openLegalPage('privacy');
+                                        }}
+                                    >
+                                        {messages.privacyTitle}
+                                    </a>
+                                    <span className="web-legal-links__sep" aria-hidden="true">·</span>
+                                    <a
+                                        id="impressum-link"
+                                        href="/impressum"
+                                        className="web-legal-link"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            openLegalPage('impressum');
+                                        }}
+                                    >
+                                        {messages.impressumTitle}
+                                    </a>
+                                </nav>
+                            </footer>
+                        )}
                     </section>
                 )}
 
-                {navTab === 'play' && isPlayingGame && (
+                {!showLegalPage && navTab === 'play' && isPlayingGame && (
                     <main className="game-screen" aria-label={messages.gameTitle}>
                         <div className="game-top-bar">
                             {myRole !== 'guest' ? (
@@ -2718,7 +2825,7 @@ export function App() {
                     </main>
                 )}
 
-                {navTab === 'watch' && !isSpectating && (
+                {!showLegalPage && navTab === 'watch' && !isSpectating && (
                     <WatchDirectory
                         rooms={activeLobbyRooms}
                         connectionStatus={connectionStatus}
@@ -2732,7 +2839,7 @@ export function App() {
                     />
                 )}
 
-                {navTab === 'watch' && isSpectating && (
+                {!showLegalPage && navTab === 'watch' && isSpectating && (
                     <main className="watch-screen" aria-label={messages.navWatch}>
                         <div id="spectator-bar" className="spectator-bar">
                             {hostJoinPolicy !== 'disabled' && (
@@ -2852,7 +2959,7 @@ export function App() {
                     </main>
                 )}
 
-                {navTab === 'settings' && (
+                {!showLegalPage && navTab === 'settings' && (
                     <SettingsPanel
                         theme={theme}
                         language={language}
@@ -2883,7 +2990,7 @@ export function App() {
             </div>
 
             <BottomNav
-                activeTab={navTab}
+                activeTab={showLegalPage ? null : navTab}
                 isWatchActive={mode === 'watch' || isSpectating}
                 onSelectTab={handleSelectNavTab}
                 messages={messages}

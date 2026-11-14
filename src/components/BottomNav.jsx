@@ -69,7 +69,7 @@ export function BottomNav({
                             type="button"
                             role="tab"
                             aria-selected={isActive}
-                            tabIndex={isActive ? 0 : -1}
+                            tabIndex={isActive || (activeTab == null && idx === 0) ? 0 : -1}
                             className={`bottom-nav__item ${isActive ? 'bottom-nav__item--active' : ''}`}
                             onClick={() => onSelectTab(item.id)}
                             onKeyDown={(e) => handleKeyDown(e, idx)}

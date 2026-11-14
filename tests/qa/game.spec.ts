@@ -155,3 +155,25 @@ test('setup selects and restores a 6 by 6 easy puzzle', async ({ page }, testInf
     await page.getByRole('button', { name: 'Play', exact: true }).click();
     expect(await page.getByRole('gridcell').allTextContents()).toEqual(board);
 });
+
+test('web start screen exposes App Store link, Privacy Policy, and Impressum cleanly', async ({ page }, testInfo) => {
+    await openFixture(page);
+    await expect(page.locator('#app-store-link')).toHaveAttribute('href', 'https://apps.apple.com/app/id6834748729');
+    await expect(page.locator('#privacy-link')).toBeVisible();
+    await expect(page.locator('#impressum-link')).toBeVisible();
+
+    await page.locator('#privacy-link').click();
+    await expect(page).toHaveURL(/\/privacy$/);
+    await expect(page.locator('#legal-privacy')).toBeVisible();
+    await checkAccessibility(page, testInfo, 'privacy-page');
+
+    await page.locator('#legal-switch-impressum').click();
+    await expect(page).toHaveURL(/\/impressum$/);
+    await expect(page.locator('#legal-impressum')).toBeVisible();
+    await checkAccessibility(page, testInfo, 'impressum-page');
+
+    await page.locator('#legal-back-btn').click();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.locator('#play-setup')).toBeVisible();
+});
+

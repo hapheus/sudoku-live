@@ -1046,6 +1046,66 @@ it('lets a 3rd player join an active co-op game without spectator downgrade and 
     expect(document.getElementById('spectator-bar')).not.toBeInTheDocument();
 });
 
+it('shows App Store link, Privacy Policy, and Impressum on Web start screen and routes /privacy and /impressum', () => {
+    try {
+        render(<App />);
 
+        const footer = document.getElementById('web-start-footer');
+        expect(footer).toBeVisible();
 
+        const appStoreLink = document.getElementById('app-store-link');
+        expect(appStoreLink).toHaveAttribute('href', 'https://apps.apple.com/app/id6834748729');
+
+        const privacyLink = document.getElementById('privacy-link');
+        const impressumLink = document.getElementById('impressum-link');
+        expect(privacyLink).toHaveAttribute('href', '/privacy');
+        expect(impressumLink).toHaveAttribute('href', '/impressum');
+
+        // Navigate to Privacy Policy
+        fireEvent.click(privacyLink);
+        expect(window.location.pathname).toBe('/privacy');
+        expect(document.getElementById('legal-privacy')).toBeVisible();
+        expect(screen.getByRole('heading', { name: 'Privacy Policy' })).toBeVisible();
+        expect(screen.getAllByText('haf68k@gmail.com')[0]).toBeVisible();
+        expect(screen.getByText(/4481 Asten, Austria/)).toBeVisible();
+        expect(screen.getByText(/165\(3\) TKG 2021/)).toBeVisible();
+        expect(screen.getByText('dsb@dsb.gv.at')).toBeVisible();
+
+        // Switch from Privacy to Impressum
+        fireEvent.click(document.getElementById('legal-switch-impressum'));
+        expect(window.location.pathname).toBe('/impressum');
+        expect(document.getElementById('legal-impressum')).toBeVisible();
+        expect(screen.getByRole('heading', { name: /Legal Notice/i })).toBeVisible();
+        expect(screen.getByText(/Franz Haberfellner/)).toBeVisible();
+        expect(screen.getByText(/4481 Asten, Austria/)).toBeVisible();
+        expect(screen.getByText(/MedienG/)).toBeVisible();
+        expect(document.getElementById('legal-impressum').textContent).not.toContain('DDG');
+
+        // Return to Start screen
+        fireEvent.click(document.getElementById('legal-back-btn'));
+        expect(window.location.pathname).toBe('/');
+        expect(document.getElementById('play-setup')).toBeVisible();
+    } finally {
+        window.history.replaceState({}, '', '/');
+    }
+});
+
+it('hides Impressum, Privacy footer, and App Store link inside native Capacitor iOS app', () => {
+    window.Capacitor = { isNativePlatform: () => true };
+    window.history.replaceState({}, '', '/impressum');
+    try {
+        render(<App />);
+
+        expect(document.getElementById('play-setup')).toBeVisible();
+        expect(document.getElementById('web-start-footer')).not.toBeInTheDocument();
+        expect(document.getElementById('app-store-link')).not.toBeInTheDocument();
+        expect(document.getElementById('privacy-link')).not.toBeInTheDocument();
+        expect(document.getElementById('impressum-link')).not.toBeInTheDocument();
+        expect(document.getElementById('legal-impressum')).not.toBeInTheDocument();
+        expect(document.getElementById('legal-privacy')).not.toBeInTheDocument();
+    } finally {
+        delete window.Capacitor;
+        window.history.replaceState({}, '', '/');
+    }
+});
 

@@ -125,5 +125,11 @@
   "hintReasonFullHouse": "Hint: R{row} C{col} = {digit} (last empty cell in {unit}).",
   "hintReasonHiddenSingle": "Hint: R{row} C{col} = {digit} (only spot for {digit} in {unit}).",
   "hintReasonNakedSingle": "Hint: R{row} C{col} = {digit} (only possible candidate for this cell).",
-  "hintReasonFallback": "Hint: R{row} C{col} = {digit} (no single-step deduction available)."
+  "hintReasonFallback": "Hint: R{row} C{col} = {digit} (no single-step deduction available).",
+  "appStoreLinkLabel": "Download on the App Store",
+  "webFooterLabel": "App download and legal notices",
+  "legalLinksLabel": "Legal notices",
+  "privacyTitle": "Privacy Policy",
+  "impressumTitle": "Legal Notice (Impressum)",
+  "legalBackToApp": "Back to Sudoku Live"
 }

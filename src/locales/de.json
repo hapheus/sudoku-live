@@ -125,5 +125,11 @@
   "hintReasonFullHouse": "Hinweis: R{row} C{col} = {digit} (letztes freies Feld {unit}).",
   "hintReasonHiddenSingle": "Hinweis: R{row} C{col} = {digit} (einzig möglicher Platz für {digit} {unit}).",
   "hintReasonNakedSingle": "Hinweis: R{row} C{col} = {digit} (einzige mögliche Zahl für dieses Feld).",
-  "hintReasonFallback": "Hinweis: R{row} C{col} = {digit} (kein eindeutiger Einzelschritt verfügbar)."
+  "hintReasonFallback": "Hinweis: R{row} C{col} = {digit} (kein eindeutiger Einzelschritt verfügbar).",
+  "appStoreLinkLabel": "Im App Store für iPhone laden",
+  "webFooterLabel": "App-Download und rechtliche Hinweise",
+  "legalLinksLabel": "Rechtliche Hinweise",
+  "privacyTitle": "Datenschutz",
+  "impressumTitle": "Impressum",
+  "legalBackToApp": "Zurück zu Sudoku Live"
 }
