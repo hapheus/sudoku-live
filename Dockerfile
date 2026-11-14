@@ -19,9 +19,9 @@ RUN npm run build
 # ==============================================================================
 FROM nginx:1.29-alpine
 
-LABEL org.opencontainers.image.title="Sudoku Live" \
-      org.opencontainers.image.description="Zero-backend Sudoku SPA with real-time Centrifugo WebSocket co-op and spectator mode" \
-      org.opencontainers.image.source="https://github.com/hapheus/sudoku-live" \
+LABEL org.opencontainers.image.title="Sudoku Shift" \
+      org.opencontainers.image.description="Runnable Sudoku Shift SPA container (Game Off 2026) with real-time Centrifugo WebSocket co-op and spectator mode" \
+      org.opencontainers.image.source="https://github.com/hapheus/sudoku-shift" \
       org.opencontainers.image.licenses="PolyForm-Noncommercial-1.0.0"
 
 RUN apk add --no-cache curl
