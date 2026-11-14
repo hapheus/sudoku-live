@@ -16,6 +16,7 @@ export function SudokuBoard({
     partnerCursorIndices = null,
     unitCelebration = null,
     hintHighlight = null,
+    boardBackground = null,
 }) {
     const variant = gameState.variant || inferVariantFromBoardLength(gameState.board?.length);
     const spec = getVariantSpec(variant);
@@ -33,6 +34,7 @@ export function SudokuBoard({
     const conflictSet = new Set(gameState.conflicts || []);
     const activeTabStop = selectedIndex !== null && selectedIndex < spec.totalCells ? selectedIndex : 0;
     const isSolved = gameState.status === 'solved';
+    const hasArtwork = Boolean(boardBackground?.src);
     const celebrationId = unitCelebration?.id || 0;
     const celebrationDelays = unitCelebration?.cellDelays || null;
     const hintHighlightId = hintHighlight?.id || 0;
@@ -40,6 +42,62 @@ export function SudokuBoard({
     const isHintPreview = hintHighlightMode === 'preview';
     const hintHighlightTarget = hintHighlight?.targetIndex ?? null;
     const hintHighlightDelays = hintHighlight?.contextDelays || null;
+
+    const completedUnitCells = new Set();
+    if (hasArtwork && Array.isArray(gameState.board) && gameState.board.length === spec.totalCells) {
+        for (let r = 0; r < gridSize; r += 1) {
+            let rowComplete = true;
+            for (let c = 0; c < gridSize; c += 1) {
+                const i = r * gridSize + c;
+                if (gameState.board[i] <= 0 || conflictSet.has(i)) {
+                    rowComplete = false;
+                    break;
+                }
+            }
+            if (rowComplete) {
+                for (let c = 0; c < gridSize; c += 1) {
+                    completedUnitCells.add(r * gridSize + c);
+                }
+            }
+        }
+        for (let c = 0; c < gridSize; c += 1) {
+            let colComplete = true;
+            for (let r = 0; r < gridSize; r += 1) {
+                const i = r * gridSize + c;
+                if (gameState.board[i] <= 0 || conflictSet.has(i)) {
+                    colComplete = false;
+                    break;
+                }
+            }
+            if (colComplete) {
+                for (let r = 0; r < gridSize; r += 1) {
+                    completedUnitCells.add(r * gridSize + c);
+                }
+            }
+        }
+        const boxCountCols = gridSize / boxCols;
+        const boxCountRows = gridSize / boxRows;
+        for (let br = 0; br < boxCountRows; br += 1) {
+            for (let bc = 0; bc < boxCountCols; bc += 1) {
+                let boxComplete = true;
+                const indices = [];
+                for (let dr = 0; dr < boxRows; dr += 1) {
+                    for (let dc = 0; dc < boxCols; dc += 1) {
+                        const i = (br * boxRows + dr) * gridSize + (bc * boxCols + dc);
+                        indices.push(i);
+                        if (gameState.board[i] <= 0 || conflictSet.has(i)) {
+                            boxComplete = false;
+                        }
+                    }
+                }
+                if (boxComplete) {
+                    for (const i of indices) {
+                        completedUnitCells.add(i);
+                    }
+                }
+            }
+        }
+    }
 
     const digitsList = Array.from({ length: maxDigit }, (_, i) => i + 1);
     const axisIndices = Array.from({ length: gridSize }, (_, i) => i + 1);
@@ -78,11 +136,22 @@ export function SudokuBoard({
                         className={[
                             'sudoku-board',
                             is6x6 ? 'sudoku-board--6x6' : '',
+                            hasArtwork ? 'sudoku-board--has-artwork' : '',
                             isSolved ? 'sudoku-board--solved' : '',
                         ].filter(Boolean).join(' ')}
                         role="grid"
                         aria-label={`${gridSize} by ${gridSize} Sudoku grid`}
                     >
+                        {hasArtwork && (
+                            <div className="sudoku-board__artwork" aria-hidden="true">
+                                <img
+                                    src={boardBackground.src}
+                                    alt=""
+                                    className="sudoku-board__artwork-img"
+                                    draggable={false}
+                                />
+                            </div>
+                        )}
                         {Array.from({ length: gridSize }, (_, r) => (
                             <div key={r} className={`sudoku-row ${is6x6 ? 'sudoku-row--6x6' : ''}`} role="row">
                                 {Array.from({ length: gridSize }, (_, c) => {
@@ -91,6 +160,8 @@ export function SudokuBoard({
                                     const isGiven = Boolean(gameState.givens[idx]);
                                     const isSelected = idx === selectedIndex;
                                     const isConflict = conflictSet.has(idx);
+                                    const isRevealed = hasArtwork && value > 0 && !isConflict;
+                                    const isUnitRevealed = isRevealed && completedUnitCells.has(idx);
                                     const cellNotes = gameState.notes[idx] || [];
                                     const coords = getCellCoords(idx, spec.id);
                                     const hint = value === 0 ? (hintsByCell.get(idx) || null) : null;
@@ -121,6 +192,14 @@ export function SudokuBoard({
                                     const isHintTarget = hintHighlightTarget === idx && hintDelay !== undefined;
                                     const isHintContext = hintDelay !== undefined && !isHintTarget;
 
+                                    const cellStyle = {};
+                                    if (isUnitCelebrating) {
+                                        cellStyle['--complete-delay'] = `${celebrateDelay}ms`;
+                                    }
+                                    if (hasArtwork && isSolved) {
+                                        cellStyle['--solve-delay'] = `${(r + c) * 42}ms`;
+                                    }
+
                                     const classNames = [
                                         'sudoku-cell',
                                         isGiven
@@ -128,6 +207,8 @@ export function SudokuBoard({
                                             : (value > 0
                                                 ? (isPartnerOwned ? 'sudoku-cell--partner' : 'sudoku-cell--user')
                                                 : ''),
+                                        isRevealed ? 'sudoku-cell--revealed' : '',
+                                        isUnitRevealed ? 'sudoku-cell--unit-revealed' : '',
                                         isSelected ? 'sudoku-cell--selected' : '',
                                         isPlayerFocused ? 'sudoku-cell--player-cursor' : '',
                                         isPartnerFocused ? 'sudoku-cell--partner-cursor' : '',
@@ -156,7 +237,7 @@ export function SudokuBoard({
                                             role="gridcell"
                                             tabIndex={idx === activeTabStop ? 0 : -1}
                                             data-index={idx}
-                                            style={isUnitCelebrating ? { '--complete-delay': `${celebrateDelay}ms` } : undefined}
+                                            style={Object.keys(cellStyle).length > 0 ? cellStyle : undefined}
                                             aria-selected={isSelected}
                                             aria-invalid={isConflict ? 'true' : undefined}
                                             aria-label={getSudokuCellAriaLabel(idx, value, {

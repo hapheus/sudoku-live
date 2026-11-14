@@ -37,6 +37,10 @@ import {
     saveParticipantSession,
     saveSoloGameSnapshot,
 } from './services/online-state-storage.js';
+import {
+    getBoardBackgroundById,
+    selectBoardBackground,
+} from './services/board-backgrounds.js';
 import { ALLOWED_REACTIONS, aggregateHintsByCell } from './utils/watcher-helpers.js';
 import { VariantSelector } from './components/VariantSelector.jsx';
 import { DifficultySelector } from './components/DifficultySelector.jsx';
@@ -153,6 +157,7 @@ export function App() {
         difficulty: localStorage.getItem('sudoku_difficulty') || 'medium',
         variant: normalizeVariant(localStorage.getItem('sudoku_variant') || '3x3'),
     }));
+    const [boardBackground, setBoardBackground] = useState(() => selectBoardBackground());
     const [selectedIndex, setSelectedIndex] = useState(null);
     const [activeDigit, setActiveDigit] = useState(null);
     const [hostCursorIndex, setHostCursorIndex] = useState(null);
@@ -199,6 +204,7 @@ export function App() {
         myRole,
         joinPolicy,
         gameState,
+        boardBackground,
         rematchRequestedBy,
         currentMembers,
         hintsMap,
@@ -223,6 +229,7 @@ export function App() {
         myRole,
         joinPolicy,
         gameState,
+        boardBackground,
         rematchRequestedBy,
         currentMembers,
         hintsMap,
@@ -439,14 +446,18 @@ export function App() {
         }, 1850);
     }, []);
 
-    const persistSnapshotIfNeeded = useCallback((nextGameState, nextRematch = stateRef.current.rematchRequestedBy) => {
+    const persistSnapshotIfNeeded = useCallback((
+        nextGameState,
+        nextRematch = stateRef.current.rematchRequestedBy,
+        nextBoardBgId = stateRef.current.boardBackground?.id || null,
+    ) => {
         const { onlineGameId: gId, mode: m, isSpectating: spec, currentMembers: members } = stateRef.current;
         const hasGuest = members.some((member) => member.role === 'guest');
         if (m === 'solo' && !spec) {
-            saveSoloGameSnapshot(nextGameState, gId);
+            saveSoloGameSnapshot(nextGameState, gId, nextBoardBgId);
         }
         if (gId && (m === 'online' || spec || hasGuest)) {
-            saveOnlineGameSnapshot(gId, nextGameState, nextRematch);
+            saveOnlineGameSnapshot(gId, nextGameState, nextRematch, nextBoardBgId);
         }
     }, []);
 
@@ -609,6 +620,16 @@ export function App() {
             stateRef.current.gameState = hydrated;
             setSelectedIndex((prev) => (prev !== null && prev < hydrated.board.length ? prev : null));
 
+            let syncedBg = cur.boardBackground;
+            if (typeof data.boardBackgroundId === 'string') {
+                const resolvedBg = getBoardBackgroundById(data.boardBackgroundId);
+                if (resolvedBg) {
+                    syncedBg = resolvedBg;
+                    setBoardBackground(resolvedBg);
+                    stateRef.current.boardBackground = resolvedBg;
+                }
+            }
+
             if (data.rematchRequestedBy !== undefined) {
                 setRematchRequestedBy(data.rematchRequestedBy);
             }
@@ -620,7 +641,7 @@ export function App() {
                 setHintsMap(nextHints);
             }
             applySyncedVisuals(data, hydrated.board.length);
-            persistSnapshotIfNeeded(hydrated, data.rematchRequestedBy);
+            persistSnapshotIfNeeded(hydrated, data.rematchRequestedBy, syncedBg?.id || null);
             return;
         }
 
@@ -854,6 +875,10 @@ export function App() {
                     stateRef.current.gameState = hydrated;
                 }
             }
+            const nextBg = (typeof data?.boardBackgroundId === 'string' && getBoardBackgroundById(data.boardBackgroundId))
+                || selectBoardBackground({ previousId: cur.boardBackground?.id, seed: cur.onlineGameId });
+            setBoardBackground(nextBg);
+            stateRef.current.boardBackground = nextBg;
             clearUnitCelebration();
             setSelectedIndex(null);
             setActiveDigit(null);
@@ -862,7 +887,7 @@ export function App() {
             setRemoteActiveDigit(null);
             setRematchRequestedBy(null);
             setHintsMap(new Map());
-            persistSnapshotIfNeeded(nextState, null);
+            persistSnapshotIfNeeded(nextState, null, nextBg?.id || null);
             syncLobbyProgress(nextState);
             announce('New puzzle started.');
             return;
@@ -879,6 +904,16 @@ export function App() {
                 const boardsDiffer = Array.isArray(data.gameState.board)
                     && (variantDiffers || data.gameState.board.some((v, idx) => v !== cur.gameState.board[idx]));
 
+                let syncedBg = cur.boardBackground;
+                if (typeof data.boardBackgroundId === 'string' && data.boardBackgroundId !== cur.boardBackground?.id) {
+                    const resolvedBg = getBoardBackgroundById(data.boardBackgroundId);
+                    if (resolvedBg) {
+                        syncedBg = resolvedBg;
+                        setBoardBackground(resolvedBg);
+                        stateRef.current.boardBackground = resolvedBg;
+                    }
+                }
+
                 const shouldRecoverHost = cur.myRole === 'host' && localFilled <= localInitial && remoteFilled > localFilled && !variantDiffers;
                 const shouldAdoptRemote = cur.myRole !== 'host' && (
                     boardsDiffer
@@ -894,7 +929,7 @@ export function App() {
                         setGameState(hydrated);
                         stateRef.current.gameState = hydrated;
                         setSelectedIndex((prev) => (prev !== null && prev < hydrated.board.length ? prev : null));
-                        persistSnapshotIfNeeded(hydrated, data.rematchRequestedBy);
+                        persistSnapshotIfNeeded(hydrated, data.rematchRequestedBy, syncedBg?.id || null);
                     }
                     if (data.rematchRequestedBy !== undefined) {
                         setRematchRequestedBy(data.rematchRequestedBy);
@@ -911,6 +946,7 @@ export function App() {
         const cur = stateRef.current;
         return {
             gameState: serializeGameState(cur.gameState),
+            boardBackgroundId: cur.boardBackground?.id || null,
             rematchRequestedBy: cur.rematchRequestedBy,
             hints: Array.from(cur.hintsMap.entries()),
             hostCursorIndex: cur.myRole === 'host' ? cur.selectedIndex : undefined,
@@ -1054,6 +1090,9 @@ export function App() {
             setGameState(snapshot.gameState);
             stateRef.current.gameState = snapshot.gameState;
         }
+        const nextBg = getBoardBackgroundById(snapshot?.boardBackgroundId) || selectBoardBackground({ seed: gameId });
+        setBoardBackground(nextBg);
+        stateRef.current.boardBackground = nextBg;
 
         enterSpectatorView(gameId, 'Connecting to live Sudoku match...');
         updateBrowserUrl(`/games/${gameId}?watch=1`);
@@ -1325,11 +1364,15 @@ export function App() {
         const hadExistingSoloRoom = Boolean(stateRef.current.onlineGameId) && stateRef.current.myRole === 'host' && stateRef.current.mode === 'solo';
         const roomId = saved?.roomId || (hadExistingSoloRoom ? stateRef.current.onlineGameId : generateGameId());
 
-        const nextState = (saved && saved.gameState.status !== 'solved')
+        const isRestoringSaved = Boolean(saved && saved.gameState.status !== 'solved');
+        const nextState = isRestoringSaved
             ? saved.gameState
             : createSudokuGame({ difficulty: diff, variant: varId });
+        const nextBg = isRestoringSaved
+            ? (getBoardBackgroundById(saved?.boardBackgroundId) || stateRef.current.boardBackground || selectBoardBackground({ seed: roomId }))
+            : selectBoardBackground({ previousId: stateRef.current.boardBackground?.id });
 
-        if (saved && saved.gameState.status !== 'solved') {
+        if (isRestoringSaved) {
             setDifficulty(nextState.difficulty);
             localStorage.setItem('sudoku_difficulty', nextState.difficulty);
             const restoredVar = normalizeVariant(nextState.variant || inferVariantFromBoardLength(nextState.board?.length));
@@ -1355,6 +1398,7 @@ export function App() {
         setIncomingJoinRequests([]);
         stateRef.current.incomingJoinRequests = [];
         setGameState(nextState);
+        setBoardBackground(nextBg);
         if (!hadExistingSoloRoom) {
             setCurrentMembers([]);
         }
@@ -1364,9 +1408,10 @@ export function App() {
         stateRef.current.onlineGameId = roomId;
         stateRef.current.myRole = 'host';
         stateRef.current.gameState = nextState;
+        stateRef.current.boardBackground = nextBg;
 
-        if (startSession || (saved && saved.gameState.status !== 'solved')) {
-            saveSoloGameSnapshot(nextState, roomId);
+        if (startSession || isRestoringSaved) {
+            saveSoloGameSnapshot(nextState, roomId, nextBg?.id || null);
         }
 
         if (startSession) {
@@ -1375,12 +1420,13 @@ export function App() {
             if (isExistingChannel) {
                 client.broadcastGameEvent(roomId, 'new-puzzle-accept', {
                     gameState: serializeGameState(nextState),
+                    boardBackgroundId: nextBg?.id || null,
                 });
             }
             ensureHostOnlineSession(nextState, roomId, 'solo');
         }
 
-        announce(saved && saved.gameState.status !== 'solved'
+        announce(isRestoringSaved
             ? `Resumed ${specInfo.shortLabel} ${nextState.difficulty} Solo puzzle.`
             : `New ${specInfo.shortLabel} ${diff} Sudoku puzzle ready.`);
     }, [announce, clearUnitCelebration, ensureHostOnlineSession]);
@@ -1395,6 +1441,9 @@ export function App() {
             stateRef.current.gameState = snapshot.gameState;
             stateRef.current.rematchRequestedBy = snapshot.rematchRequestedBy;
         }
+        const nextBg = getBoardBackgroundById(snapshot?.boardBackgroundId) || selectBoardBackground({ seed: gameId });
+        setBoardBackground(nextBg);
+        stateRef.current.boardBackground = nextBg;
 
         const stored = loadParticipantSession(gameId);
         if (stored) {
@@ -1475,7 +1524,7 @@ export function App() {
                 const next = { ...prev, elapsedSeconds: (prev.elapsedSeconds || 0) + 1 };
                 stateRef.current.gameState = next;
                 if (stateRef.current.mode === 'solo' && next.elapsedSeconds % 5 === 0) {
-                    saveSoloGameSnapshot(next, stateRef.current.onlineGameId);
+                    saveSoloGameSnapshot(next, stateRef.current.onlineGameId, stateRef.current.boardBackground?.id || null);
                 }
                 return next;
             });
@@ -1493,6 +1542,7 @@ export function App() {
             onlineClientRef.current?.sendGamePing({
                 role: cur.myRole,
                 gameState: serializeGameState(cur.gameState),
+                boardBackgroundId: cur.boardBackground?.id || null,
                 rematchRequestedBy: cur.rematchRequestedBy,
                 hostCursorIndex: cur.myRole === 'host' ? cur.selectedIndex : undefined,
                 hostActiveDigit: cur.myRole === 'host' ? cur.activeDigit : undefined,
@@ -2135,8 +2185,11 @@ export function App() {
                 cur.gameState.variant || inferVariantFromBoardLength(cur.gameState.board?.length),
             );
             const nextState = createSudokuGame({ difficulty: cur.difficulty, variant: targetVariant });
+            const nextBg = selectBoardBackground({ previousId: cur.boardBackground?.id });
             setGameState(nextState);
+            setBoardBackground(nextBg);
             stateRef.current.gameState = nextState;
+            stateRef.current.boardBackground = nextBg;
             setSelectedIndex(null);
             setActiveDigit(null);
             setHostCursorIndex(null);
@@ -2145,9 +2198,10 @@ export function App() {
             setNotesMode(false);
             setRematchRequestedBy(null);
             setHintsMap(new Map());
-            persistSnapshotIfNeeded(nextState, null);
+            persistSnapshotIfNeeded(nextState, null, nextBg?.id || null);
             onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'new-puzzle-accept', {
                 gameState: serializeGameState(nextState),
+                boardBackgroundId: nextBg?.id || null,
             });
             syncLobbyProgress(nextState);
             announce('New co-op puzzle started.');
@@ -2270,7 +2324,7 @@ export function App() {
                 stateRef.current.isPlayingGame = true;
                 setSelectedIndex(0);
                 stateRef.current.selectedIndex = 0;
-                saveSoloGameSnapshot(curState, stateRef.current.onlineGameId);
+                saveSoloGameSnapshot(curState, stateRef.current.onlineGameId, stateRef.current.boardBackground?.id || null);
                 ensureHostOnlineSession(curState, stateRef.current.onlineGameId, 'solo');
                 broadcastCursor(0);
                 broadcastActiveDigit(null);
@@ -2741,6 +2795,7 @@ export function App() {
                             partnerCursorIndices={playPartnerCursorIndices}
                             unitCelebration={unitCelebration}
                             hintHighlight={hintHighlight}
+                            boardBackground={boardBackground}
                         />
 
                         {actionFeedback && (
@@ -2907,6 +2962,7 @@ export function App() {
                             partnerCursorIndices={watchPartnerCursorIndices}
                             unitCelebration={unitCelebration}
                             hintHighlight={hintHighlight}
+                            boardBackground={boardBackground}
                         />
 
                         {actionFeedback && (

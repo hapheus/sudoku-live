@@ -29,18 +29,20 @@ export function loadOnlineGameSnapshot(gameId) {
         return {
             gameState,
             rematchRequestedBy: parsed.rematchRequestedBy || null,
+            boardBackgroundId: typeof parsed.boardBackgroundId === 'string' ? parsed.boardBackgroundId : null,
         };
     } catch {
         return null;
     }
 }
 
-export function saveOnlineGameSnapshot(gameId, gameState, rematchRequestedBy = null) {
+export function saveOnlineGameSnapshot(gameId, gameState, rematchRequestedBy = null, boardBackgroundId = null) {
     if (!gameId || !gameState) return;
     try {
         sessionStorage.setItem(`${STATE_KEY_PREFIX}${gameId}`, JSON.stringify({
             gameState: serializeGameState(gameState),
             rematchRequestedBy,
+            boardBackgroundId: typeof boardBackgroundId === 'string' ? boardBackgroundId : null,
         }));
     } catch {
         // Ignore storage quota errors
@@ -58,18 +60,20 @@ export function loadSoloGameSnapshot() {
         return {
             gameState,
             roomId: typeof parsed.roomId === 'string' ? parsed.roomId : null,
+            boardBackgroundId: typeof parsed.boardBackgroundId === 'string' ? parsed.boardBackgroundId : null,
         };
     } catch {
         return null;
     }
 }
 
-export function saveSoloGameSnapshot(gameState, roomId = null) {
+export function saveSoloGameSnapshot(gameState, roomId = null, boardBackgroundId = null) {
     if (typeof localStorage === 'undefined' || !gameState) return;
     try {
         localStorage.setItem(SOLO_STORAGE_KEY, JSON.stringify({
             gameState: serializeGameState(gameState),
             roomId,
+            boardBackgroundId: typeof boardBackgroundId === 'string' ? boardBackgroundId : null,
         }));
     } catch {
         // Ignore storage quota errors

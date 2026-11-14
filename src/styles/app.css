@@ -1012,8 +1012,11 @@ body {
     font-weight: 800;
 }
 
-.sudoku-cell--selected {
+.sudoku-board:not(.sudoku-board--solved) .sudoku-cell--selected {
     background-color: rgba(56, 189, 248, 0.38) !important;
+}
+
+.sudoku-cell--selected {
     outline: 2.5px solid var(--color-primary);
     outline-offset: -2.5px;
     z-index: 2;
@@ -1730,6 +1733,16 @@ input:focus-visible {
     --color-nav-active-bg: rgba(124, 179, 255, 0.15);
     --color-backdrop: rgba(10, 12, 16, 0.78);
     --color-board-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+    --color-reveal-scrim: rgba(15, 19, 26, 0.76);
+    --color-reveal-unit-scrim: rgba(15, 19, 26, 0.70);
+    --color-reveal-peer-tint: rgba(56, 189, 248, 0.14);
+    --color-reveal-same-digit-tint: rgba(56, 189, 248, 0.28);
+    --color-reveal-selected-tint: rgba(56, 189, 248, 0.34);
+    --color-reveal-partner-tint: rgba(196, 181, 253, 0.18);
+    --color-reveal-given-digit: #f8f5ee;
+    --color-reveal-user-digit: #93c5fd;
+    --color-reveal-partner-digit: #ddd6fe;
+    --color-reveal-digit-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
     --board-max-size: 460px;
 }
 
@@ -1770,6 +1783,16 @@ input:focus-visible {
     --color-nav-active-bg: rgba(29, 78, 216, 0.11);
     --color-backdrop: rgba(27, 31, 35, 0.56);
     --color-board-shadow: 0 10px 28px rgba(27, 31, 35, 0.1);
+    --color-reveal-scrim: rgba(255, 253, 248, 0.80);
+    --color-reveal-unit-scrim: rgba(255, 253, 248, 0.74);
+    --color-reveal-peer-tint: rgba(29, 78, 216, 0.10);
+    --color-reveal-same-digit-tint: rgba(29, 78, 216, 0.20);
+    --color-reveal-selected-tint: rgba(29, 78, 216, 0.24);
+    --color-reveal-partner-tint: rgba(124, 58, 237, 0.14);
+    --color-reveal-given-digit: #111827;
+    --color-reveal-user-digit: #1e3a8a;
+    --color-reveal-partner-digit: #5b21b6;
+    --color-reveal-digit-shadow: 0 1px 2px rgba(255, 255, 255, 0.9);
 }
 
 body {
@@ -2174,8 +2197,158 @@ body {
 .sudoku-cell--same-digit.sudoku-cell--given .sudoku-cell__digit,
 .sudoku-cell--same-digit.sudoku-cell--user .sudoku-cell__digit { color: var(--color-same-digit-text); }
 .sudoku-cell--same-digit.sudoku-cell--partner .sudoku-cell__digit { color: var(--color-partner); }
-.sudoku-cell--selected { background: var(--color-selected-cell) !important; }
+.sudoku-board:not(.sudoku-board--solved) .sudoku-cell--selected { background: var(--color-selected-cell) !important; }
 .sudoku-cell__note--match { background: var(--color-same-digit); color: var(--color-same-digit-text); }
+
+/* Board Artwork Progressive Reveal & Solved Finale */
+.sudoku-board--has-artwork {
+    position: relative;
+    isolation: isolate;
+}
+
+.sudoku-board__artwork {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.sudoku-board__artwork-img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    transform: scale(1.03);
+    transition: transform 1100ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sudoku-board--has-artwork.sudoku-board--solved .sudoku-board__artwork-img {
+    transform: scale(1);
+}
+
+.sudoku-board--has-artwork .sudoku-row {
+    position: relative;
+    z-index: 1;
+}
+
+.sudoku-board--has-artwork .sudoku-cell:not(.sudoku-cell--revealed) {
+    background: var(--color-surface);
+}
+
+.sudoku-board--has-artwork .sudoku-cell:not(.sudoku-cell--revealed):hover,
+.sudoku-board--has-artwork .sudoku-cell--peer:not(.sudoku-cell--revealed) {
+    background: var(--color-peer);
+}
+
+.sudoku-board--has-artwork .sudoku-cell--hinted:not(.sudoku-cell--revealed),
+.sudoku-board--has-artwork .sudoku-cell--hint-preview.sudoku-cell--hint-context:not(.sudoku-cell--revealed),
+.sudoku-board--has-artwork .sudoku-cell--hint-preview.sudoku-cell--hint-target:not(.sudoku-cell--revealed) {
+    background: linear-gradient(var(--color-hint-bg), var(--color-hint-bg)), var(--color-surface);
+}
+
+.sudoku-board--has-artwork .sudoku-cell--partner-cursor:not(.sudoku-cell--revealed) {
+    background: linear-gradient(var(--color-partner-bg), var(--color-partner-bg)), var(--color-surface);
+}
+
+.sudoku-board--has-artwork .sudoku-cell--player-cursor:not(.sudoku-cell--revealed) {
+    background: var(--color-selected-cell);
+}
+
+.sudoku-board--has-artwork .sudoku-cell--conflict {
+    background: linear-gradient(var(--color-error-bg), var(--color-error-bg)), var(--color-surface) !important;
+}
+
+.sudoku-board--has-artwork .sudoku-cell--revealed {
+    background: var(--color-reveal-scrim);
+    transition: background 280ms ease, border-color 280ms ease;
+}
+
+.sudoku-board--has-artwork .sudoku-cell--revealed.sudoku-cell--unit-revealed {
+    background: var(--color-reveal-unit-scrim);
+}
+
+.sudoku-board--has-artwork .sudoku-cell--revealed:hover,
+.sudoku-board--has-artwork .sudoku-cell--revealed.sudoku-cell--peer {
+    background: linear-gradient(var(--color-reveal-peer-tint), var(--color-reveal-peer-tint)), var(--color-reveal-scrim);
+}
+
+.sudoku-board--has-artwork .sudoku-cell--revealed.sudoku-cell--unit-revealed.sudoku-cell--peer {
+    background: linear-gradient(var(--color-reveal-peer-tint), var(--color-reveal-peer-tint)), var(--color-reveal-unit-scrim);
+}
+
+.sudoku-board--has-artwork .sudoku-cell--revealed.sudoku-cell--partner-cursor {
+    background: linear-gradient(var(--color-reveal-partner-tint), var(--color-reveal-partner-tint)), var(--color-reveal-scrim);
+}
+
+.sudoku-board--has-artwork .sudoku-cell--revealed.sudoku-cell--same-digit {
+    background: linear-gradient(var(--color-reveal-same-digit-tint), var(--color-reveal-same-digit-tint)), var(--color-reveal-scrim);
+}
+
+.sudoku-board--has-artwork:not(.sudoku-board--solved) .sudoku-cell--revealed.sudoku-cell--selected {
+    background: linear-gradient(var(--color-reveal-selected-tint), var(--color-reveal-selected-tint)), var(--color-reveal-scrim) !important;
+}
+
+.sudoku-board--has-artwork .sudoku-cell--revealed.sudoku-cell--given .sudoku-cell__digit {
+    color: var(--color-reveal-given-digit);
+    text-shadow: var(--color-reveal-digit-shadow);
+}
+
+.sudoku-board--has-artwork .sudoku-cell--revealed.sudoku-cell--user .sudoku-cell__digit {
+    color: var(--color-reveal-user-digit);
+    text-shadow: var(--color-reveal-digit-shadow);
+}
+
+.sudoku-board--has-artwork .sudoku-cell--revealed.sudoku-cell--partner .sudoku-cell__digit {
+    color: var(--color-reveal-partner-digit);
+    text-shadow: var(--color-reveal-digit-shadow);
+}
+
+.sudoku-board--has-artwork .sudoku-cell--revealed.sudoku-cell--same-digit .sudoku-cell__digit,
+.sudoku-board--has-artwork .sudoku-cell--revealed.sudoku-cell--selected .sudoku-cell__digit {
+    color: var(--color-reveal-highlight-digit, var(--color-reveal-given-digit));
+    font-weight: 800;
+}
+
+.sudoku-board--has-artwork.sudoku-board--solved .sudoku-cell {
+    pointer-events: none;
+    outline-color: transparent;
+    animation: solvedCellDissolve 420ms cubic-bezier(0.22, 1, 0.36, 1) calc(var(--solve-delay, 0ms) + 120ms) forwards;
+}
+
+.sudoku-board--has-artwork.sudoku-board--solved .sudoku-cell__digit,
+.sudoku-board--has-artwork.sudoku-board--solved .sudoku-cell__player-pip,
+.sudoku-board--has-artwork.sudoku-board--solved .sudoku-cell__partner-pip {
+    animation: solvedDigitDissolve 220ms cubic-bezier(0.22, 1, 0.36, 1) var(--solve-delay, 0ms) forwards;
+}
+
+@keyframes solvedDigitDissolve {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    45% {
+        opacity: 1;
+        transform: scale(1.1);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(0.84);
+    }
+}
+
+@keyframes solvedCellDissolve {
+    100% {
+        background: transparent;
+        background-color: transparent;
+        background-image: none;
+        border-color: transparent;
+        box-shadow: none;
+        outline-color: transparent;
+    }
+}
+
 .tool-btn--active,
 .notes-quick-btn,
 .numpad-btn--active,
@@ -2346,6 +2519,21 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
     .app-container { animation: none; }
+    .sudoku-board__artwork-img { transition: none; transform: none; }
+    .sudoku-cell--revealed { transition: none; }
+    .sudoku-board--has-artwork.sudoku-board--solved .sudoku-cell {
+        animation: none;
+        background: transparent !important;
+        border-color: transparent;
+        box-shadow: none;
+        outline-color: transparent;
+    }
+    .sudoku-board--has-artwork.sudoku-board--solved .sudoku-cell__digit,
+    .sudoku-board--has-artwork.sudoku-board--solved .sudoku-cell__player-pip,
+    .sudoku-board--has-artwork.sudoku-board--solved .sudoku-cell__partner-pip {
+        animation: none;
+        opacity: 0;
+    }
     .sudoku-cell--unit-complete .sudoku-cell__digit,
     .sudoku-cell--hint-target .sudoku-cell__digit { animation: none; }
     .sudoku-cell__hint-flash {

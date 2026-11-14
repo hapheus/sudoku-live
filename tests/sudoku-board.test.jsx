@@ -326,5 +326,73 @@ describe('SudokuBoard & SpectatorHintsFeed React components', () => {
         expect(cells[2].querySelector('.sudoku-cell__partner-pip')).not.toBeNull();
         expect(cells[10].querySelector('.sudoku-cell__partner-pip')).not.toBeNull();
     });
+
+    it('reveals underlying artwork on valid filled cells and completed units while keeping empty/conflict cells covered', () => {
+        const puzzle = [...SAMPLE_SOLUTION];
+        // Keep row 0 completely filled & conflict-free; make row 1, row 3, col 0, and box 3 incomplete
+        puzzle[9] = 0;
+        puzzle[18] = 0;
+        puzzle[28] = 0;
+        let state = createSudokuGame({ difficulty: 'easy', puzzle, solution: SAMPLE_SOLUTION });
+        // Place conflicting digit 9 in cell 18 (row 2 col 0), colliding with 9 at cell 19 (row 2 col 1)
+        state = setCellValue(state, 18, 9);
+
+        render(
+            <SudokuBoard
+                gameState={state}
+                selectedIndex={9}
+                hintsByCell={new Map()}
+                floatingReactions={[]}
+                boardBackground={{ id: 'alpine.webp', title: 'Alpine', src: '/boards/alpine.webp' }}
+                onCellSelect={vi.fn()}
+            />,
+        );
+
+        const board = document.getElementById('sudoku-board');
+        expect(board).toHaveClass('sudoku-board--has-artwork');
+        const artworkImg = board.querySelector('.sudoku-board__artwork-img');
+        expect(artworkImg).not.toBeNull();
+        expect(artworkImg).toHaveAttribute('src', '/boards/alpine.webp');
+
+        const cells = screen.getAllByRole('gridcell');
+        // Row 0 is completely filled without conflicts -> revealed AND unit-revealed
+        expect(cells[0]).toHaveClass('sudoku-cell--revealed', 'sudoku-cell--unit-revealed');
+        expect(cells[8]).toHaveClass('sudoku-cell--revealed', 'sudoku-cell--unit-revealed');
+        // Cell 9 is empty -> not revealed
+        expect(cells[9]).not.toHaveClass('sudoku-cell--revealed');
+        // Cell 27 (row 3 col 0) is valid & filled, but row 3 (cell 28=0), col 0 (cell 9=0), and box 3 (cell 28=0) are incomplete
+        expect(cells[27]).toHaveClass('sudoku-cell--revealed');
+        expect(cells[27]).not.toHaveClass('sudoku-cell--unit-revealed');
+        // Cell 18 has a conflict -> must stay covered (not revealed)
+        expect(cells[18]).toHaveClass('sudoku-cell--conflict');
+        expect(cells[18]).not.toHaveClass('sudoku-cell--revealed');
+    });
+
+    it('applies staggered --solve-delay across cells when puzzle is solved with artwork', () => {
+        const puzzle = [...SAMPLE_SOLUTION];
+        puzzle[80] = 0;
+        const almostSolved = createSudokuGame({ difficulty: 'easy', puzzle, solution: SAMPLE_SOLUTION });
+        const solved = setCellValue(almostSolved, 80, SAMPLE_SOLUTION[80]);
+        expect(solved.status).toBe('solved');
+
+        render(
+            <SudokuBoard
+                gameState={solved}
+                selectedIndex={80}
+                hintsByCell={new Map()}
+                floatingReactions={[]}
+                boardBackground={{ id: 'alpine.webp', title: 'Alpine', src: '/boards/alpine.webp' }}
+                onCellSelect={vi.fn()}
+            />,
+        );
+
+        const board = document.getElementById('sudoku-board');
+        expect(board).toHaveClass('sudoku-board--has-artwork', 'sudoku-board--solved');
+        const cells = screen.getAllByRole('gridcell');
+        expect(cells[0].style.getPropertyValue('--solve-delay')).toBe('0ms');
+        expect(cells[1].style.getPropertyValue('--solve-delay')).toBe('42ms');
+        expect(cells[80].style.getPropertyValue('--solve-delay')).toBe(`${(8 + 8) * 42}ms`);
+    });
 });
+
 
