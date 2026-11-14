@@ -1052,15 +1052,18 @@ it('lets a 3rd player join an active co-op game without spectator downgrade and 
     expect(document.getElementById('spectator-bar')).not.toBeInTheDocument();
 });
 
-it('shows App Store link, Privacy Policy, and Impressum on Web start screen and routes /privacy and /impressum', () => {
+it('shows App Store Coming Soon badge, Privacy Policy, and Impressum on Web start screen and routes /privacy and /impressum', () => {
     try {
         render(<App />);
 
         const footer = document.getElementById('web-start-footer');
         expect(footer).toBeVisible();
 
-        const appStoreLink = document.getElementById('app-store-link');
-        expect(appStoreLink).toHaveAttribute('href', 'https://apps.apple.com/app/id6834748729');
+        const appStoreBadge = document.getElementById('app-store-link');
+        expect(appStoreBadge).toBeVisible();
+        expect(appStoreBadge).toHaveTextContent(/App Store/i);
+        expect(appStoreBadge).toHaveTextContent(/Coming Soon/i);
+        expect(appStoreBadge).not.toHaveAttribute('href');
 
         const privacyLink = document.getElementById('privacy-link');
         const impressumLink = document.getElementById('impressum-link');

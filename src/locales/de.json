@@ -127,6 +127,8 @@
   "hintReasonNakedSingle": "Hinweis: R{row} C{col} = {digit} (einzige mögliche Zahl für dieses Feld).",
   "hintReasonFallback": "Hinweis: R{row} C{col} = {digit} (kein eindeutiger Einzelschritt verfügbar).",
   "appStoreLinkLabel": "Im App Store für iPhone laden",
+  "appStoreComingSoonLabel": "App Store",
+  "appStoreComingSoonBadge": "Coming Soon",
   "webFooterLabel": "App-Download und rechtliche Hinweise",
   "legalLinksLabel": "Rechtliche Hinweise",
   "privacyTitle": "Datenschutz",

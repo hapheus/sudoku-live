@@ -102,7 +102,7 @@ export function LegalPage({
                                     <strong>Empfänger &amp; Drittlandübermittlung (Art. 13 Abs. 1 lit. e &amp; f DSGVO):</strong> Die Auslieferung und Absicherung erfolgt über unsere Server-Infrastruktur sowie über <strong>Cloudflare</strong> (Cloudflare, Inc., USA / Cloudflare Germany GmbH) als Tunnel-, CDN- und Sicherheitsdienstleister. Dabei können technische Verbindungsdaten auch in die USA übermittelt werden. Cloudflare ist nach dem <strong>EU-US Data Privacy Framework (DPF)</strong> zertifiziert (Angemessenheitsbeschluss nach Art. 45 DSGVO); ergänzend bestehen Standardvertragsklauseln gemäß Art. 46 DSGVO. Server- und Sicherheitslogs werden nur so lange aufbewahrt, wie es technisch für Betrieb und Sicherheit erforderlich ist.
                                 </p>
                                 <p>
-                                    <strong>Externer App-Store-Link (nur Web):</strong> Auf der Web-Startseite befindet sich ein Link in den Apple App Store. Erst beim aktiven Anklicken dieses Links wird eine Verbindung zu Servern der Apple Distribution International Ltd. hergestellt; ab diesem Zeitpunkt gelten die Datenschutzbestimmungen von Apple.
+                                    <strong>Externer App-Store-Link (nur Web, sofern aktiv):</strong> Sofern auf der Web-Startseite ein Link in den Apple App Store angezeigt wird, wird erst beim aktiven Anklicken dieses Links eine Verbindung zu Servern der Apple Distribution International Ltd. hergestellt; ab diesem Zeitpunkt gelten die Datenschutzbestimmungen von Apple.
                                 </p>
                             </section>
 
@@ -189,7 +189,7 @@ export function LegalPage({
                                     <strong>Recipients &amp; Third-Country Transfers (Art. 13(1)(e) &amp; (f) GDPR):</strong> Delivery and edge protection rely on our hosting infrastructure and <strong>Cloudflare</strong> (Cloudflare, Inc., USA / Cloudflare Germany GmbH) as a tunnel, CDN, and security provider. Technical connection metadata may be processed in the United States. Cloudflare is certified under the <strong>EU-US Data Privacy Framework (DPF)</strong> (European Commission adequacy decision under Art. 45 GDPR), supplemented by Standard Contractual Clauses under Art. 46 GDPR. Connection logs are retained only as long as technically required for security and operations.
                                 </p>
                                 <p>
-                                    <strong>External App Store Link (Web only):</strong> The web start screen includes an outbound link to the Apple App Store. A connection to servers of Apple Distribution International Ltd. is only established if you actively click that link, at which point Apple&apos;s privacy policy applies.
+                                    <strong>External App Store Link (Web only, when active):</strong> Where an outbound link to the Apple App Store is displayed on the web start screen, a connection to servers of Apple Distribution International Ltd. is only established if you actively click that link, at which point Apple&apos;s privacy policy applies.
                                 </p>
                             </section>
 
