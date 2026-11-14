@@ -12,12 +12,15 @@ export function PlayerControls({
     highlightedDigit = null,
     isSolved = false,
     isHintArmed = false,
+    canShift = false,
     onUndo,
     onErase,
     onToggleNotes,
     onFillCandidates,
     onClearNotes,
     onLocalHint,
+    onShiftRow = null,
+    onShiftCol = null,
     onDigit,
     messages = enMessages,
 }) {
@@ -149,6 +152,58 @@ export function PlayerControls({
                     );
                 })}
             </div>
+
+            {(onShiftRow || onShiftCol) && (
+                <div className="shift-bar" role="toolbar" aria-label={messages.shiftToolbarLabel || 'Shift row or column within box'}>
+                    <span className="shift-bar__label" aria-hidden="true">{messages.shiftLabel || 'Shift'}</span>
+                    <div className="shift-bar__actions">
+                        <button
+                            type="button"
+                            id="shift-row-up-btn"
+                            className="shift-btn"
+                            disabled={!canShift || isSolved}
+                            aria-label={messages.shiftRowUp || 'Shift row up'}
+                            title={`${messages.shiftRowUp || 'Shift row up'} (Shift + ↑)`}
+                            onClick={() => onShiftRow?.(-1)}
+                        >
+                            ↑
+                        </button>
+                        <button
+                            type="button"
+                            id="shift-row-down-btn"
+                            className="shift-btn"
+                            disabled={!canShift || isSolved}
+                            aria-label={messages.shiftRowDown || 'Shift row down'}
+                            title={`${messages.shiftRowDown || 'Shift row down'} (Shift + ↓)`}
+                            onClick={() => onShiftRow?.(1)}
+                        >
+                            ↓
+                        </button>
+                        <button
+                            type="button"
+                            id="shift-col-left-btn"
+                            className="shift-btn"
+                            disabled={!canShift || isSolved}
+                            aria-label={messages.shiftColLeft || 'Shift column left'}
+                            title={`${messages.shiftColLeft || 'Shift column left'} (Shift + ←)`}
+                            onClick={() => onShiftCol?.(-1)}
+                        >
+                            ←
+                        </button>
+                        <button
+                            type="button"
+                            id="shift-col-right-btn"
+                            className="shift-btn"
+                            disabled={!canShift || isSolved}
+                            aria-label={messages.shiftColRight || 'Shift column right'}
+                            title={`${messages.shiftColRight || 'Shift column right'} (Shift + →)`}
+                            onClick={() => onShiftCol?.(1)}
+                        >
+                            →
+                        </button>
+                    </div>
+                </div>
+            )}
         </section>
     );
 }

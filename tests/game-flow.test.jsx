@@ -1288,3 +1288,39 @@ it('runs safely when storage throws SecurityError and skips pushState inside emb
         }
     }
 });
+
+it('shifts rows and columns via buttons and Shift+Arrow keys while keeping selection aligned', () => {
+    render(<App />);
+    fireEvent.click(document.getElementById('start-game-btn'));
+
+    const shiftRowDownBtn = document.getElementById('shift-row-down-btn');
+    const shiftColRightBtn = document.getElementById('shift-col-right-btn');
+    expect(shiftRowDownBtn).toBeEnabled();
+    expect(shiftColRightBtn).toBeEnabled();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(shiftRowDownBtn).toBeDisabled();
+    expect(shiftColRightBtn).toBeDisabled();
+
+    const getCellDigit = (idx) => document.querySelector(`[data-index="${idx}"] .sudoku-cell__digit`)?.textContent || '';
+
+    const r0c0Before = getCellDigit(0);
+    const r1c0Before = getCellDigit(9);
+
+    fireEvent.click(document.querySelector('[data-index="0"]'));
+    expect(shiftRowDownBtn).toBeEnabled();
+
+    fireEvent.click(shiftRowDownBtn);
+    expect(getCellDigit(0)).toBe(r1c0Before);
+    expect(getCellDigit(9)).toBe(r0c0Before);
+    expect(document.querySelector('[data-index="9"]')).toHaveAttribute('aria-selected', 'true');
+
+    const r1c1Before = getCellDigit(10);
+    fireEvent.keyDown(document, { key: 'ArrowRight', shiftKey: true });
+    expect(getCellDigit(9)).toBe(r1c1Before);
+    expect(getCellDigit(10)).toBe(r0c0Before);
+    expect(document.querySelector('[data-index="10"]')).toHaveAttribute('aria-selected', 'true');
+
+    fireEvent.click(document.getElementById('undo-btn'));
+    expect(getCellDigit(9)).toBe(r0c0Before);
+});

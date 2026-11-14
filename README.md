@@ -1,6 +1,6 @@
-# Sudoku Live
+# Sudoku Shift
 
-[![CI](https://github.com/hapheus/sudoku-live/actions/workflows/ci.yml/badge.svg)](https://github.com/hapheus/sudoku-live/actions/workflows/ci.yml)
+[![CI](https://github.com/hapheus/sudoku-shift/actions/workflows/ci.yml/badge.svg)](https://github.com/hapheus/sudoku-shift/actions/workflows/ci.yml)
 [![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/License-PolyForm--Noncommercial--1.0.0-blue.svg)](LICENSE)
 
 Zero-backend 9×9 and 6×6 Sudoku app built with **React 19**, **Vite 8**, **Capacitor 8**, and **Centrifugo v6** WebSockets — structured as a reference showcase for shipping one web codebase to **Docker**, **itch.io HTML5**, and **iOS (TestFlight)**.
@@ -44,7 +44,7 @@ Open `http://localhost:8000` in your browser.
   ```
 - **itch.io HTML5 ZIP:**
   ```bash
-  npm run build:itch      # Build dist-itch/ with base './' -> sudoku-live-itch.zip
+  npm run build:itch      # Build dist-itch/ with base './' -> sudoku-shift-itch.zip
   npm run verify:itch     # Verify root index.html, relative paths, and file limits
   ```
 
@@ -81,7 +81,7 @@ Full index: [docs/README.md](docs/README.md)
 ```bash
 npm test                # 12 Vitest suites (domain, UI, Centrifugo client, itch.io ZIP checks)
 npm run build           # Vite production bundle
-npm run verify:itch     # Validate sudoku-live-itch.zip structure and relative paths
+npm run verify:itch     # Validate sudoku-shift-itch.zip structure and relative paths
 npm run docker:config   # Validate docker-compose.yml and compose.prod.yml
 npm run e2e             # Playwright headless Chromium + axe-core E2E suite
 ```

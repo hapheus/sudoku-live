@@ -331,6 +331,38 @@ export function createSoundEffectsPlayer({
         });
     });
 
+    const playShift = () => withReadyContext((activeCtx, dest) => {
+        // Smooth tactile slide sweep + bright harmonic shimmer for row/column shifts
+        scheduleTone(activeCtx, dest, {
+            freq: 260,
+            endFreq: 520,
+            startOffset: 0,
+            duration: 0.095,
+            type: 'triangle',
+            volume: 0.24,
+            attack: 0.006,
+            filterFreq: 1800,
+        });
+        scheduleTone(activeCtx, dest, {
+            freq: 659.25,
+            endFreq: 698.46,
+            startOffset: 0.032,
+            duration: 0.12,
+            type: 'sine',
+            volume: 0.18,
+            attack: 0.005,
+        });
+        scheduleTone(activeCtx, dest, {
+            freq: 987.77,
+            endFreq: 1046.5,
+            startOffset: 0.055,
+            duration: 0.16,
+            type: 'sine',
+            volume: 0.15,
+            attack: 0.005,
+        });
+    });
+
     const play = (effect) => {
         switch (effect) {
         case 'correct':
@@ -343,6 +375,8 @@ export function createSoundEffectsPlayer({
             return playGameSolved();
         case 'cheer':
             return playSpectatorCheer();
+        case 'shift':
+            return playShift();
         default:
             return false;
         }
@@ -394,6 +428,7 @@ export function createSoundEffectsPlayer({
         playUnitCompleted,
         playGameSolved,
         playSpectatorCheer,
+        playShift,
         unlock: handleUserGesture,
         isEnabled: () => enabled,
         setEnabled,

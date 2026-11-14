@@ -11,6 +11,10 @@ import {
     hydrateGameState,
     serializeGameState,
     setCellValue,
+    shiftBand,
+    shiftCol,
+    shiftRow,
+    shiftStack,
     toggleCellNote,
     undoLastMove,
 } from '../src/domain/sudoku-engine.js';
@@ -365,6 +369,83 @@ describe('Sudoku Engine', () => {
         // Either finds a valid non-poisoned deduction (e.g. hidden/naked single on box 0 or row 0) or fallback, never trusting wrong cell 9
         expect(hintFromPoisoned.contextDelays.has(9)).toBe(false);
         expect(base.status).toBe('in_progress');
+    });
+
+    it('shiftRow swaps rows within the same 3x3 band, preserves valid solution, and supports undo', () => {
+        const puzzle = [...SAMPLE_SOLUTION];
+        puzzle[0] = 0; // row 0, col 0
+        puzzle[9] = 0; // row 1, col 0
+        let state = createSudokuGame({ difficulty: 'easy', puzzle, solution: SAMPLE_SOLUTION });
+        state = toggleCellNote(state, 0, 5);
+        state = setCellValue(state, 9, 6, { owner: 'host' });
+
+        // Shift row 0 down (+1) -> swaps row 0 and row 1 within band 0
+        const shifted = shiftRow(state, 0, 1);
+        expect(shifted.board[0]).toBe(6);
+        expect(shifted.cellOwners[0]).toBe('host');
+        expect(shifted.givens[0]).toBe(false);
+        expect(shifted.notes[9]).toEqual([5]);
+        expect(shifted.givens[1]).toBe(true); // old row 1 col 1 was given (7)
+        expect(shifted.solution.slice(0, 9)).toEqual(SAMPLE_SOLUTION.slice(9, 18));
+        expect(shifted.solution.slice(9, 18)).toEqual(SAMPLE_SOLUTION.slice(0, 9));
+        expect(findConflicts(shifted.solution, '3x3')).toEqual([]);
+
+        // Shift row 0 up (-1) -> wraps within band 0 to row 2
+        const wrapped = shiftRow(state, 0, -1);
+        expect(wrapped.solution.slice(0, 9)).toEqual(SAMPLE_SOLUTION.slice(18, 27));
+        expect(wrapped.solution.slice(18, 27)).toEqual(SAMPLE_SOLUTION.slice(0, 9));
+        expect(findConflicts(wrapped.solution, '3x3')).toEqual([]);
+
+        // Undo restores board, givens, solution, notes, and cellOwners
+        const undone = undoLastMove(shifted);
+        expect(undone.board).toEqual(state.board);
+        expect(undone.givens).toEqual(state.givens);
+        expect(undone.solution).toEqual(state.solution);
+        expect(undone.notes).toEqual(state.notes);
+        expect(undone.cellOwners).toEqual(state.cellOwners);
+    });
+
+    it('shiftCol swaps columns within the same stack and works on 2x3 boards', () => {
+        const solution2x3 = [
+            1, 2, 3, 4, 5, 6,
+            4, 5, 6, 1, 2, 3,
+            2, 3, 1, 6, 4, 5,
+            5, 6, 4, 2, 3, 1,
+            3, 1, 2, 5, 6, 4,
+            6, 4, 5, 3, 1, 2,
+        ];
+        const puzzle2x3 = [...solution2x3];
+        puzzle2x3[0] = 0; // row 0, col 0
+        const state = createSudokuGame({ difficulty: 'easy', variant: '2x3', puzzle: puzzle2x3, solution: solution2x3 });
+
+        // Shift col 0 left (-1) -> wraps within stack 0 (cols 0..2) to col 2
+        const shiftedCol = shiftCol(state, 0, -1);
+        expect(shiftedCol.board[2]).toBe(0);
+        expect(shiftedCol.givens[2]).toBe(false);
+        expect(shiftedCol.board[0]).toBe(3);
+        expect(shiftedCol.givens[0]).toBe(true);
+        expect(findConflicts(shiftedCol.solution, '2x3')).toEqual([]);
+
+        // Shift row 0 down (+1) in 2x3 (band has 2 rows: 0 and 1)
+        const shiftedRow = shiftRow(state, 0, 1);
+        expect(shiftedRow.board[6]).toBe(0);
+        expect(shiftedRow.board[0]).toBe(4);
+        expect(findConflicts(shiftedRow.solution, '2x3')).toEqual([]);
+    });
+
+    it('shiftBand and shiftStack swap whole bands/stacks while preserving valid solution', () => {
+        const puzzle = [...SAMPLE_SOLUTION];
+        puzzle[0] = 0;
+        const state = createSudokuGame({ difficulty: 'easy', puzzle, solution: SAMPLE_SOLUTION });
+
+        const bandShifted = shiftBand(state, 0, 1);
+        expect(bandShifted.board[27]).toBe(0);
+        expect(bandShifted.solution.slice(27, 36)).toEqual(SAMPLE_SOLUTION.slice(0, 9));
+        expect(findConflicts(bandShifted.solution, '3x3')).toEqual([]);
+
+        const stackShifted = shiftStack(state, 0, -1);
+        expect(stackShifted.board[6]).toBe(0);
+        expect(findConflicts(stackShifted.solution, '3x3')).toEqual([]);
     });
 });
 

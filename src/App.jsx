@@ -15,6 +15,8 @@ import {
     hydrateGameState,
     serializeGameState,
     setCellValue,
+    shiftCol,
+    shiftRow,
     toggleCellNote,
     undoLastMove,
 } from './domain/sudoku-engine.js';
@@ -1925,6 +1927,7 @@ export function App() {
         if (cur.isSpectating || cur.mode === 'watch' || !cur.gameState.history?.length) return;
 
         const prevBoard = [...cur.gameState.board];
+        const prevGivens = [...cur.gameState.givens];
         const prevNotes = cur.gameState.notes.map((n) => [...n]);
         const nextState = undoLastMove(cur.gameState);
         setGameState(nextState);
@@ -1933,24 +1936,73 @@ export function App() {
 
         const isBroadcaster = (cur.mode === 'solo' || cur.mode === 'online') && Boolean(cur.onlineGameId) && !cur.isSpectating;
         if (isBroadcaster) {
-            const totalCells = nextState.board.length;
-            for (let i = 0; i < totalCells; i++) {
-                const boardChanged = prevBoard[i] !== nextState.board[i];
-                const notesChanged = prevNotes[i].join(',') !== nextState.notes[i].join(',');
-                if (boardChanged || notesChanged) {
-                    onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'cell-update', {
-                        index: i,
-                        value: nextState.board[i],
-                        notes: nextState.notes[i],
-                        owner: nextState.cellOwners?.[i] || null,
-                    });
+            const givensChanged = prevGivens.some((val, idx) => val !== nextState.givens[idx]);
+            if (givensChanged) {
+                onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'sync', buildSyncPayload());
+            } else {
+                const totalCells = nextState.board.length;
+                for (let i = 0; i < totalCells; i++) {
+                    const boardChanged = prevBoard[i] !== nextState.board[i];
+                    const notesChanged = prevNotes[i].join(',') !== nextState.notes[i].join(',');
+                    if (boardChanged || notesChanged) {
+                        onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'cell-update', {
+                            index: i,
+                            value: nextState.board[i],
+                            notes: nextState.notes[i],
+                            owner: nextState.cellOwners?.[i] || null,
+                        });
+                    }
                 }
             }
             syncLobbyProgress(nextState);
         }
 
         persistSnapshotIfNeeded(nextState);
-    }, [clearPendingHint, persistSnapshotIfNeeded, syncLobbyProgress]);
+    }, [buildSyncPayload, clearPendingHint, persistSnapshotIfNeeded, syncLobbyProgress]);
+
+    const handleShift = useCallback((axis, direction) => {
+        const cur = stateRef.current;
+        if (cur.isSpectating || cur.mode === 'watch' || cur.gameState.status === 'solved') return;
+        const activeIdx = cur.selectedIndex;
+        if (activeIdx === null || activeIdx === undefined) return;
+
+        const activeVariant = cur.gameState.variant || inferVariantFromBoardLength(cur.gameState.board?.length);
+        const specInfo = getVariantSpec(activeVariant);
+        if (activeIdx < 0 || activeIdx >= specInfo.totalCells) return;
+
+        const { row, col } = getCellCoords(activeIdx, specInfo.id);
+        const dir = direction < 0 ? -1 : 1;
+        const nextState = axis === 'row'
+            ? shiftRow(cur.gameState, row, dir)
+            : shiftCol(cur.gameState, col, dir);
+
+        if (nextState === cur.gameState) return;
+
+        let nextSelectedIndex = activeIdx;
+        if (axis === 'row') {
+            const bandStart = Math.floor(row / specInfo.boxRows) * specInfo.boxRows;
+            const targetRow = bandStart + ((row - bandStart + dir + specInfo.boxRows) % specInfo.boxRows);
+            nextSelectedIndex = targetRow * specInfo.gridSize + col;
+        } else {
+            const stackStart = Math.floor(col / specInfo.boxCols) * specInfo.boxCols;
+            const targetCol = stackStart + ((col - stackStart + dir + specInfo.boxCols) % specInfo.boxCols);
+            nextSelectedIndex = row * specInfo.gridSize + targetCol;
+        }
+
+        setGameState(nextState);
+        stateRef.current.gameState = nextState;
+        clearPendingHint();
+        focusCell(nextSelectedIndex);
+        soundEffectsRef.current?.playShift();
+
+        const isBroadcaster = (cur.mode === 'solo' || cur.mode === 'online') && Boolean(cur.onlineGameId) && !cur.isSpectating;
+        if (isBroadcaster) {
+            onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'sync', buildSyncPayload());
+            syncLobbyProgress(nextState);
+        }
+
+        persistSnapshotIfNeeded(nextState);
+    }, [buildSyncPayload, clearPendingHint, focusCell, persistSnapshotIfNeeded, syncLobbyProgress]);
 
     const handleLocalHint = useCallback(() => {
         const cur = stateRef.current;
@@ -2603,6 +2655,30 @@ export function App() {
             }
 
             if (selectedIndex === null || selectedIndex >= specInfo.totalCells) return;
+
+            if (e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && !isSpectating) {
+                if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    handleShift('row', -1);
+                    return;
+                }
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    handleShift('row', 1);
+                    return;
+                }
+                if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    handleShift('col', -1);
+                    return;
+                }
+                if (e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    handleShift('col', 1);
+                    return;
+                }
+            }
+
             const { row, col } = getCellCoords(selectedIndex, specInfo.id);
             const maxIdx = specInfo.gridSize - 1;
             let nextIndex = null;
@@ -2623,7 +2699,7 @@ export function App() {
 
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [applyPlayerDigit, broadcastActiveDigit, broadcastCursor, focusCell, handleUndo, isHelpOpen, isPlayingGame, isSpectating, navTab, pendingConfirm, selectedIndex, sendSpectatorHint]);
+    }, [applyPlayerDigit, broadcastActiveDigit, broadcastCursor, focusCell, handleShift, handleUndo, isHelpOpen, isPlayingGame, isSpectating, navTab, pendingConfirm, selectedIndex, sendSpectatorHint]);
 
     const showHints = mode === 'solo' || mode === 'online' || isSpectating;
     const hintsByCell = useMemo(
@@ -3042,12 +3118,15 @@ export function App() {
                             highlightedDigit={highlightedDigit}
                             isSolved={gameState.status === 'solved'}
                             isHintArmed={Boolean(pendingHint)}
+                            canShift={selectedIndex !== null && !isSpectating}
                             onUndo={handleUndo}
                             onErase={() => applyPlayerDigit(0)}
                             onToggleNotes={() => setNotesMode((prev) => !prev)}
                             onFillCandidates={handleFillCandidates}
                             onClearNotes={handleClearNotes}
                             onLocalHint={handleLocalHint}
+                            onShiftRow={(dir) => handleShift('row', dir)}
+                            onShiftCol={(dir) => handleShift('col', dir)}
                             onDigit={applyPlayerDigit}
                             messages={messages}
                         />

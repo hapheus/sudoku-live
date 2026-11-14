@@ -464,6 +464,8 @@ export function undoLastMove(state) {
     return {
         ...state,
         board: [...previous.board],
+        givens: Array.isArray(previous.givens) ? [...previous.givens] : state.givens,
+        solution: Array.isArray(previous.solution) ? [...previous.solution] : state.solution,
         notes: cloneNotes(previous.notes),
         cellOwners: cloneOwners(previous.cellOwners, spec.totalCells),
         conflicts,
@@ -471,6 +473,151 @@ export function undoLastMove(state) {
         status: 'in_progress',
         history: nextHistory,
     };
+}
+
+function applyCellPermutation(state, indexMap, { recordHistory = true } = {}) {
+    const spec = getVariantSpec(resolveVariantForState(state));
+    const nextBoard = indexMap.map((oldIdx) => state.board[oldIdx]);
+    const nextGivens = indexMap.map((oldIdx) => Boolean(state.givens[oldIdx]));
+    const nextSolution = Array.isArray(state.solution) && state.solution.length === spec.totalCells
+        ? indexMap.map((oldIdx) => state.solution[oldIdx])
+        : state.solution;
+    const nextNotes = indexMap.map((oldIdx) => [...(state.notes[oldIdx] || [])]);
+    const nextOwners = indexMap.map((oldIdx) => state.cellOwners?.[oldIdx] ?? null);
+
+    const nextHistory = recordHistory
+        ? [
+            ...state.history.slice(-49),
+            {
+                board: [...state.board],
+                givens: [...state.givens],
+                solution: Array.isArray(state.solution) ? [...state.solution] : state.solution,
+                notes: cloneNotes(state.notes),
+                cellOwners: cloneOwners(state.cellOwners, spec.totalCells),
+            },
+        ]
+        : state.history;
+
+    return {
+        ...state,
+        board: nextBoard,
+        givens: nextGivens,
+        solution: nextSolution,
+        notes: nextNotes,
+        cellOwners: nextOwners,
+        conflicts: findConflicts(nextBoard, spec.id),
+        filledCount: countFilledCells(nextBoard, spec.id),
+        status: state.status,
+        history: nextHistory,
+    };
+}
+
+function normalizeDirection(direction) {
+    return direction < 0 ? -1 : 1;
+}
+
+/**
+ * Swap a row with its neighbor inside the same box band (preserves Sudoku validity).
+ */
+export function shiftRow(state, row, direction = 1, { recordHistory = true } = {}) {
+    if (!state || state.status === 'solved') return state;
+    const spec = getVariantSpec(resolveVariantForState(state));
+    if (!Number.isInteger(row) || row < 0 || row >= spec.gridSize) {
+        throw new Error(`Invalid row ${row}.`);
+    }
+    const dir = normalizeDirection(direction);
+    const bandStart = Math.floor(row / spec.boxRows) * spec.boxRows;
+    const targetRow = bandStart + ((row - bandStart + dir + spec.boxRows) % spec.boxRows);
+    if (targetRow === row) return state;
+
+    const indexMap = Array.from({ length: spec.totalCells }, (_, idx) => idx);
+    for (let c = 0; c < spec.gridSize; c++) {
+        const a = row * spec.gridSize + c;
+        const b = targetRow * spec.gridSize + c;
+        indexMap[a] = b;
+        indexMap[b] = a;
+    }
+    return applyCellPermutation(state, indexMap, { recordHistory });
+}
+
+/**
+ * Swap a column with its neighbor inside the same box stack (preserves Sudoku validity).
+ */
+export function shiftCol(state, col, direction = 1, { recordHistory = true } = {}) {
+    if (!state || state.status === 'solved') return state;
+    const spec = getVariantSpec(resolveVariantForState(state));
+    if (!Number.isInteger(col) || col < 0 || col >= spec.gridSize) {
+        throw new Error(`Invalid column ${col}.`);
+    }
+    const dir = normalizeDirection(direction);
+    const stackStart = Math.floor(col / spec.boxCols) * spec.boxCols;
+    const targetCol = stackStart + ((col - stackStart + dir + spec.boxCols) % spec.boxCols);
+    if (targetCol === col) return state;
+
+    const indexMap = Array.from({ length: spec.totalCells }, (_, idx) => idx);
+    for (let r = 0; r < spec.gridSize; r++) {
+        const a = r * spec.gridSize + col;
+        const b = r * spec.gridSize + targetCol;
+        indexMap[a] = b;
+        indexMap[b] = a;
+    }
+    return applyCellPermutation(state, indexMap, { recordHistory });
+}
+
+/**
+ * Swap an entire horizontal band of boxes with its neighbor band (preserves Sudoku validity).
+ */
+export function shiftBand(state, bandIndex, direction = 1, { recordHistory = true } = {}) {
+    if (!state || state.status === 'solved') return state;
+    const spec = getVariantSpec(resolveVariantForState(state));
+    const bandCount = spec.gridSize / spec.boxRows;
+    if (!Number.isInteger(bandIndex) || bandIndex < 0 || bandIndex >= bandCount) {
+        throw new Error(`Invalid band ${bandIndex}.`);
+    }
+    const dir = normalizeDirection(direction);
+    const targetBand = (bandIndex + dir + bandCount) % bandCount;
+    if (targetBand === bandIndex) return state;
+
+    const indexMap = Array.from({ length: spec.totalCells }, (_, idx) => idx);
+    for (let dr = 0; dr < spec.boxRows; dr++) {
+        const rA = bandIndex * spec.boxRows + dr;
+        const rB = targetBand * spec.boxRows + dr;
+        for (let c = 0; c < spec.gridSize; c++) {
+            const a = rA * spec.gridSize + c;
+            const b = rB * spec.gridSize + c;
+            indexMap[a] = b;
+            indexMap[b] = a;
+        }
+    }
+    return applyCellPermutation(state, indexMap, { recordHistory });
+}
+
+/**
+ * Swap an entire vertical stack of boxes with its neighbor stack (preserves Sudoku validity).
+ */
+export function shiftStack(state, stackIndex, direction = 1, { recordHistory = true } = {}) {
+    if (!state || state.status === 'solved') return state;
+    const spec = getVariantSpec(resolveVariantForState(state));
+    const stackCount = spec.gridSize / spec.boxCols;
+    if (!Number.isInteger(stackIndex) || stackIndex < 0 || stackIndex >= stackCount) {
+        throw new Error(`Invalid stack ${stackIndex}.`);
+    }
+    const dir = normalizeDirection(direction);
+    const targetStack = (stackIndex + dir + stackCount) % stackCount;
+    if (targetStack === stackIndex) return state;
+
+    const indexMap = Array.from({ length: spec.totalCells }, (_, idx) => idx);
+    for (let dc = 0; dc < spec.boxCols; dc++) {
+        const cA = stackIndex * spec.boxCols + dc;
+        const cB = targetStack * spec.boxCols + dc;
+        for (let r = 0; r < spec.gridSize; r++) {
+            const a = r * spec.gridSize + cA;
+            const b = r * spec.gridSize + cB;
+            indexMap[a] = b;
+            indexMap[b] = a;
+        }
+    }
+    return applyCellPermutation(state, indexMap, { recordHistory });
 }
 
 export function serializeGameState(state) {

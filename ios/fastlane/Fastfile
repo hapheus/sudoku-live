@@ -73,7 +73,7 @@ def build_release_ipa!(api_key)
     clean: true,
     export_method: "app-store",
     output_directory: BUILD_OUTPUT_DIR,
-    output_name: "SudokuLive.ipa",
+    output_name: "SudokuShift.ipa",
     xcargs: build_xcargs(api_key),
     export_options: {
       signingStyle: "automatic",
@@ -137,7 +137,7 @@ platform :ios do
   lane :register_app do
     produce(
       app_identifier: APP_IDENTIFIER,
-      app_name: ENV.fetch("APP_NAME", "Sudoku Live"),
+      app_name: ENV.fetch("APP_NAME", "Sudoku Shift"),
       language: ENV.fetch("APP_LANGUAGE", "English"),
       app_version: "1.0",
       sku: ENV.fetch("APP_SKU", "dev.fraha.sudoku"),
@@ -182,7 +182,7 @@ platform :ios do
     if api_key || has_app_specific_password
       upload_params = {
         app_identifier: APP_IDENTIFIER,
-        ipa: File.join(BUILD_OUTPUT_DIR, "SudokuLive.ipa"),
+        ipa: File.join(BUILD_OUTPUT_DIR, "SudokuShift.ipa"),
         skip_waiting_for_build_processing: options[:wait] ? false : true,
         changelog: options[:changelog] || "TestFlight Build"
       }

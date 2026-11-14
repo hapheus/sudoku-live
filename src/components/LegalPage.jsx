@@ -21,7 +21,7 @@ export function LegalPage({
                     onClick={onBack}
                 >
                     <span aria-hidden="true">←</span>
-                    <span>{messages.legalBackToApp || 'Back to Sudoku Live'}</span>
+                    <span>{messages.legalBackToApp || 'Back to Sudoku Shift'}</span>
                 </button>
                 <a
                     id={isPrivacy ? 'legal-switch-impressum' : 'legal-switch-privacy'}
@@ -44,7 +44,7 @@ export function LegalPage({
                                 Datenschutzerklärung (Privacy Policy)
                             </h1>
                             <p className="legal-card__meta">
-                                Informationen gemäß Art. 13 DSGVO, DSG und § 165 Abs. 3 TKG 2021 für die Web-App <strong>sudoku.fraha.dev</strong> sowie die iOS-App <strong>Sudoku Live</strong> (Stand: 14. November 2026).
+                                Informationen gemäß Art. 13 DSGVO, DSG und § 165 Abs. 3 TKG 2021 für die Web-App <strong>sudoku.fraha.dev</strong> sowie die iOS-App <strong>Sudoku Shift</strong> (Stand: 14. November 2026).
                             </p>
 
                             <section className="legal-card__section">
@@ -64,7 +64,7 @@ export function LegalPage({
                             <section className="legal-card__section">
                                 <h2>2. Grundsatz: Keine Konten, kein Tracking, keine Cookies</h2>
                                 <p>
-                                    Sudoku Live erfordert kein Benutzerkonto, erstellt keine Nutzerprofile und verwendet keine Analyse-Dienste, keine Werbe-SDKs und <strong>keine Cookies</strong>.
+                                    Sudoku Shift erfordert kein Benutzerkonto, erstellt keine Nutzerprofile und verwendet keine Analyse-Dienste, keine Werbe-SDKs und <strong>keine Cookies</strong>.
                                 </p>
                             </section>
 
@@ -131,7 +131,7 @@ export function LegalPage({
                                 Privacy Policy
                             </h1>
                             <p className="legal-card__meta">
-                                Information pursuant to Art. 13 GDPR, the Austrian Data Protection Act (DSG), and § 165(3) Austrian Telecommunications Act (TKG 2021) for <strong>sudoku.fraha.dev</strong> and the iOS app <strong>Sudoku Live</strong> (Effective: November 14, 2026).
+                                Information pursuant to Art. 13 GDPR, the Austrian Data Protection Act (DSG), and § 165(3) Austrian Telecommunications Act (TKG 2021) for <strong>sudoku.fraha.dev</strong> and the iOS app <strong>Sudoku Shift</strong> (Effective: November 14, 2026).
                             </p>
 
                             <section className="legal-card__section">
@@ -151,7 +151,7 @@ export function LegalPage({
                             <section className="legal-card__section">
                                 <h2>2. No Accounts, No Tracking &amp; No Cookies</h2>
                                 <p>
-                                    Sudoku Live does not require an account, does not build user profiles, and does not use analytics services, advertising SDKs, or <strong>HTTP cookies</strong>.
+                                    Sudoku Shift does not require an account, does not build user profiles, and does not use analytics services, advertising SDKs, or <strong>HTTP cookies</strong>.
                                 </p>
                             </section>
 
@@ -238,7 +238,7 @@ export function LegalPage({
                         <section className="legal-card__section">
                             <h2>Art &amp; Zweck des Angebots</h2>
                             <p>
-                                Dies ist ein privates, unentgeltliches und nicht-kommerzielles Webprojekt zur Bereitstellung von Sudoku Live (ohne Gewinnerzielungsabsicht, ohne In-App-Käufe, ohne Werbung und ohne auf öffentliche Meinungsbildung gerichtete redaktionelle Inhalte; kein gewerblicher bzw. geschäftlicher Dienst im Sinne des § 5 E-Commerce-Gesetz – ECG).
+                                Dies ist ein privates, unentgeltliches und nicht-kommerzielles Webprojekt zur Bereitstellung von Sudoku Shift (ohne Gewinnerzielungsabsicht, ohne In-App-Käufe, ohne Werbung und ohne auf öffentliche Meinungsbildung gerichtete redaktionelle Inhalte; kein gewerblicher bzw. geschäftlicher Dienst im Sinne des § 5 E-Commerce-Gesetz – ECG).
                             </p>
                         </section>
 
@@ -274,7 +274,7 @@ export function LegalPage({
                         <section className="legal-card__section">
                             <h2>Project Scope</h2>
                             <p>
-                                This is a private, free, non-commercial web project providing Sudoku Live (operated without profit intent, without in-app purchases, without advertising, and without editorial content aimed at shaping public opinion; not a commercial information society service under § 5 Austrian E-Commerce Act – ECG).
+                                This is a private, free, non-commercial web project providing Sudoku Shift (operated without profit intent, without in-app purchases, without advertising, and without editorial content aimed at shaping public opinion; not a commercial information society service under § 5 Austrian E-Commerce Act – ECG).
                             </p>
                         </section>
 

@@ -1,6 +1,6 @@
 {
   "appId": "dev.fraha.sudoku",
-  "appName": "Sudoku Live",
+  "appName": "Sudoku Shift",
   "webDir": "dist",
   "backgroundColor": "#0f172a",
   "ios": {
