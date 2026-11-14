@@ -1,3 +1,3 @@
-app_identifier(ENV.fetch("APP_IDENTIFIER", "dev.fraha.sudokulive"))
+app_identifier(ENV.fetch("APP_IDENTIFIER", "dev.fraha.sudoku"))
 apple_id(ENV.fetch("FASTLANE_APPLE_ID", "hapheus@me.com"))
 team_id(ENV.fetch("APPLE_TEAM_ID", "83EB97U8C3"))

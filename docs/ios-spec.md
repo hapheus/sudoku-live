@@ -2,7 +2,7 @@
 
 **Product**: Sudoku Live (iOS Native Shell via Capacitor 8)  
 **Primary Domain**: `fraha.dev` (`https://sudoku.fraha.dev` / `wss://sudoku-ws.fraha.dev/connection/websocket`)  
-**iOS Bundle Identifier**: `dev.fraha.sudokulive`  
+**iOS Bundle Identifier**: `dev.fraha.sudoku`  
 **Minimum OS Target**: iOS 15.0 (iPhone & iPad, Swift Package Manager)
 
 ---
@@ -13,7 +13,7 @@
 Sudoku Live delivers a zero-backend, real-time 9×9 Sudoku experience for iOS devices by packaging the framework-agnostic puzzle domain and React 19 SPA inside a dedicated Capacitor 8 iOS native shell (`ios/`). Players can solve puzzles offline in **Solo** mode, collaborate synchronously with a partner in **Online Co-op** via shareable `https://sudoku.fraha.dev/games/{gameId}` links, or spectate active rooms and send cell hints/reactions in **Watch Live** mode — backed by self-hosted **Centrifugo v6** WebSockets at `wss://sudoku-ws.fraha.dev/connection/websocket`.
 
 ### In-Scope
-- **Native iOS Target (`ios/`)**: Capacitor 8 (`@capacitor/core`, `@capacitor/cli`, `@capacitor/ios`) using Swift Package Manager (`ios/App/CapApp-SPM/Package.swift`), Xcode scheme `App`, and Bundle ID `dev.fraha.sudokulive`.
+- **Native iOS Target (`ios/`)**: Capacitor 8 (`@capacitor/core`, `@capacitor/cli`, `@capacitor/ios`) using Swift Package Manager (`ios/App/CapApp-SPM/Package.swift`), Xcode scheme `App`, and Bundle ID `dev.fraha.sudoku`.
 - **Production Endpoints (`fraha.dev`)**:
   - Public Web / Share URL: `https://sudoku.fraha.dev`
   - Public WebSocket Endpoint: `wss://sudoku-ws.fraha.dev/connection/websocket`
@@ -80,7 +80,7 @@ The core architecture isolates pure puzzle rules from React state, Capacitor iOS
 
 | ID | Bounded Context | User Story |
 |---|---|---|
-| **IOS-01** | Native iOS Shell | As an **iPhone player**, I want the app packaged with Bundle ID `dev.fraha.sudokulive` and safe-area insets, so that the 9×9 board and numpad never collide with the Dynamic Island or home indicator. |
+| **IOS-01** | Native iOS Shell | As an **iPhone player**, I want the app packaged with Bundle ID `dev.fraha.sudoku` and safe-area insets, so that the 9×9 board and numpad never collide with the Dynamic Island or home indicator. |
 | **IOS-02** | Solo Solving | As an **offline iOS commuter**, I want to generate uniquely solvable Sudoku puzzles and have my progress saved locally, so that I can play on flights or subways without a network connection. |
 | **IOS-03** | Real-Time Co-op | As an **iOS host**, I want to tap **Share Link** to open the iOS Share Sheet with `https://sudoku.fraha.dev/games/{id}`, so that a friend can join via browser or iOS and solve collaboratively over `wss://sudoku-ws.fraha.dev`. |
 | **IOS-04** | Mobile Reconnect | As an **iOS co-op player**, I want missed moves to recover automatically when I switch back to the app after backgrounding iOS, so that our boards stay in sync via Centrifugo 300s history recovery and 5s ping reconciliation. |
@@ -92,7 +92,7 @@ The core architecture isolates pure puzzle rules from React state, Capacitor iOS
 
 ### 4.1 iOS Platform & `fraha.dev` Configuration Matrix
 - **Capacitor Config (`capacitor.config.json`)**:
-  - `appId`: `"dev.fraha.sudokulive"`
+  - `appId`: `"dev.fraha.sudoku"`
   - `appName`: `"Sudoku Live"`
   - `webDir`: `"dist"`
   - `backgroundColor`: `"#0f172a"`
@@ -104,7 +104,7 @@ The core architecture isolates pure puzzle rules from React state, Capacitor iOS
   - Centrifugo hostname (`cf.tunnel.hostname`): `sudoku-ws.fraha.dev` (`WS_HOST=sudoku-ws.fraha.dev`, `WS_PORT=443`, `WS_SCHEME=https`)
   - Centrifugo `CENTRIFUGO_CLIENT_ALLOWED_ORIGINS`: `"https://sudoku.fraha.dev capacitor://localhost https://localhost http://localhost"`
 - **Universal Links Readiness (Optional Xcode Capability)**:
-  - Add Associated Domains entitlement `applinks:sudoku.fraha.dev` and serve `/.well-known/apple-app-site-association` for `dev.fraha.sudokulive` when enabling deep links directly from Safari/Messages into the iOS app.
+  - Add Associated Domains entitlement `applinks:sudoku.fraha.dev` and serve `/.well-known/apple-app-site-association` for `dev.fraha.sudoku` when enabling deep links directly from Safari/Messages into the iOS app.
 
 ### 4.2 Localization Key Registry (English Baseline)
 All user-facing UI strings are organized for deterministic extraction into `.arb` / JSON resource bundles:

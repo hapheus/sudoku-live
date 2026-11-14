@@ -68,7 +68,7 @@ Open `http://localhost:8000` (or Vite dev URL) in your browser. Centrifugo liste
 
 ## Native iOS Build (Capacitor 8 + Xcode)
 
-Android is intentionally not targeted. See [docs/ios-spec.md](docs/ios-spec.md) for the full iOS & `fraha.dev` specification (`dev.fraha.sudokulive`).
+Android is intentionally not targeted. See [docs/ios-spec.md](docs/ios-spec.md) for the full iOS & `fraha.dev` specification (`dev.fraha.sudoku`).
 
 ```bash
 # 1. Build web assets (defaults to wss://sudoku-ws.fraha.dev/connection/websocket in native iOS)

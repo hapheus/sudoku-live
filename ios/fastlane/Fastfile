@@ -6,7 +6,7 @@ require "xcodeproj"
 REPO_ROOT = File.expand_path("../..", __dir__)
 PROJECT_PATH = File.expand_path("../App/App.xcodeproj", __dir__)
 SCHEME_NAME = "App"
-APP_IDENTIFIER = ENV.fetch("APP_IDENTIFIER", "dev.fraha.sudokulive")
+APP_IDENTIFIER = ENV.fetch("APP_IDENTIFIER", "dev.fraha.sudoku")
 TEAM_ID = ENV.fetch("APPLE_TEAM_ID", "83EB97U8C3")
 BUILD_OUTPUT_DIR = File.expand_path("../App/build", __dir__)
 
@@ -68,7 +68,11 @@ end
 platform :ios do
   desc "Build Vite web bundle and sync Capacitor iOS assets"
   lane :sync_web do
-    sh("npm", "--prefix", REPO_ROOT, "run", "cap:sync")
+    sh(
+      "env",
+      "VITE_WS_URL=#{ENV.fetch('VITE_WS_URL', 'wss://sudoku-ws.fraha.dev/connection/websocket')}",
+      "npm", "--prefix", REPO_ROOT, "run", "cap:sync"
+    )
   end
 
   desc "Register Bundle ID and create App Store Connect app entry if missing"
@@ -78,7 +82,7 @@ platform :ios do
       app_name: ENV.fetch("APP_NAME", "Sudoku Live"),
       language: ENV.fetch("APP_LANGUAGE", "German"),
       app_version: "1.0",
-      sku: ENV.fetch("APP_SKU", "dev.fraha.sudokulive"),
+      sku: ENV.fetch("APP_SKU", "dev.fraha.sudoku"),
       team_id: TEAM_ID,
       platforms: ["ios"]
     )
@@ -145,14 +149,55 @@ platform :ios do
       }
     )
 
-    upload_params = {
-      app_identifier: APP_IDENTIFIER,
-      ipa: File.join(BUILD_OUTPUT_DIR, "SudokuLive.ipa"),
-      skip_waiting_for_build_processing: options[:wait] ? false : true,
-      changelog: options[:changelog] || "TestFlight Build"
-    }
-    upload_params[:api_key] = api_key if api_key
+    has_app_specific_password = !ENV["FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD"].to_s.strip.empty?
+    if api_key || has_app_specific_password
+      upload_params = {
+        app_identifier: APP_IDENTIFIER,
+        ipa: File.join(BUILD_OUTPUT_DIR, "SudokuLive.ipa"),
+        skip_waiting_for_build_processing: options[:wait] ? false : true,
+        changelog: options[:changelog] || "TestFlight Build"
+      }
+      upload_params[:api_key] = api_key if api_key
 
-    upload_to_testflight(**upload_params)
+      upload_to_testflight(**upload_params)
+    else
+      require "tempfile"
+      archive_path = lane_context[SharedValues::XCODEBUILD_ARCHIVE]
+      UI.user_error!("Missing XCODEBUILD_ARCHIVE path for Xcode upload") if archive_path.to_s.empty?
+
+      plist = Tempfile.new(["export_upload", ".plist"])
+      begin
+        plist.write(<<~PLIST)
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>destination</key>
+            <string>upload</string>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>teamID</key>
+            <string>#{TEAM_ID}</string>
+            <key>uploadSymbols</key>
+            <true/>
+          </dict>
+          </plist>
+        PLIST
+        plist.flush
+
+        sh(
+          "xcodebuild",
+          "-exportArchive",
+          "-exportOptionsPlist", plist.path,
+          "-archivePath", archive_path,
+          "-allowProvisioningUpdates"
+        )
+      ensure
+        plist.close
+        plist.unlink
+      end
+    end
   end
 end
