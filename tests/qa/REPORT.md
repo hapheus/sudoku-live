@@ -22,6 +22,7 @@ Local captures and failure traces are retained under ignored `test-results/`. `n
 ## Findings
 
 - Existing number-pad `label-content-name-mismatch` was reproduced by axe before the fix. The adjacent digit/count spans produced concatenated visible text. An explicitly approved whitespace separator fixes this without changing the design or spoken names. The targeted axe check passed afterward.
+- Native review identified a support-policy discrepancy: app-target settings resolve to the SDK recommendation (17.0 on the installed SDK) and iPhone-only device family, while `docs/ios-spec.md` still says iOS 15/iPad. This is a release gate, not a demonstrated compile failure; the user explicitly included these existing settings in the snapshot.
 - Existing compact grid/touch-target constraints remain: nine-column cells on narrow phones are below the project's 44 px target. This test-focused change does not redesign the grid or the existing compact controls.
 - Full-page captures can show the fixed bottom navigation over content at the original viewport boundary, especially 360 × 640 and landscape. This is an existing fixed-overlay/full-page-capture characteristic, not a newly introduced layout change. Hit-tested digit entry and scrolling prove the lower keypad remains reachable. It is not claimed that all content fits simultaneously in a short viewport.
 - Hidden native radio inputs cannot be `.check()`-clicked by Playwright; the tests activate the visible labels instead, without `force` or visibility bypasses.
@@ -31,6 +32,8 @@ Local captures and failure traces are retained under ignored `test-results/`. `n
 - `npm test`: 54 tests passed, 8 files.
 - `npm run build`: passed.
 - `git diff --check`: passed.
+- `npx cap ls` and `npx cap ls ios`: completed successfully; CLI listing only, not compilation.
+- `docker compose config -q`: passed before opening integration PR #2.
 - `plutil -lint ios/App/App.xcodeproj/project.pbxproj`: passed; syntax only, not an iOS build.
 - `npm run e2e -- --update-snapshots`: 15 passed after reviewed reference acceptance.
 - `npm run e2e`: 15 passed in 37.0s, including all screenshot comparisons without updates.
