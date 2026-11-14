@@ -140,7 +140,7 @@ export function PlayerControls({
                             aria-label={isComplete ? `${d}, all ${gridSize} placed` : `Enter ${d}, ${remaining} remaining`}
                             onClick={() => onDigit(d)}
                         >
-                            <span className="numpad-btn__digit">{d}</span>
+                            <span className="numpad-btn__digit">{d}</span>{' '}
                             <span className="numpad-btn__count" aria-hidden="true">
                                 {remaining > 0 ? remaining : '✓'}
                             </span>

@@ -3,8 +3,8 @@ import enMessages from '../locales/en.json';
 
 export function VariantSelector({ variant, onChange, messages = enMessages }) {
     const variants = [
-        { value: '3x3', label: messages.variant3x3 },
         { value: '2x3', label: messages.variant2x3 },
+        { value: '3x3', label: messages.variant3x3 },
     ];
 
     return (
