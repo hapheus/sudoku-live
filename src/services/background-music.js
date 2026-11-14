@@ -79,11 +79,23 @@ export function saveMusicVolume(volume, storage = typeof localStorage !== 'undef
     }
 }
 
+function toPerceptualGain(volume) {
+    const clamped = clampVolume(volume, DEFAULT_MUSIC_VOLUME);
+    if (clamped <= 0) return 0;
+    return clamped * clamped;
+}
+
+function getDefaultAudioContextClass(win) {
+    if (!win) return null;
+    return win.AudioContext || win.webkitAudioContext || null;
+}
+
 export function createBackgroundMusicPlayer({
     tracks = getMusicTracks(),
     shuffle = true,
     random = Math.random,
     audioFactory = null,
+    contextFactory = null,
     storage = typeof localStorage !== 'undefined' ? localStorage : null,
     win = typeof window !== 'undefined' ? window : null,
     doc = typeof document !== 'undefined' ? document : null,
@@ -99,8 +111,104 @@ export function createBackgroundMusicPlayer({
     let waitingForGesture = false;
     let consecutiveErrors = 0;
     let audio = null;
+    let audioCtx = null;
+    let sourceNode = null;
+    let gainNode = null;
 
     const gestureEvents = ['pointerdown', 'touchstart', 'keydown', 'click'];
+
+    const applyOutputVolume = (vol) => {
+        const gainValue = toPerceptualGain(vol);
+        if (audio) {
+            audio.muted = vol <= 0;
+            // When routed through a Web Audio GainNode, keep HTMLAudioElement.volume at 1
+            // so desktop browsers do not double-attenuate and iOS uses GainNode exclusively.
+            audio.volume = gainNode ? 1 : vol;
+        }
+        if (gainNode && audioCtx) {
+            const now = audioCtx.currentTime || 0;
+            try {
+                if (typeof gainNode.gain.setTargetAtTime === 'function') {
+                    gainNode.gain.setTargetAtTime(gainValue, now, 0.015);
+                } else if (typeof gainNode.gain.setValueAtTime === 'function') {
+                    gainNode.gain.setValueAtTime(gainValue, now);
+                } else {
+                    gainNode.gain.value = gainValue;
+                }
+            } catch {
+                gainNode.gain.value = gainValue;
+            }
+        }
+    };
+
+    const ensureAudioGraph = () => {
+        if (destroyed || !audio || gainNode) return Boolean(gainNode);
+
+        let candidateCtx = null;
+        if (typeof contextFactory === 'function') {
+            candidateCtx = contextFactory();
+        } else {
+            const Ctor = getDefaultAudioContextClass(win);
+            if (Ctor) {
+                try {
+                    candidateCtx = new Ctor();
+                } catch {
+                    candidateCtx = null;
+                }
+            }
+        }
+
+        if (
+            !candidateCtx
+            || typeof candidateCtx.createMediaElementSource !== 'function'
+            || typeof candidateCtx.createGain !== 'function'
+        ) {
+            return false;
+        }
+
+        try {
+            const srcNode = candidateCtx.createMediaElementSource(audio);
+            const gain = candidateCtx.createGain();
+            srcNode.connect(gain);
+            gain.connect(candidateCtx.destination);
+            audioCtx = candidateCtx;
+            sourceNode = srcNode;
+            gainNode = gain;
+            applyOutputVolume(volume);
+            return true;
+        } catch {
+            audioCtx = null;
+            sourceNode = null;
+            gainNode = null;
+            return false;
+        }
+    };
+
+    const resumeAudioContextIfNeeded = () => {
+        if (!audioCtx || audioCtx.state === 'running' || typeof audioCtx.resume !== 'function') {
+            return false;
+        }
+        try {
+            const res = audioCtx.resume();
+            if (res && typeof res.then === 'function') {
+                res.then(
+                    () => {
+                        if (!destroyed && enabled && audio && !audio.paused) {
+                            removeGestureListeners();
+                        }
+                    },
+                    () => {
+                        if (!destroyed && enabled) {
+                            attachGestureListeners();
+                        }
+                    },
+                );
+            }
+            return true;
+        } catch {
+            return false;
+        }
+    };
 
     const createAudio = () => {
         if (audio) return audio;
@@ -113,6 +221,7 @@ export function createBackgroundMusicPlayer({
 
         audio.preload = 'auto';
         audio.volume = volume;
+        audio.muted = volume <= 0;
         if ('playsInline' in audio) {
             audio.playsInline = true;
         }
@@ -147,6 +256,10 @@ export function createBackgroundMusicPlayer({
         const el = createAudio();
         if (!el || typeof el.play !== 'function') return;
 
+        ensureAudioGraph();
+        applyOutputVolume(volume);
+        resumeAudioContextIfNeeded();
+
         if (!el.src && playlist[currentIndex]) {
             el.src = playlist[currentIndex].src;
         }
@@ -158,7 +271,11 @@ export function createBackgroundMusicPlayer({
                 result.then(
                     () => {
                         consecutiveErrors = 0;
-                        removeGestureListeners();
+                        if (!audioCtx || audioCtx.state === 'running') {
+                            removeGestureListeners();
+                        } else {
+                            attachGestureListeners();
+                        }
                     },
                     () => {
                         if (!destroyed && enabled) {
@@ -168,7 +285,11 @@ export function createBackgroundMusicPlayer({
                 );
             } else {
                 consecutiveErrors = 0;
-                removeGestureListeners();
+                if (!audioCtx || audioCtx.state === 'running') {
+                    removeGestureListeners();
+                } else {
+                    attachGestureListeners();
+                }
             }
         } catch {
             if (!destroyed && enabled) {
@@ -182,6 +303,8 @@ export function createBackgroundMusicPlayer({
             removeGestureListeners();
             return;
         }
+        ensureAudioGraph();
+        resumeAudioContextIfNeeded();
         tryPlay();
     }
 
@@ -257,8 +380,11 @@ export function createBackgroundMusicPlayer({
         if (destroyed || !doc) return;
         if (doc.visibilityState === 'hidden') {
             audio?.pause?.();
-        } else if (doc.visibilityState === 'visible' && enabled && audio?.paused) {
-            tryPlay();
+        } else if (doc.visibilityState === 'visible' && enabled) {
+            resumeAudioContextIfNeeded();
+            if (audio?.paused) {
+                tryPlay();
+            }
         }
     };
 
@@ -292,7 +418,9 @@ export function createBackgroundMusicPlayer({
         volume = resolved;
         saveMusicVolume(resolved, storage);
         if (audio) {
-            audio.volume = resolved;
+            ensureAudioGraph();
+            resumeAudioContextIfNeeded();
+            applyOutputVolume(resolved);
         }
     };
 
@@ -301,6 +429,30 @@ export function createBackgroundMusicPlayer({
         destroyed = true;
         removeGestureListeners();
         doc?.removeEventListener?.('visibilitychange', handleVisibilityChange);
+        if (sourceNode && typeof sourceNode.disconnect === 'function') {
+            try {
+                sourceNode.disconnect();
+            } catch {
+                // Ignore disconnect errors
+            }
+        }
+        if (gainNode && typeof gainNode.disconnect === 'function') {
+            try {
+                gainNode.disconnect();
+            } catch {
+                // Ignore disconnect errors
+            }
+        }
+        if (audioCtx && typeof audioCtx.close === 'function') {
+            try {
+                audioCtx.close();
+            } catch {
+                // Ignore close errors
+            }
+        }
+        sourceNode = null;
+        gainNode = null;
+        audioCtx = null;
         if (audio) {
             audio.removeEventListener?.('ended', handleEnded);
             audio.removeEventListener?.('error', handleError);

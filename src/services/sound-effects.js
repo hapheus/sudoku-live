@@ -1,12 +1,18 @@
 const SOUND_STORAGE_KEY = 'sudoku_sound_enabled';
 const SOUND_VOLUME_STORAGE_KEY = 'sudoku_sound_volume';
 const DEFAULT_SOUND_VOLUME = 0.65;
-const MAX_SOUND_MASTER_GAIN = 0.5;
+const MAX_SOUND_MASTER_GAIN = 0.7;
 
 function clampVolume(value, fallback) {
     const num = Number(value);
     if (!Number.isFinite(num)) return fallback;
     return Math.min(1, Math.max(0, num));
+}
+
+function toPerceptualGain(volume) {
+    const clamped = clampVolume(volume, DEFAULT_SOUND_VOLUME);
+    if (clamped <= 0) return 0;
+    return clamped * clamped;
 }
 
 function getDefaultAudioContextClass(win) {
@@ -104,9 +110,9 @@ export function createSoundEffectsPlayer({
 
     const computeMasterGain = (vol) => {
         const ceiling = typeof masterVolume === 'number'
-            ? masterVolume / DEFAULT_SOUND_VOLUME
+            ? masterVolume / (DEFAULT_SOUND_VOLUME * DEFAULT_SOUND_VOLUME)
             : MAX_SOUND_MASTER_GAIN;
-        return Math.max(0, ceiling * clampVolume(vol, DEFAULT_SOUND_VOLUME));
+        return Math.max(0, ceiling * toPerceptualGain(vol));
     };
 
     const gestureEvents = ['pointerdown', 'touchstart', 'keydown', 'click'];
@@ -176,7 +182,7 @@ export function createSoundEffectsPlayer({
     }
 
     const withReadyContext = (renderFn) => {
-        if (destroyed || !enabled) return false;
+        if (destroyed || !enabled || volume <= 0) return false;
         const activeCtx = ensureContext();
         if (!activeCtx || !masterGain) return false;
 

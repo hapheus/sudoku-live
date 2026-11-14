@@ -163,12 +163,20 @@ describe('SoundEffectsPlayer', () => {
         expect(player.playCorrectDigit()).toBe(true);
 
         const masterGain = mockCtx.__gains[0];
-        expect(masterGain.gain.setValueAtTime).toHaveBeenCalledWith(0.325, 10);
+        expect(masterGain.gain.setValueAtTime.mock.calls[0][0]).toBeCloseTo(0.7 * 0.65 * 0.65, 5);
+        expect(masterGain.gain.setValueAtTime.mock.calls[0][1]).toBe(10);
 
         player.setVolume(0.8);
         expect(player.getVolume()).toBe(0.8);
         expect(localStorage.getItem('sudoku_sound_volume')).toBe('0.8');
-        expect(masterGain.gain.setValueAtTime).toHaveBeenLastCalledWith(0.4, 10);
+        const lastCall = masterGain.gain.setValueAtTime.mock.calls.at(-1);
+        expect(lastCall[0]).toBeCloseTo(0.7 * 0.8 * 0.8, 5);
+        expect(lastCall[1]).toBe(10);
+
+        const oscCountBeforeMute = mockCtx.__oscillators.length;
+        player.setVolume(0);
+        expect(player.playCorrectDigit()).toBe(false);
+        expect(mockCtx.__oscillators.length).toBe(oscCountBeforeMute);
 
         player.destroy();
     });

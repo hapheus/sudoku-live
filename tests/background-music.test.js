@@ -282,8 +282,75 @@ describe('BackgroundMusicPlayer', () => {
         player.setVolume(0.2);
         expect(player.getVolume()).toBe(0.2);
         expect(audio.volume).toBe(0.2);
+        expect(audio.muted).toBe(false);
         expect(localStorage.getItem('sudoku_music_volume')).toBe('0.2');
 
+        player.setVolume(0);
+        expect(audio.muted).toBe(true);
+
         player.destroy();
+    });
+
+    it('routes music through Web Audio GainNode so volume works even when HTMLAudioElement.volume is ignored (iOS)', async () => {
+        const audio = createMockAudio();
+        const gainNode = {
+            gain: {
+                value: 1,
+                setTargetAtTime: vi.fn((val) => {
+                    gainNode.gain.value = val;
+                }),
+                setValueAtTime: vi.fn((val) => {
+                    gainNode.gain.value = val;
+                }),
+            },
+            connect: vi.fn(),
+            disconnect: vi.fn(),
+        };
+        const sourceNode = {
+            connect: vi.fn(),
+            disconnect: vi.fn(),
+        };
+        const mockCtx = {
+            currentTime: 5,
+            state: 'suspended',
+            destination: { kind: 'destination' },
+            resume: vi.fn(() => {
+                mockCtx.state = 'running';
+                return Promise.resolve();
+            }),
+            close: vi.fn(),
+            createMediaElementSource: vi.fn(() => sourceNode),
+            createGain: vi.fn(() => gainNode),
+        };
+
+        const player = createBackgroundMusicPlayer({
+            tracks: [{ id: '01.mp3', title: '01', src: '/01.mp3' }],
+            audioFactory: () => audio,
+            contextFactory: () => mockCtx,
+        });
+
+        player.start();
+        await Promise.resolve();
+
+        expect(mockCtx.createMediaElementSource).toHaveBeenCalledWith(audio);
+        expect(sourceNode.connect).toHaveBeenCalledWith(gainNode);
+        expect(gainNode.connect).toHaveBeenCalledWith(mockCtx.destination);
+        expect(mockCtx.resume).toHaveBeenCalled();
+        expect(audio.volume).toBe(1);
+        expect(gainNode.gain.value).toBeCloseTo(0.45 * 0.45, 5);
+
+        player.setVolume(0.2);
+        expect(audio.volume).toBe(1);
+        expect(audio.muted).toBe(false);
+        expect(gainNode.gain.value).toBeCloseTo(0.2 * 0.2, 5);
+
+        player.setVolume(0);
+        expect(audio.muted).toBe(true);
+        expect(gainNode.gain.value).toBe(0);
+
+        player.destroy();
+        expect(sourceNode.disconnect).toHaveBeenCalled();
+        expect(gainNode.disconnect).toHaveBeenCalled();
+        expect(mockCtx.close).toHaveBeenCalled();
     });
 });
