@@ -15,6 +15,12 @@ export default defineConfig(({ mode }) => {
             globals: true,
             setupFiles: ['./tests/setup.js'],
             include: ['tests/**/*.test.{js,jsx}'],
+            coverage: {
+                provider: 'v8',
+                include: ['src/**/*.{js,jsx}'],
+                reporter: ['text', 'lcov', 'json-summary'],
+                reportsDirectory: './coverage',
+            },
         },
     };
 });

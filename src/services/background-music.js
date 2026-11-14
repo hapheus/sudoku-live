@@ -1,12 +1,20 @@
+import {
+    getDefaultStorage,
+    loadBooleanPref,
+    loadNumberPref,
+    saveBooleanPref,
+    saveNumberPref,
+} from '../utils/storage.js';
+import {
+    clampVolume,
+    createGestureListenerManager,
+    getDefaultAudioContextClass,
+    toPerceptualGain,
+} from './audio-core.js';
+
 const MUSIC_STORAGE_KEY = 'sudoku_music_enabled';
 const MUSIC_VOLUME_STORAGE_KEY = 'sudoku_music_volume';
 const DEFAULT_MUSIC_VOLUME = 0.45;
-
-function clampVolume(value, fallback) {
-    const num = Number(value);
-    if (!Number.isFinite(num)) return fallback;
-    return Math.min(1, Math.max(0, num));
-}
 
 const discoveredTrackModules = import.meta.glob(
     [
@@ -45,49 +53,25 @@ export function shuffleTracks(tracks, random = Math.random) {
     return copy;
 }
 
-export function loadMusicEnabled(storage = typeof localStorage !== 'undefined' ? localStorage : null) {
-    try {
-        return storage?.getItem(MUSIC_STORAGE_KEY) === 'true';
-    } catch {
-        return false;
-    }
+export function loadMusicEnabled(storage = getDefaultStorage('local')) {
+    return loadBooleanPref(MUSIC_STORAGE_KEY, false, storage);
 }
 
-export function saveMusicEnabled(enabled, storage = typeof localStorage !== 'undefined' ? localStorage : null) {
-    try {
-        storage?.setItem(MUSIC_STORAGE_KEY, enabled ? 'true' : 'false');
-    } catch {
-        // Ignore storage quota / privacy errors
-    }
+export function saveMusicEnabled(enabled, storage = getDefaultStorage('local')) {
+    saveBooleanPref(MUSIC_STORAGE_KEY, enabled, storage);
 }
 
-export function loadMusicVolume(storage = typeof localStorage !== 'undefined' ? localStorage : null) {
-    try {
-        const raw = storage?.getItem(MUSIC_VOLUME_STORAGE_KEY);
-        if (raw === null || raw === undefined || raw === '') return DEFAULT_MUSIC_VOLUME;
-        return clampVolume(raw, DEFAULT_MUSIC_VOLUME);
-    } catch {
-        return DEFAULT_MUSIC_VOLUME;
-    }
+export function loadMusicVolume(storage = getDefaultStorage('local')) {
+    return loadNumberPref(MUSIC_VOLUME_STORAGE_KEY, DEFAULT_MUSIC_VOLUME, { min: 0, max: 1 }, storage);
 }
 
-export function saveMusicVolume(volume, storage = typeof localStorage !== 'undefined' ? localStorage : null) {
-    try {
-        storage?.setItem(MUSIC_VOLUME_STORAGE_KEY, String(clampVolume(volume, DEFAULT_MUSIC_VOLUME)));
-    } catch {
-        // Ignore storage quota / privacy errors
-    }
-}
-
-function toPerceptualGain(volume) {
-    const clamped = clampVolume(volume, DEFAULT_MUSIC_VOLUME);
-    if (clamped <= 0) return 0;
-    return clamped * clamped;
-}
-
-function getDefaultAudioContextClass(win) {
-    if (!win) return null;
-    return win.AudioContext || win.webkitAudioContext || null;
+export function saveMusicVolume(volume, storage = getDefaultStorage('local')) {
+    saveNumberPref(
+        MUSIC_VOLUME_STORAGE_KEY,
+        volume,
+        { min: 0, max: 1, fallback: DEFAULT_MUSIC_VOLUME },
+        storage,
+    );
 }
 
 export function createBackgroundMusicPlayer({
@@ -108,17 +92,20 @@ export function createBackgroundMusicPlayer({
     let playlist = shuffle && tracks.length > 1 ? shuffleTracks(tracks, random) : [...tracks];
     let currentIndex = 0;
     let destroyed = false;
-    let waitingForGesture = false;
     let consecutiveErrors = 0;
     let audio = null;
     let audioCtx = null;
     let sourceNode = null;
     let gainNode = null;
 
-    const gestureEvents = ['pointerdown', 'touchstart', 'keydown', 'click'];
+    const gestureManager = createGestureListenerManager({
+        target: win,
+        capture: true,
+        onGesture: handleUserGesture,
+    });
 
     const applyOutputVolume = (vol) => {
-        const gainValue = toPerceptualGain(vol);
+        const gainValue = toPerceptualGain(vol, DEFAULT_MUSIC_VOLUME);
         if (audio) {
             audio.muted = vol <= 0;
             // When routed through a Web Audio GainNode, keep HTMLAudioElement.volume at 1
@@ -233,20 +220,10 @@ export function createBackgroundMusicPlayer({
         return audio;
     };
 
-    const removeGestureListeners = () => {
-        if (!win || !waitingForGesture) return;
-        waitingForGesture = false;
-        for (const evt of gestureEvents) {
-            win.removeEventListener(evt, handleUserGesture, true);
-        }
-    };
+    const removeGestureListeners = () => gestureManager.remove();
 
     const attachGestureListeners = () => {
-        if (!win || waitingForGesture || destroyed) return;
-        waitingForGesture = true;
-        for (const evt of gestureEvents) {
-            win.addEventListener(evt, handleUserGesture, { capture: true, passive: true });
-        }
+        if (!destroyed) gestureManager.attach();
     };
 
     const tryPlay = () => {
