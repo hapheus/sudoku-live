@@ -2,7 +2,7 @@ import React from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { App } from '../src/App.jsx';
-import { createSudokuGame, serializeGameState, setCellValue } from '../src/domain/sudoku-engine.js';
+import { createSudokuGame, serializeGameState, setCellValue, toggleCellNote } from '../src/domain/sudoku-engine.js';
 import { OnlineGameClient } from '../src/services/online-game-client.js';
 import { saveSoloGameSnapshot } from '../src/services/online-state-storage.js';
 
@@ -1107,5 +1107,104 @@ it('hides Impressum, Privacy footer, and App Store link inside native Capacitor 
         delete window.Capacitor;
         window.history.replaceState({}, '', '/');
     }
+});
+
+it('allocates a fresh room and does not carry over notes or digits when starting a new game after an unfinished game', () => {
+    const joinedRooms = [];
+    vi.spyOn(OnlineGameClient.prototype, 'joinLobby').mockImplementation(() => null);
+    vi.spyOn(OnlineGameClient.prototype, 'joinGameChannel').mockImplementation(function (gameId) {
+        joinedRooms.push(gameId);
+        this.currentGameId = gameId;
+        this.gameChannel = { name: `sudoku:game.${gameId}` };
+        return this.gameChannel;
+    });
+
+    const solution2x3 = [
+        1, 2, 3, 4, 5, 6,
+        4, 5, 6, 1, 2, 3,
+        2, 3, 1, 6, 4, 5,
+        5, 6, 4, 2, 3, 1,
+        3, 1, 2, 5, 6, 4,
+        6, 4, 5, 3, 1, 2,
+    ];
+    const puzzle2x3 = [...solution2x3];
+    puzzle2x3[0] = 0;
+    puzzle2x3[1] = 0;
+    let unfinishedState = createSudokuGame({
+        difficulty: 'easy',
+        variant: '2x3',
+        puzzle: puzzle2x3,
+        solution: solution2x3,
+    });
+    // Notes-only unfinished progress still counts as unsaved progress even after reload strips history
+    unfinishedState = toggleCellNote(unfinishedState, 0, 1);
+    saveSoloGameSnapshot(unfinishedState, 'unfinished-room-old');
+
+    render(<App />);
+    expect(screen.getByRole('button', { name: 'Resume Current Game' })).toBeVisible();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    expect(joinedRooms).toHaveLength(1);
+    expect(joinedRooms[0]).not.toBe('unfinished-room-old');
+
+    // Also starting a new puzzle after placing a wrong/user digit clears old user progress cleanly
+    const cells = screen.getAllByRole('gridcell');
+    const emptyIdx = cells.findIndex((c) => !c.classList.contains('sudoku-cell--given'));
+    fireEvent.click(cells[emptyIdx]);
+    fireEvent.click(document.querySelector('.numpad-btn[data-digit="6"]'));
+
+    cleanup();
+    localStorage.setItem('sudoku_theme', 'dark');
+    const secondJoined = [];
+    vi.spyOn(OnlineGameClient.prototype, 'joinGameChannel').mockImplementation(function (gameId) {
+        secondJoined.push(gameId);
+        this.currentGameId = gameId;
+        this.gameChannel = { name: `sudoku:game.${gameId}` };
+        return this.gameChannel;
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    expect(secondJoined).toHaveLength(1);
+    expect(secondJoined[0]).not.toBe(joinedRooms[0]);
+});
+
+it('clears selected cell highlight as soon as the final digit solves the puzzle', () => {
+    const solution2x3 = [
+        1, 2, 3, 4, 5, 6,
+        4, 5, 6, 1, 2, 3,
+        2, 3, 1, 6, 4, 5,
+        5, 6, 4, 2, 3, 1,
+        3, 1, 2, 5, 6, 4,
+        6, 4, 5, 3, 1, 2,
+    ];
+    const almostSolvedPuzzle = [...solution2x3];
+    almostSolvedPuzzle[34] = 0;
+    almostSolvedPuzzle[35] = 0; // last cell R6 C6 = 2
+
+    let saved = createSudokuGame({
+        difficulty: 'easy',
+        variant: '2x3',
+        puzzle: almostSolvedPuzzle,
+        solution: solution2x3,
+    });
+    saved = setCellValue(saved, 34, solution2x3[34]);
+    saveSoloGameSnapshot(saved, 'almost-solved-room');
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Resume Current Game' }));
+
+    const cells = screen.getAllByRole('gridcell');
+    fireEvent.click(cells[35]);
+    expect(cells[35]).toHaveClass('sudoku-cell--selected');
+
+    fireEvent.click(document.querySelector('.numpad-btn[data-digit="2"]'));
+
+    const board = document.getElementById('sudoku-board');
+    expect(board).toHaveClass('sudoku-board--solved');
+    expect(document.querySelectorAll('.sudoku-cell--selected')).toHaveLength(0);
+    expect(document.querySelectorAll('.sudoku-cell--peer')).toHaveLength(0);
+    expect(document.querySelectorAll('.sudoku-cell--same-digit')).toHaveLength(0);
+    expect(document.querySelectorAll('.sudoku-cell--revealed')).toHaveLength(36);
 });
 

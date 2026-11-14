@@ -67,7 +67,8 @@ function isNativeCapacitorApp() {
 function hasUnsavedProgress(state) {
     if (!state || state.status === 'solved') return false;
     const givenCount = Array.isArray(state.givens) ? state.givens.filter(Boolean).length : 0;
-    return Boolean((state.history && state.history.length > 0) || state.filledCount > givenCount);
+    const hasNotes = Array.isArray(state.notes) && state.notes.some((arr) => Array.isArray(arr) && arr.length > 0);
+    return Boolean((state.history && state.history.length > 0) || state.filledCount > givenCount || hasNotes);
 }
 
 function parseInitialRoute() {
@@ -762,6 +763,12 @@ export function App() {
                     playMoveSoundFeedback(patched, data.index, data.value, unitCompleted);
                 }
             }
+            if (patched.status === 'solved') {
+                setSelectedIndex(null);
+                setActiveDigit(null);
+                stateRef.current.selectedIndex = null;
+                stateRef.current.activeDigit = null;
+            }
             persistSnapshotIfNeeded(patched);
             return;
         }
@@ -914,7 +921,16 @@ export function App() {
                     }
                 }
 
-                const shouldRecoverHost = cur.myRole === 'host' && localFilled <= localInitial && remoteFilled > localFilled && !variantDiffers;
+                const givensDiffer = !Array.isArray(data.gameState.givens)
+                    || data.gameState.givens.length !== cur.gameState.givens.length
+                    || data.gameState.givens.some((g, idx) => Boolean(g) !== Boolean(cur.gameState.givens[idx]))
+                    || (Array.isArray(data.gameState.board) && cur.gameState.givens.some((g, idx) => g && data.gameState.board[idx] !== cur.gameState.board[idx]));
+                const shouldRecoverHost = cur.myRole === 'host'
+                    && cur.mode === 'online'
+                    && localFilled <= localInitial
+                    && remoteFilled > localFilled
+                    && !variantDiffers
+                    && !givensDiffer;
                 const shouldAdoptRemote = cur.myRole !== 'host' && (
                     boardsDiffer
                     || remoteFilled !== localFilled
@@ -1354,17 +1370,27 @@ export function App() {
     ) => {
         clearUnitCelebration();
         const saved = restoreSaved ? loadSoloGameSnapshot() : null;
-        const diff = saved?.gameState?.status === 'in_progress'
+        const isRestoringSaved = Boolean(saved && saved.gameState.status !== 'solved');
+        const diff = isRestoringSaved
             ? saved.gameState.difficulty
             : (overrideDifficulty || stateRef.current.difficulty);
-        const varId = saved?.gameState?.status === 'in_progress'
+        const varId = isRestoringSaved
             ? normalizeVariant(saved.gameState.variant || inferVariantFromBoardLength(saved.gameState.board?.length))
             : normalizeVariant(overrideVariant || stateRef.current.variant);
 
-        const hadExistingSoloRoom = Boolean(stateRef.current.onlineGameId) && stateRef.current.myRole === 'host' && stateRef.current.mode === 'solo';
-        const roomId = saved?.roomId || (hadExistingSoloRoom ? stateRef.current.onlineGameId : generateGameId());
+        const client = onlineClientRef.current;
+        const hasRemoteMembers = Boolean(
+            client
+            && stateRef.current.onlineGameId
+            && client.currentGameId === stateRef.current.onlineGameId
+            && client.gameChannel
+            && stateRef.current.currentMembers.some((m) => m.id && m.id !== client.clientId),
+        );
+        const keepActiveRoom = !isRestoringSaved && startSession && hasRemoteMembers;
+        const roomId = isRestoringSaved
+            ? (saved.roomId || generateGameId())
+            : (keepActiveRoom ? stateRef.current.onlineGameId : generateGameId());
 
-        const isRestoringSaved = Boolean(saved && saved.gameState.status !== 'solved');
         const nextState = isRestoringSaved
             ? saved.gameState
             : createSudokuGame({ difficulty: diff, variant: varId });
@@ -1399,8 +1425,9 @@ export function App() {
         stateRef.current.incomingJoinRequests = [];
         setGameState(nextState);
         setBoardBackground(nextBg);
-        if (!hadExistingSoloRoom) {
+        if (!keepActiveRoom) {
             setCurrentMembers([]);
+            stateRef.current.currentMembers = [];
         }
 
         stateRef.current.mode = 'solo';
@@ -1673,6 +1700,12 @@ export function App() {
                         broadcastActiveDigit(null);
                     }
                 }
+                if (nextState.status === 'solved') {
+                    setSelectedIndex(null);
+                    setActiveDigit(null);
+                    stateRef.current.selectedIndex = null;
+                    stateRef.current.activeDigit = null;
+                }
                 if (isBroadcaster) {
                     onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'cell-update', {
                         index: targetIndex,
@@ -1925,6 +1958,12 @@ export function App() {
         broadcastHintHighlight(hint, 'solve');
         const unitCompleted = triggerUnitCelebration(prevBoard, nextState, targetIdx);
         playMoveSoundFeedback(nextState, targetIdx, correctDigit, unitCompleted);
+        if (nextState.status === 'solved') {
+            setSelectedIndex(null);
+            setActiveDigit(null);
+            stateRef.current.selectedIndex = null;
+            stateRef.current.activeDigit = null;
+        }
 
         const isBroadcaster = (cur.mode === 'solo' || cur.mode === 'online') && Boolean(cur.onlineGameId) && !cur.isSpectating;
         if (isBroadcaster) {
@@ -2843,6 +2882,12 @@ export function App() {
                                 const unitCompleted = triggerUnitCelebration(prevBoard, nextState, idx);
                                 if (nextState !== prevGameState) {
                                     playMoveSoundFeedback(nextState, idx, digit, unitCompleted);
+                                }
+                                if (nextState.status === 'solved') {
+                                    setSelectedIndex(null);
+                                    setActiveDigit(null);
+                                    stateRef.current.selectedIndex = null;
+                                    stateRef.current.activeDigit = null;
                                 }
                                 const isBroadcaster = (cur.mode === 'solo' || cur.mode === 'online') && Boolean(cur.onlineGameId) && !cur.isSpectating;
                                 if (isBroadcaster) {

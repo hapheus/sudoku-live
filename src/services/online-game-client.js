@@ -272,17 +272,33 @@ export class OnlineGameClient {
             try {
                 const hist = await sub.history({ limit: 25 });
                 if (this.gameChannel === sub && Array.isArray(hist?.publications)) {
-                    for (const pub of hist.publications) {
-                        const payload = pub?.data;
-                        if (!payload || !payload.type || payload.type === 'presence-announce') {
-                            continue;
+                    const isAuthoritativeSoloHost = this.gameRole === 'host' && this.gameMode === 'solo';
+                    if (!isAuthoritativeSoloHost) {
+                        const orderedPubs = [...hist.publications].sort((a, b) => {
+                            const ao = Number.isFinite(a?.offset) ? a.offset : 0;
+                            const bo = Number.isFinite(b?.offset) ? b.offset : 0;
+                            return ao - bo;
+                        });
+                        let startIdx = 0;
+                        for (let i = orderedPubs.length - 1; i >= 0; i -= 1) {
+                            const t = orderedPubs[i]?.data?.type;
+                            if (t === 'new-puzzle-accept' || t === 'init' || t === 'sync') {
+                                startIdx = i;
+                                break;
+                            }
                         }
-                        const eventId = payload.data?.eventId;
-                        if (eventId && this.rememberEvent(eventId)) {
-                            continue;
-                        }
-                        if (payload.type === 'init' || payload.type === 'sync' || payload.type === 'cell-update' || payload.type === 'new-puzzle-accept' || payload.type === 'new-puzzle-request' || payload.type === 'join-policy') {
-                            onEvent(payload.type, payload.data || {});
+                        for (const pub of orderedPubs.slice(startIdx)) {
+                            const payload = pub?.data;
+                            if (!payload || !payload.type || payload.type === 'presence-announce') {
+                                continue;
+                            }
+                            const eventId = payload.data?.eventId;
+                            if (eventId && this.rememberEvent(eventId)) {
+                                continue;
+                            }
+                            if (payload.type === 'init' || payload.type === 'sync' || payload.type === 'cell-update' || payload.type === 'new-puzzle-accept' || payload.type === 'new-puzzle-request' || payload.type === 'join-policy') {
+                                onEvent(payload.type, payload.data || {});
+                            }
                         }
                     }
                 }

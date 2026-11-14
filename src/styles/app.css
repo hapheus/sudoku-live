@@ -948,7 +948,7 @@ body {
     border-bottom: 2px solid var(--color-grid-box);
 }
 
-.sudoku-cell:hover {
+.sudoku-board:not(.sudoku-board--solved) .sudoku-cell:hover {
     background-color: var(--color-peer);
 }
 
@@ -2237,22 +2237,22 @@ body {
     background: var(--color-surface);
 }
 
-.sudoku-board--has-artwork .sudoku-cell:not(.sudoku-cell--revealed):hover,
-.sudoku-board--has-artwork .sudoku-cell--peer:not(.sudoku-cell--revealed) {
+.sudoku-board--has-artwork:not(.sudoku-board--solved) .sudoku-cell:not(.sudoku-cell--revealed):hover,
+.sudoku-board--has-artwork:not(.sudoku-board--solved) .sudoku-cell--peer:not(.sudoku-cell--revealed) {
     background: var(--color-peer);
 }
 
-.sudoku-board--has-artwork .sudoku-cell--hinted:not(.sudoku-cell--revealed),
-.sudoku-board--has-artwork .sudoku-cell--hint-preview.sudoku-cell--hint-context:not(.sudoku-cell--revealed),
-.sudoku-board--has-artwork .sudoku-cell--hint-preview.sudoku-cell--hint-target:not(.sudoku-cell--revealed) {
+.sudoku-board--has-artwork:not(.sudoku-board--solved) .sudoku-cell--hinted:not(.sudoku-cell--revealed),
+.sudoku-board--has-artwork:not(.sudoku-board--solved) .sudoku-cell--hint-preview.sudoku-cell--hint-context:not(.sudoku-cell--revealed),
+.sudoku-board--has-artwork:not(.sudoku-board--solved) .sudoku-cell--hint-preview.sudoku-cell--hint-target:not(.sudoku-cell--revealed) {
     background: linear-gradient(var(--color-hint-bg), var(--color-hint-bg)), var(--color-surface);
 }
 
-.sudoku-board--has-artwork .sudoku-cell--partner-cursor:not(.sudoku-cell--revealed) {
+.sudoku-board--has-artwork:not(.sudoku-board--solved) .sudoku-cell--partner-cursor:not(.sudoku-cell--revealed) {
     background: linear-gradient(var(--color-partner-bg), var(--color-partner-bg)), var(--color-surface);
 }
 
-.sudoku-board--has-artwork .sudoku-cell--player-cursor:not(.sudoku-cell--revealed) {
+.sudoku-board--has-artwork:not(.sudoku-board--solved) .sudoku-cell--player-cursor:not(.sudoku-cell--revealed) {
     background: var(--color-selected-cell);
 }
 
@@ -2269,20 +2269,20 @@ body {
     background: var(--color-reveal-unit-scrim);
 }
 
-.sudoku-board--has-artwork .sudoku-cell--revealed:hover,
-.sudoku-board--has-artwork .sudoku-cell--revealed.sudoku-cell--peer {
+.sudoku-board--has-artwork:not(.sudoku-board--solved) .sudoku-cell--revealed:hover,
+.sudoku-board--has-artwork:not(.sudoku-board--solved) .sudoku-cell--revealed.sudoku-cell--peer {
     background: linear-gradient(var(--color-reveal-peer-tint), var(--color-reveal-peer-tint)), var(--color-reveal-scrim);
 }
 
-.sudoku-board--has-artwork .sudoku-cell--revealed.sudoku-cell--unit-revealed.sudoku-cell--peer {
+.sudoku-board--has-artwork:not(.sudoku-board--solved) .sudoku-cell--revealed.sudoku-cell--unit-revealed.sudoku-cell--peer {
     background: linear-gradient(var(--color-reveal-peer-tint), var(--color-reveal-peer-tint)), var(--color-reveal-unit-scrim);
 }
 
-.sudoku-board--has-artwork .sudoku-cell--revealed.sudoku-cell--partner-cursor {
+.sudoku-board--has-artwork:not(.sudoku-board--solved) .sudoku-cell--revealed.sudoku-cell--partner-cursor {
     background: linear-gradient(var(--color-reveal-partner-tint), var(--color-reveal-partner-tint)), var(--color-reveal-scrim);
 }
 
-.sudoku-board--has-artwork .sudoku-cell--revealed.sudoku-cell--same-digit {
+.sudoku-board--has-artwork:not(.sudoku-board--solved) .sudoku-cell--revealed.sudoku-cell--same-digit {
     background: linear-gradient(var(--color-reveal-same-digit-tint), var(--color-reveal-same-digit-tint)), var(--color-reveal-scrim);
 }
 
@@ -2313,14 +2313,16 @@ body {
 
 .sudoku-board--has-artwork.sudoku-board--solved .sudoku-cell {
     pointer-events: none;
+    outline: none;
     outline-color: transparent;
-    animation: solvedCellDissolve 420ms cubic-bezier(0.22, 1, 0.36, 1) calc(var(--solve-delay, 0ms) + 120ms) forwards;
+    transition: none;
+    animation: solvedCellDissolve 420ms cubic-bezier(0.22, 1, 0.36, 1) calc(var(--solve-delay, 0ms) + 120ms) both;
 }
 
 .sudoku-board--has-artwork.sudoku-board--solved .sudoku-cell__digit,
 .sudoku-board--has-artwork.sudoku-board--solved .sudoku-cell__player-pip,
 .sudoku-board--has-artwork.sudoku-board--solved .sudoku-cell__partner-pip {
-    animation: solvedDigitDissolve 220ms cubic-bezier(0.22, 1, 0.36, 1) var(--solve-delay, 0ms) forwards;
+    animation: solvedDigitDissolve 220ms cubic-bezier(0.22, 1, 0.36, 1) var(--solve-delay, 0ms) both;
 }
 
 @keyframes solvedDigitDissolve {
@@ -2339,7 +2341,11 @@ body {
 }
 
 @keyframes solvedCellDissolve {
+    0% {
+        opacity: 1;
+    }
     100% {
+        opacity: 0;
         background: transparent;
         background-color: transparent;
         background-image: none;
@@ -2523,6 +2529,7 @@ body {
     .sudoku-cell--revealed { transition: none; }
     .sudoku-board--has-artwork.sudoku-board--solved .sudoku-cell {
         animation: none;
+        opacity: 0;
         background: transparent !important;
         border-color: transparent;
         box-shadow: none;

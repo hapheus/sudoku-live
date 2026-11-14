@@ -140,4 +140,70 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
             data: { joinPolicy: 'auto' },
         }));
     });
+
+    it('skips replaying channel history for authoritative solo hosts and ignores pre-rematch events for guests', async () => {
+        const makeMockSubscription = (publications) => {
+            const handlers = new Map();
+            return {
+                on: (evt, cb) => handlers.set(evt, cb),
+                subscribe: async () => {
+                    await handlers.get('subscribed')?.();
+                },
+                unsubscribe: vi.fn(),
+                presence: vi.fn().mockResolvedValue({ clients: {} }),
+                history: vi.fn().mockResolvedValue({ publications }),
+                publish: vi.fn().mockResolvedValue({}),
+            };
+        };
+
+        const soloClient = new OnlineGameClient({
+            wsConfig: { host: 'localhost', port: 8081, scheme: 'http' },
+        });
+        const soloSub = makeMockSubscription([
+            { offset: 1, data: { type: 'cell-update', data: { eventId: 'e1', index: 4, value: 9 } } },
+        ]);
+        soloClient.client = {
+            state: 'connected',
+            connect: vi.fn(),
+            newSubscription: vi.fn(() => soloSub),
+            removeSubscription: vi.fn(),
+        };
+
+        const soloEvents = [];
+        soloClient.joinGameChannel('room-solo-clean', {
+            role: 'host',
+            gameMode: 'solo',
+            onEvent: (type, data) => soloEvents.push({ type, data }),
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(soloEvents).toEqual([]);
+
+        const guestClient = new OnlineGameClient({
+            wsConfig: { host: 'localhost', port: 8081, scheme: 'http' },
+        });
+        const guestSub = makeMockSubscription([
+            // Out-of-order / descending offsets with stale move before new-puzzle-accept
+            { offset: 4, data: { type: 'cell-update', data: { eventId: 'e4', index: 5, value: 3 } } },
+            { offset: 3, data: { type: 'new-puzzle-accept', data: { eventId: 'e3', gameState: { board: [] } } } },
+            { offset: 2, data: { type: 'cell-update', data: { eventId: 'e2', index: 1, value: 8 } } },
+            { offset: 1, data: { type: 'cell-update', data: { eventId: 'e1', index: 0, value: 7 } } },
+        ]);
+        guestClient.client = {
+            state: 'connected',
+            connect: vi.fn(),
+            newSubscription: vi.fn(() => guestSub),
+            removeSubscription: vi.fn(),
+        };
+
+        const guestEvents = [];
+        guestClient.joinGameChannel('room-coop-reset', {
+            role: 'guest',
+            gameMode: 'online',
+            onEvent: (type, data) => guestEvents.push({ type, data }),
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(guestEvents.map((e) => e.data.eventId)).toEqual(['e3', 'e4']);
+    });
 });
