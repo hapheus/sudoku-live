@@ -396,7 +396,7 @@ export function useBoardActions({
 
         if (nextState === cur.gameState) return;
 
-        let nextSelectedIndex = activeIdx;
+        let nextSelectedIndex;
         if (axis === 'row') {
             const bandStart = Math.floor(row / specInfo.boxRows) * specInfo.boxRows;
             const targetRow = bandStart + ((row - bandStart + dir + specInfo.boxRows) % specInfo.boxRows);

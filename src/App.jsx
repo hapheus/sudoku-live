@@ -293,8 +293,6 @@ export function App() {
     const {
         broadcastCursor,
         broadcastActiveDigit,
-        broadcastHintHighlight,
-        writeDigitToCell,
         applyPlayerDigit,
         focusCell,
         handleCellSelect,
@@ -329,7 +327,6 @@ export function App() {
     });
 
     const {
-        switchMode,
         openLegalPage,
         closeLegalPage,
         handleSelectNavTab,

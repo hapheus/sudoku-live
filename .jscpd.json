@@ -1,0 +1,15 @@
+{
+    "threshold": 5,
+    "reporters": ["console", "json"],
+    "output": "coverage/jscpd",
+    "ignore": [
+        "**/node_modules/**",
+        "**/dist/**",
+        "**/dist-itch/**",
+        "**/coverage/**",
+        "**/ios/**",
+        "**/tests/**",
+        "**/*.json"
+    ],
+    "path": ["src"]
+}

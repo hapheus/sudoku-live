@@ -142,7 +142,7 @@ function findNakedSingleHints({ board, givens, spec, candidatesByCell, isBoardCe
 }
 
 function findFallbackHint({ board, givens, solution, spec, preferredIndex }) {
-    let fallbackIdx = null;
+    let fallbackIdx;
     if (
         Number.isInteger(preferredIndex)
         && preferredIndex >= 0

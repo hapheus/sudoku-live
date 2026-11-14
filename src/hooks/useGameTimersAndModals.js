@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { serializeGameState } from '../domain/sudoku-engine.js';
 import { saveSoloGameSnapshot } from '../services/online-state-storage.js';
-import { isEmbeddedSubpathApp } from '../utils/app-routing.js';
+import { isEmbeddedSubpathApp, normalizePathname } from '../utils/app-routing.js';
 
 const GAME_PING_INTERVAL_MS = 5000;
 
@@ -100,7 +100,7 @@ export function useGameTimersAndModals({
     useEffect(() => {
         if (isNativeApp || isEmbeddedSubpathApp() || typeof window === 'undefined') return undefined;
         const onPopState = () => {
-            const path = window.location.pathname.replace(/\/+$/, '') || '/';
+            const path = normalizePathname(window.location.pathname);
             if (path === '/privacy') {
                 setLegalPage('privacy');
             } else if (path === '/impressum') {

@@ -10,7 +10,7 @@ import {
 } from '../domain/sudoku-engine.js';
 import { selectBoardBackground } from '../services/board-backgrounds.js';
 import { saveSoloGameSnapshot } from '../services/online-state-storage.js';
-import { hasUnsavedProgress, updateBrowserUrl } from '../utils/app-routing.js';
+import { hasUnsavedProgress, normalizePathname, updateBrowserUrl } from '../utils/app-routing.js';
 import { setStorageItem } from '../utils/storage.js';
 import { clearPendingJoinState, respondToQueuedJoinRequests } from './useOnlineSession.js';
 
@@ -177,7 +177,7 @@ export function useNavigationAndSetup({
     const handleSelectNavTab = useCallback((targetTab) => {
         setLegalPage(null);
         if (!isNativeApp && typeof window !== 'undefined') {
-            const path = window.location.pathname.replace(/\/+$/, '') || '/';
+            const path = normalizePathname(window.location.pathname);
             if (path === '/privacy' || path === '/impressum') {
                 updateBrowserUrl('/');
             }

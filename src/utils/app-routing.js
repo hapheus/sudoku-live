@@ -29,13 +29,21 @@ export function hasUnsavedProgress(state) {
     return Boolean((state.history && state.history.length > 0) || state.filledCount > givenCount || hasNotes);
 }
 
+export function normalizePathname(pathname) {
+    let path = pathname || '/';
+    while (path.length > 1 && path.endsWith('/')) {
+        path = path.slice(0, -1);
+    }
+    return path || '/';
+}
+
 export function parseInitialRoute() {
     if (typeof window === 'undefined') {
         return { initialMode: 'solo', initialGameId: null, initialWatch: false, initialLegalPage: null };
     }
 
     const isNative = isNativeCapacitorApp();
-    const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
+    const pathname = normalizePathname(window.location.pathname);
     if (!isNative && pathname === '/privacy') {
         return { initialMode: 'solo', initialGameId: null, initialWatch: false, initialLegalPage: 'privacy' };
     }
