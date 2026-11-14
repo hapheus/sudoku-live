@@ -1251,4 +1251,40 @@ it('defaults background music to Off (opt-in) on Start screen, syncs with Settin
     expect(document.getElementById('setup-music-control').querySelector('input[value="false"]')).toBeChecked();
 });
 
+it('runs safely when storage throws SecurityError and skips pushState inside embedded iframes', () => {
+    const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+        throw new DOMException('Blocked', 'SecurityError');
+    });
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new DOMException('Blocked', 'SecurityError');
+    });
+    const pushStateSpy = vi.spyOn(window.history, 'pushState');
+    const originalTopDescriptor = Object.getOwnPropertyDescriptor(window, 'top');
+    Object.defineProperty(window, 'top', {
+        configurable: true,
+        get: () => ({}),
+    });
 
+    try {
+        render(<App />);
+        expect(document.getElementById('play-setup')).toBeVisible();
+
+        fireEvent.click(document.getElementById('privacy-link'));
+        expect(document.getElementById('legal-privacy')).toBeVisible();
+        expect(pushStateSpy).not.toHaveBeenCalled();
+
+        fireEvent.click(document.getElementById('legal-back-btn'));
+        expect(document.getElementById('play-setup')).toBeVisible();
+
+        fireEvent.click(document.getElementById('start-game-btn'));
+        expect(document.getElementById('sudoku-board')).toBeVisible();
+        expect(pushStateSpy).not.toHaveBeenCalled();
+    } finally {
+        getItemSpy.mockRestore();
+        setItemSpy.mockRestore();
+        pushStateSpy.mockRestore();
+        if (originalTopDescriptor) {
+            Object.defineProperty(window, 'top', originalTopDescriptor);
+        }
+    }
+});

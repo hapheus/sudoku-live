@@ -78,6 +78,40 @@ function isNativeCapacitorApp() {
     return typeof window !== 'undefined' && Boolean(window.Capacitor?.isNativePlatform?.());
 }
 
+function isEmbeddedSubpathApp() {
+    const env = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : {};
+    if (env.VITE_ITCH_BUILD === 'true') return true;
+    if (typeof window === 'undefined') return false;
+    const host = window.location?.hostname || '';
+    if (host.endsWith('.itch.zone') || host === 'itch.io' || host.endsWith('.itch.io')) {
+        return true;
+    }
+    try {
+        return window.self !== window.top;
+    } catch {
+        return true;
+    }
+}
+
+function safeGetLocalStorage(key, fallback = null) {
+    try {
+        if (typeof localStorage === 'undefined') return fallback;
+        const val = localStorage.getItem(key);
+        return val === null ? fallback : val;
+    } catch {
+        return fallback;
+    }
+}
+
+function safeSetLocalStorage(key, value) {
+    try {
+        if (typeof localStorage === 'undefined') return;
+        localStorage.setItem(key, value);
+    } catch {
+        // Ignore restricted iframe / storage quota errors
+    }
+}
+
 function hasUnsavedProgress(state) {
     if (!state || state.status === 'solved') return false;
     const givenCount = Array.isArray(state.givens) ? state.givens.filter(Boolean).length : 0;
@@ -116,8 +150,7 @@ function parseInitialRoute() {
 
 function updateBrowserUrl(path) {
     if (typeof window === 'undefined') return;
-    const isNative = isNativeCapacitorApp();
-    if (isNative || !window.location.protocol.startsWith('http')) {
+    if (isNativeCapacitorApp() || isEmbeddedSubpathApp() || !window.location.protocol.startsWith('http')) {
         return;
     }
     window.history.pushState({}, '', path);
@@ -125,8 +158,7 @@ function updateBrowserUrl(path) {
 
 function replaceBrowserUrl(path) {
     if (typeof window === 'undefined') return;
-    const isNative = isNativeCapacitorApp();
-    if (isNative || !window.location.protocol.startsWith('http')) {
+    if (isNativeCapacitorApp() || isEmbeddedSubpathApp() || !window.location.protocol.startsWith('http')) {
         return;
     }
     window.history.replaceState({}, '', path);
@@ -146,10 +178,10 @@ export function App() {
         initialRoute.initialGameId && !initialRoute.initialWatch,
     ));
     const [theme, setTheme] = useState(() => (
-        localStorage.getItem('sudoku_theme') === 'light' ? 'light' : 'dark'
+        safeGetLocalStorage('sudoku_theme') === 'light' ? 'light' : 'dark'
     ));
     const [language, setLanguage] = useState(() => (
-        localStorage.getItem('sudoku_lang') === 'de' ? 'de' : 'en'
+        safeGetLocalStorage('sudoku_lang') === 'de' ? 'de' : 'en'
     ));
     const [joinsAllowed, setJoinsAllowed] = useState(() => loadJoinsAllowed());
     const [joinsAutoAccept, setJoinsAutoAccept] = useState(() => loadJoinsAutoAccept());
@@ -160,8 +192,8 @@ export function App() {
     const [soundVolume, setSoundVolume] = useState(() => loadSoundVolume());
     const messages = useMemo(() => getMessages(language), [language]);
 
-    const [difficulty, setDifficulty] = useState(() => localStorage.getItem('sudoku_difficulty') || 'medium');
-    const [variant, setVariant] = useState(() => normalizeVariant(localStorage.getItem('sudoku_variant') || '3x3'));
+    const [difficulty, setDifficulty] = useState(() => safeGetLocalStorage('sudoku_difficulty', 'medium') || 'medium');
+    const [variant, setVariant] = useState(() => normalizeVariant(safeGetLocalStorage('sudoku_variant', '3x3') || '3x3'));
     const [mode, setMode] = useState(initialRoute.initialMode);
     const [isSpectating, setIsSpectating] = useState(initialRoute.initialWatch);
     const [onlineGameId, setOnlineGameId] = useState(initialRoute.initialGameId);
@@ -169,8 +201,8 @@ export function App() {
     const [spectatedGameMode, setSpectatedGameMode] = useState(null);
     const [hostJoinPolicy, setHostJoinPolicy] = useState('confirm');
     const [gameState, setGameState] = useState(() => createSudokuGame({
-        difficulty: localStorage.getItem('sudoku_difficulty') || 'medium',
-        variant: normalizeVariant(localStorage.getItem('sudoku_variant') || '3x3'),
+        difficulty: safeGetLocalStorage('sudoku_difficulty', 'medium') || 'medium',
+        variant: normalizeVariant(safeGetLocalStorage('sudoku_variant', '3x3') || '3x3'),
     }));
     const [boardBackground, setBoardBackground] = useState(() => selectBoardBackground());
     const [selectedIndex, setSelectedIndex] = useState(null);
@@ -262,7 +294,7 @@ export function App() {
     useEffect(() => {
         document.documentElement.dataset.theme = theme;
         document.documentElement.style.colorScheme = theme;
-        localStorage.setItem('sudoku_theme', theme);
+        safeSetLocalStorage('sudoku_theme', theme);
         const themeMeta = document.querySelector('meta[name="theme-color"]');
         if (themeMeta) {
             themeMeta.setAttribute('content', theme === 'light' ? '#f6f2ea' : '#13161b');
@@ -271,7 +303,7 @@ export function App() {
 
     useEffect(() => {
         document.documentElement.lang = language;
-        localStorage.setItem('sudoku_lang', language);
+        safeSetLocalStorage('sudoku_lang', language);
     }, [language]);
 
     useEffect(() => {
@@ -1448,10 +1480,10 @@ export function App() {
 
         if (isRestoringSaved) {
             setDifficulty(nextState.difficulty);
-            localStorage.setItem('sudoku_difficulty', nextState.difficulty);
+            safeSetLocalStorage('sudoku_difficulty', nextState.difficulty);
             const restoredVar = normalizeVariant(nextState.variant || inferVariantFromBoardLength(nextState.board?.length));
             setVariant(restoredVar);
-            localStorage.setItem('sudoku_variant', restoredVar);
+            safeSetLocalStorage('sudoku_variant', restoredVar);
         }
 
         const resolvedVar = normalizeVariant(nextState.variant || inferVariantFromBoardLength(nextState.board?.length));
@@ -2175,7 +2207,7 @@ export function App() {
     }, []);
 
     useEffect(() => {
-        if (isNativeApp || typeof window === 'undefined') return undefined;
+        if (isNativeApp || isEmbeddedSubpathApp() || typeof window === 'undefined') return undefined;
         const onPopState = () => {
             const path = window.location.pathname.replace(/\/+$/, '') || '/';
             if (path === '/privacy') {
@@ -2335,7 +2367,7 @@ export function App() {
 
         const applyDifficulty = () => {
             setDifficulty(nextDiff);
-            localStorage.setItem('sudoku_difficulty', nextDiff);
+            safeSetLocalStorage('sudoku_difficulty', nextDiff);
             if (cur.isPlayingGame && cur.mode === 'solo' && !cur.isSpectating) {
                 startNewSoloGame(nextDiff, cur.variant);
             }
@@ -2369,7 +2401,7 @@ export function App() {
 
         const applyVariant = () => {
             setVariant(nextVariant);
-            localStorage.setItem('sudoku_variant', nextVariant);
+            safeSetLocalStorage('sudoku_variant', nextVariant);
             if (cur.isPlayingGame && cur.mode === 'solo' && !cur.isSpectating) {
                 startNewSoloGame(cur.difficulty, nextVariant);
             }
@@ -2459,10 +2491,10 @@ export function App() {
         const curState = stateRef.current.gameState;
         const resumedVar = normalizeVariant(curState.variant || inferVariantFromBoardLength(curState.board?.length));
         setVariant(resumedVar);
-        localStorage.setItem('sudoku_variant', resumedVar);
+        safeSetLocalStorage('sudoku_variant', resumedVar);
         if (curState.difficulty) {
             setDifficulty(curState.difficulty);
-            localStorage.setItem('sudoku_difficulty', curState.difficulty);
+            safeSetLocalStorage('sudoku_difficulty', curState.difficulty);
         }
         setNavTab('play');
         setIsPlayingGame(true);

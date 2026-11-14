@@ -10,6 +10,8 @@
 /.vscode
 /.zed
 /dist
+/dist-itch
+sudoku-live-itch.zip
 /node_modules
 /ios/App/App/public
 /ios/App/Pods

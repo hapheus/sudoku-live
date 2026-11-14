@@ -5,17 +5,25 @@ const STATE_KEY_PREFIX = 'sudoku_state_';
 const SOLO_STORAGE_KEY = 'sudoku_solo_snapshot_v1';
 
 export function loadParticipantSession(gameId) {
-    if (!gameId) return null;
-    const role = sessionStorage.getItem(`${ROLE_KEY_PREFIX}${gameId}`);
-    if (role !== 'host' && role !== 'guest') {
+    if (!gameId || typeof sessionStorage === 'undefined') return null;
+    try {
+        const role = sessionStorage.getItem(`${ROLE_KEY_PREFIX}${gameId}`);
+        if (role !== 'host' && role !== 'guest') {
+            return null;
+        }
+        return { role };
+    } catch {
         return null;
     }
-    return { role };
 }
 
 export function saveParticipantSession(gameId, role) {
-    if (!gameId) return;
-    sessionStorage.setItem(`${ROLE_KEY_PREFIX}${gameId}`, role);
+    if (!gameId || typeof sessionStorage === 'undefined') return;
+    try {
+        sessionStorage.setItem(`${ROLE_KEY_PREFIX}${gameId}`, role);
+    } catch {
+        // Ignore restricted iframe / storage quota errors
+    }
 }
 
 export function loadOnlineGameSnapshot(gameId) {

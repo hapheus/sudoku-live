@@ -76,10 +76,22 @@ export class OnlineGameClient {
         this.seenEventIds = new Set();
 
         // Persistent client id per browser / app session
-        this.clientId = sessionStorage.getItem('ttt_client_id');
+        let storedClientId = null;
+        try {
+            storedClientId = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('ttt_client_id') : null;
+        } catch {
+            storedClientId = null;
+        }
+        this.clientId = storedClientId;
         if (!this.clientId || !/^[A-Za-z0-9_-]{4,64}$/.test(this.clientId)) {
             this.clientId = `client_${randomHex(8)}`;
-            sessionStorage.setItem('ttt_client_id', this.clientId);
+            try {
+                if (typeof sessionStorage !== 'undefined') {
+                    sessionStorage.setItem('ttt_client_id', this.clientId);
+                }
+            } catch {
+                // Ignore restricted iframe / storage quota errors
+            }
         }
     }
 
