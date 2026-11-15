@@ -57,7 +57,7 @@ export function SolveSummary({
                             className="btn-secondary solve-summary__secondary-btn"
                             onClick={onBackToSetup}
                         >
-                            {messages.backToSetupFull || 'Back to Setup'}
+                            {messages.backToSetup || 'Back'}
                         </button>
                     )}
                 </div>
