@@ -522,7 +522,7 @@ describe('UI/UX components & Solo persistence', () => {
         );
     });
 
-    it('renders Back to Setup alongside Play Again in SolveSummary', () => {
+    it('renders Back alongside Play Again in SolveSummary', () => {
         const onPlayAgain = vi.fn();
         const onBackToSetup = vi.fn();
 
@@ -539,7 +539,7 @@ describe('UI/UX components & Solo persistence', () => {
             />,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Back to Setup' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
         expect(onBackToSetup).toHaveBeenCalledTimes(1);
         expect(screen.getByRole('button', { name: 'Play Again' })).toBeInTheDocument();
     });
