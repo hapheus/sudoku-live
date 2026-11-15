@@ -166,6 +166,7 @@ export function createRemoteEventRouter(ctx) {
             if (prevBoard[data.index] !== data.value) {
                 ctx.playMoveSoundFeedback(patched, data.index, data.value, unitCompleted);
             }
+            ctx.handleRemoteCellSolveForFistBump?.(data, patched);
         }
         if (patched.status === 'solved') {
             ctx.setSelectedIndex(null);
@@ -333,6 +334,14 @@ export function createRemoteEventRouter(ctx) {
         reaction: (data) => {
             if (data && data.emoji) {
                 ctx.triggerFloatingReaction(data.emoji);
+            }
+        },
+        'fist-bump': (data) => {
+            if (data && Number.isInteger(data.index)) {
+                ctx.triggerFistBumpEffect?.({
+                    index: data.index,
+                    phraseKey: data.phraseKey === 'fistBumpAmazing' ? 'fistBumpAmazing' : 'fistBumpAwesome',
+                });
             }
         },
         'new-puzzle-request': (data, cur) => {

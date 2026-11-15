@@ -26,4 +26,19 @@ describe('remote-event-router', () => {
         });
         expect(() => router('unknown-event', {})).not.toThrow();
     });
+
+    it('routes fist-bump events to triggerFistBumpEffect for players and spectators', () => {
+        const triggerFistBumpEffect = vi.fn();
+        const router = createRemoteEventRouter({
+            stateRef: { current: { isSpectating: true } },
+            onlineClientRef: { current: { clientId: 'spectator-1' } },
+            triggerFistBumpEffect,
+        });
+
+        router('fist-bump', { index: 4, phraseKey: 'fistBumpAmazing', senderId: 'host-1' });
+        expect(triggerFistBumpEffect).toHaveBeenCalledWith({
+            index: 4,
+            phraseKey: 'fistBumpAmazing',
+        });
+    });
 });

@@ -124,6 +124,8 @@ export function useOnlineSession({
     triggerUnitCelebration,
     playMoveSoundFeedback,
     triggerFloatingReaction,
+    triggerFistBumpEffect = null,
+    handleRemoteCellSolveForFistBump = null,
     announce,
     showFeedback,
 }) {
@@ -284,6 +286,8 @@ export function useOnlineSession({
         triggerUnitCelebration,
         playMoveSoundFeedback,
         triggerFloatingReaction,
+        triggerFistBumpEffect,
+        handleRemoteCellSolveForFistBump,
         persistSnapshotIfNeeded,
         syncLobbyProgress,
         announce,
@@ -314,6 +318,8 @@ export function useOnlineSession({
         stateRef,
         syncLobbyProgress,
         triggerFloatingReaction,
+        triggerFistBumpEffect,
+        handleRemoteCellSolveForFistBump,
         triggerHintHighlight,
         triggerUnitCelebration,
     ]);

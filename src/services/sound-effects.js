@@ -87,6 +87,7 @@ export function createSoundEffectsPlayer({
 } = {}) {
     let enabled = loadSoundEnabled(storage);
     let volume = loadSoundVolume(storage);
+    let retroMode = false;
     let destroyed = false;
     let ctx = null;
     let masterGain = null;
@@ -190,7 +191,37 @@ export function createSoundEffectsPlayer({
         return true;
     };
 
+    const scheduleChiptuneNotes = (activeCtx, dest, notes, {
+        step = 0.055,
+        duration = 0.075,
+        type = 'square',
+        volume: noteVol = 0.14,
+        filterFreq = 2600,
+    } = {}) => {
+        notes.forEach((freq, idx) => {
+            scheduleTone(activeCtx, dest, {
+                freq,
+                startOffset: idx * step,
+                duration: idx === notes.length - 1 ? duration * 1.6 : duration,
+                type,
+                volume: noteVol,
+                attack: 0.003,
+                filterFreq,
+            });
+        });
+    };
+
     const playCorrectDigit = () => withReadyContext((activeCtx, dest) => {
+        if (retroMode) {
+            // Classic 8-bit coin blip (B5 -> E6)
+            scheduleChiptuneNotes(activeCtx, dest, [987.77, 1318.51], {
+                step: 0.042,
+                duration: 0.07,
+                type: 'square',
+                volume: 0.14,
+            });
+            return;
+        }
         // Warm, soft kalimba/piano pluck on G5 with subtle lower octave body
         scheduleTone(activeCtx, dest, {
             freq: 783.99,
@@ -212,6 +243,20 @@ export function createSoundEffectsPlayer({
     });
 
     const playWrongDigit = () => withReadyContext((activeCtx, dest) => {
+        if (retroMode) {
+            // 8-bit NES-style descending buzz
+            scheduleTone(activeCtx, dest, {
+                freq: 196.0,
+                endFreq: 110.0,
+                startOffset: 0,
+                duration: 0.16,
+                type: 'sawtooth',
+                volume: 0.18,
+                attack: 0.004,
+                filterFreq: 900,
+            });
+            return;
+        }
         // Gentle muted two-step wood thud (A3 -> F3), clearly distinct without harsh buzzing
         scheduleTone(activeCtx, dest, {
             freq: 220.0,
@@ -236,6 +281,15 @@ export function createSoundEffectsPlayer({
     });
 
     const playUnitCompleted = () => withReadyContext((activeCtx, dest) => {
+        if (retroMode) {
+            scheduleChiptuneNotes(activeCtx, dest, [523.25, 659.25, 783.99, 1046.5], {
+                step: 0.05,
+                duration: 0.085,
+                type: 'square',
+                volume: 0.14,
+            });
+            return;
+        }
         // Ascending crystalline chime arpeggio (C5 - E5 - G5 - C6) matching cell wave
         const notes = [523.25, 659.25, 783.99, 1046.5];
         notes.forEach((freq, i) => {
@@ -260,6 +314,16 @@ export function createSoundEffectsPlayer({
     });
 
     const playGameSolved = () => withReadyContext((activeCtx, dest) => {
+        if (retroMode) {
+            // Classic 8-bit stage clear fanfare
+            scheduleChiptuneNotes(activeCtx, dest, [523.25, 659.25, 783.99, 1046.5, 783.99, 1046.5], {
+                step: 0.075,
+                duration: 0.11,
+                type: 'square',
+                volume: 0.15,
+            });
+            return;
+        }
         // Warm celebratory piano/chime cadence (C5 - E5 - G5 - B5 - C6 + warm root pad)
         const melody = [
             { freq: 523.25, offset: 0, duration: 0.26 },
@@ -293,6 +357,15 @@ export function createSoundEffectsPlayer({
     });
 
     const playSpectatorCheer = () => withReadyContext((activeCtx, dest) => {
+        if (retroMode) {
+            scheduleChiptuneNotes(activeCtx, dest, [659.25, 783.99, 1318.51, 1046.5, 1174.66, 1567.98], {
+                step: 0.04,
+                duration: 0.06,
+                type: 'square',
+                volume: 0.12,
+            });
+            return;
+        }
         // Light, playful sparkle chime (G5 -> B5 -> D6) for floating emoji reactions
         const notes = [783.99, 987.77, 1174.66];
         notes.forEach((freq, i) => {
@@ -305,6 +378,70 @@ export function createSoundEffectsPlayer({
                 volume: 0.22,
                 attack: 0.005,
             });
+        });
+    });
+
+    const playFistBump = () => withReadyContext((activeCtx, dest) => {
+        if (retroMode) {
+            scheduleChiptuneNotes(activeCtx, dest, [392.0, 523.25, 783.99, 1046.5], {
+                step: 0.04,
+                duration: 0.08,
+                type: 'square',
+                volume: 0.16,
+            });
+            return;
+        }
+        // Tactile low-mid "bump" + bright celebratory two-note chord
+        scheduleTone(activeCtx, dest, {
+            freq: 185.0,
+            endFreq: 92.5,
+            startOffset: 0,
+            duration: 0.09,
+            type: 'triangle',
+            volume: 0.36,
+            attack: 0.004,
+            filterFreq: 680,
+        });
+        [587.33, 880.0].forEach((freq, idx) => {
+            scheduleTone(activeCtx, dest, {
+                freq,
+                startOffset: 0.035 + idx * 0.035,
+                duration: 0.18,
+                type: 'sine',
+                volume: 0.24,
+                attack: 0.005,
+            });
+        });
+    });
+
+    const playRetroActivate = () => withReadyContext((activeCtx, dest) => {
+        // Iconic 8-bit power-up arpeggio
+        scheduleChiptuneNotes(activeCtx, dest, [329.63, 392.0, 659.25, 523.25, 587.33, 783.99], {
+            step: 0.052,
+            duration: 0.085,
+            type: 'square',
+            volume: 0.16,
+        });
+    });
+
+    const playRetroExit = () => withReadyContext((activeCtx, dest) => {
+        // Quick time-warp sweep back to the present
+        scheduleTone(activeCtx, dest, {
+            freq: 330.0,
+            endFreq: 987.77,
+            startOffset: 0,
+            duration: 0.18,
+            type: 'triangle',
+            volume: 0.22,
+            attack: 0.006,
+        });
+        scheduleTone(activeCtx, dest, {
+            freq: 1046.5,
+            startOffset: 0.11,
+            duration: 0.16,
+            type: 'sine',
+            volume: 0.2,
+            attack: 0.005,
         });
     });
 
@@ -354,6 +491,12 @@ export function createSoundEffectsPlayer({
             return playSpectatorCheer();
         case 'shift':
             return playShift();
+        case 'fist-bump':
+            return playFistBump();
+        case 'retro-activate':
+            return playRetroActivate();
+        case 'retro-exit':
+            return playRetroExit();
         default:
             return false;
         }
@@ -406,6 +549,13 @@ export function createSoundEffectsPlayer({
         playGameSolved,
         playSpectatorCheer,
         playShift,
+        playFistBump,
+        playRetroActivate,
+        playRetroExit,
+        setRetroMode: (nextRetro) => {
+            retroMode = Boolean(nextRetro);
+        },
+        isRetroMode: () => retroMode,
         unlock: handleUserGesture,
         isEnabled: () => enabled,
         setEnabled,

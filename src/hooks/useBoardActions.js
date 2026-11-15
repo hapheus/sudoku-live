@@ -69,6 +69,8 @@ export function useBoardActions({
     buildSyncPayload,
     announce,
     showFeedback,
+    onLocalCellSolveForFistBump = null,
+    isRetroMode = false,
 }) {
     const isOnlineBroadcaster = (cur) => (
         (cur.mode === 'solo' || cur.mode === 'online') && Boolean(cur.onlineGameId) && !cur.isSpectating
@@ -137,6 +139,11 @@ export function useBoardActions({
             if (nextState !== prevGameState) {
                 playMoveSoundFeedback(nextState, targetIndex, digit, unitCompleted);
             }
+            const expected = nextState.solution?.[targetIndex];
+            const isCorrect = expected > 0 ? digit === expected : !nextState.conflicts?.includes(targetIndex);
+            if (isCorrect) {
+                onLocalCellSolveForFistBump?.(targetIndex, digit);
+            }
             const totalPlaced = nextState.board.filter((v) => v === digit).length;
             if (totalPlaced >= specInfo.gridSize && cur.activeDigit === digit) {
                 setActiveDigit(null);
@@ -173,6 +180,7 @@ export function useBoardActions({
         stateRef,
         syncLobbyProgress,
         triggerUnitCelebration,
+        onLocalCellSolveForFistBump,
     ]);
 
     const writeDigitToCell = useCallback((targetIndex, digit) => {
@@ -383,7 +391,7 @@ export function useBoardActions({
 
     const handleShift = useCallback((axis, direction) => {
         const cur = stateRef.current;
-        if (cur.isSpectating || cur.mode === 'watch' || cur.gameState.status === 'solved') return;
+        if (isRetroMode || cur.isSpectating || cur.mode === 'watch' || cur.gameState.status === 'solved') return;
         const activeIdx = cur.selectedIndex;
         if (activeIdx === null || activeIdx === undefined) return;
 
@@ -426,6 +434,7 @@ export function useBoardActions({
         buildSyncPayload,
         clearPendingHint,
         focusCell,
+        isRetroMode,
         onlineClientRef,
         persistSnapshotIfNeeded,
         setGameState,

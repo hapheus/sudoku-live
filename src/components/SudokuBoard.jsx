@@ -16,7 +16,9 @@ export function SudokuBoard({
     partnerCursorIndices = null,
     unitCelebration = null,
     hintHighlight = null,
+    fistBump = null,
     boardBackground = null,
+    messages = null,
 }) {
     const variant = gameState.variant || inferVariantFromBoardLength(gameState.board?.length);
     const spec = getVariantSpec(variant);
@@ -191,6 +193,7 @@ export function SudokuBoard({
                                     const hintDelay = hintHighlightDelays?.get(idx);
                                     const isHintTarget = hintHighlightTarget === idx && hintDelay !== undefined;
                                     const isHintContext = hintDelay !== undefined && !isHintTarget;
+                                    const isFistBumpCell = fistBump?.index === idx;
 
                                     const cellStyle = {};
                                     if (isUnitCelebrating) {
@@ -220,6 +223,7 @@ export function SudokuBoard({
                                         isHintTarget ? 'sudoku-cell--hint-target' : '',
                                         isHintContext ? 'sudoku-cell--hint-context' : '',
                                         (isHintTarget || isHintContext) && isHintPreview ? 'sudoku-cell--hint-preview' : '',
+                                        isFistBumpCell ? 'sudoku-cell--fist-bump' : '',
                                         isBoxRight ? 'sudoku-cell--box-right' : '',
                                         isBoxBottom ? 'sudoku-cell--box-bottom' : '',
                                     ].filter(Boolean).join(' ');
@@ -267,6 +271,18 @@ export function SudokuBoard({
                                                     style={{ '--hint-delay': `${hintDelay}ms` }}
                                                     aria-hidden="true"
                                                 />
+                                            )}
+                                            {isFistBumpCell && (
+                                                <span
+                                                    key={`fist-bump-${fistBump.id}`}
+                                                    className={`sudoku-cell__fist-bump ${r === 0 ? 'sudoku-cell__fist-bump--below' : ''}`}
+                                                    aria-hidden="true"
+                                                >
+                                                    <span className="sudoku-cell__fist-bump-emoji">🤜🤛</span>
+                                                    <span className="sudoku-cell__fist-bump-text">
+                                                        {messages?.[fistBump.phraseKey] || 'Awesome!'}
+                                                    </span>
+                                                </span>
                                             )}
                                             {value >= 1 && value <= maxDigit ? (
                                                 <span className="sudoku-cell__digit">{value}</span>
