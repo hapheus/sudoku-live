@@ -650,7 +650,7 @@ it('first Hint click highlights the logically deduced cell without filling it, a
     expect(previewCells[6]).toHaveClass('sudoku-cell--hint-context', 'sudoku-cell--hint-preview');
     expect(previewCells[30]).toHaveClass('sudoku-cell--hint-context', 'sudoku-cell--hint-preview');
     expect(hintBtn).toHaveClass('tool-btn--hint-armed');
-    expect(document.getElementById('action-feedback')).toHaveTextContent('Hint: Check R1 C1 (last empty cell in column). Tap Hint again to fill.');
+    expect(document.getElementById('action-feedback')).toHaveTextContent('Hint: Check A1 (last empty cell in column). Tap Hint again to fill.');
 
     // Preview highlight persists past 2200ms while player thinks
     act(() => {
@@ -666,7 +666,7 @@ it('first Hint click highlights the logically deduced cell without filling it, a
     expect(afterCells[0]).not.toHaveClass('sudoku-cell--hint-preview');
     expect(afterCells[22]).toHaveTextContent('');
     expect(hintBtn).not.toHaveClass('tool-btn--hint-armed');
-    expect(document.getElementById('action-feedback')).toHaveTextContent('Hint: R1 C1 = 1 (last empty cell in column).');
+    expect(document.getElementById('action-feedback')).toHaveTextContent('Hint: A1 = 1 (last empty cell in column).');
 
     // Solve highlights clear automatically after animation duration
     act(() => {

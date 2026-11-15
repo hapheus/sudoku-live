@@ -81,6 +81,26 @@ export function getCellCoords(index, variant = '3x3') {
     return { row, col, box: getBoxIndex(row, col, spec.id) };
 }
 
+/**
+ * Convert a 0-based column index into a chess-style column letter (0 -> 'A').
+ * @param {number} col
+ * @returns {string}
+ */
+export function getColLabel(col) {
+    return String.fromCharCode(65 + col);
+}
+
+/**
+ * Format a cell index as chess-style coordinates (e.g. index 0 -> 'A1').
+ * @param {number} index
+ * @param {string} [variant='3x3']
+ * @returns {string}
+ */
+export function formatCellCoord(index, variant = '3x3') {
+    const { row, col } = getCellCoords(index, variant);
+    return `${getColLabel(col)}${row + 1}`;
+}
+
 export function getUnitsForVariant(spec) {
     const units = [];
 

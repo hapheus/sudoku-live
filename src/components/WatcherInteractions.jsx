@@ -1,5 +1,5 @@
 import React from 'react';
-import { getCellCoords, getVariantSpec, inferVariantFromBoardLength } from '../domain/sudoku-generator.js';
+import { formatCellCoord, getVariantSpec, inferVariantFromBoardLength } from '../domain/sudoku-generator.js';
 import { REACTION_LIST } from '../utils/watcher-helpers.js';
 import enMessages from '../locales/en.json';
 
@@ -27,10 +27,10 @@ export function WatcherInteractions({
     const canHintSelected = selectedIndex !== null && board[selectedIndex] === 0;
     let hintStatus = `Tap an empty cell on the board, then suggest 1–${maxDigit} or nudge players to inspect it:`;
     if (selectedIndex !== null) {
-        const { row, col } = getCellCoords(selectedIndex, resolvedVariant);
+        const cellLabel = formatCellCoord(selectedIndex, resolvedVariant);
         hintStatus = board[selectedIndex] !== 0
-            ? `R${row + 1} C${col + 1} already has a digit. Select an empty cell to suggest a hint.`
-            : `Selected R${row + 1} C${col + 1} — suggest a digit or nudge players to look here:`;
+            ? `${cellLabel} already has a digit. Select an empty cell to suggest a hint.`
+            : `Selected ${cellLabel} — suggest a digit or nudge players to look here:`;
     }
 
     return (

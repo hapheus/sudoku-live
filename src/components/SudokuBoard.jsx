@@ -1,5 +1,5 @@
 import React from 'react';
-import { getCellCoords, getVariantSpec, inferVariantFromBoardLength } from '../domain/sudoku-generator.js';
+import { getCellCoords, getColLabel, getVariantSpec, inferVariantFromBoardLength } from '../domain/sudoku-generator.js';
 import { getSudokuCellAriaLabel } from '../utils/aria-helpers.js';
 
 export function SudokuBoard({
@@ -120,14 +120,14 @@ export function SudokuBoard({
             <div className="board-frame">
                 <div className={`board-col-axes ${is6x6 ? 'board-col-axes--6x6' : ''}`} aria-hidden="true">
                     {axisIndices.map((col) => (
-                        <span key={col} className="board-axis-label">{`C${col}`}</span>
+                        <span key={col} className="board-axis-label">{getColLabel(col - 1)}</span>
                     ))}
                 </div>
 
                 <div className="board-main-row">
                     <div className={`board-row-axes ${is6x6 ? 'board-row-axes--6x6' : ''}`} aria-hidden="true">
                         {axisIndices.map((row) => (
-                            <span key={row} className="board-axis-label">{`R${row}`}</span>
+                            <span key={row} className="board-axis-label">{String(row)}</span>
                         ))}
                     </div>
 

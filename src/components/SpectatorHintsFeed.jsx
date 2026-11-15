@@ -1,5 +1,5 @@
 import React from 'react';
-import { getCellCoords } from '../domain/sudoku-generator.js';
+import { formatCellCoord, getCellCoords } from '../domain/sudoku-generator.js';
 import enMessages from '../locales/en.json';
 
 export function SpectatorHintsFeed({ hintsByCell, variant = '3x3', canApply, onSelectHint, onApplyHint, messages = enMessages }) {
@@ -12,11 +12,12 @@ export function SpectatorHintsFeed({ hintsByCell, variant = '3x3', canApply, onS
             <span className="hints-feed__label">{messages.hintsFeedLabel}</span>
             {Array.from(hintsByCell.values()).map((hint) => {
                 const { row, col } = getCellCoords(hint.index, variant);
+                const cellLabel = formatCellCoord(hint.index, variant);
                 const digitPart = hint.topValue ? ` → ${hint.topValue}` : ' (check cell)';
                 const countPart = hint.count > 1 ? ` ×${hint.count}` : '';
                 const title = canApply && hint.topValue
-                    ? `Apply hint ${hint.topValue} to Row ${row + 1}, Column ${col + 1}`
-                    : `Highlight Row ${row + 1}, Column ${col + 1}`;
+                    ? `Apply hint ${hint.topValue} to ${cellLabel} (Row ${row + 1}, Column ${col + 1})`
+                    : `Highlight ${cellLabel} (Row ${row + 1}, Column ${col + 1})`;
 
                 return (
                     <button
@@ -32,7 +33,7 @@ export function SpectatorHintsFeed({ hintsByCell, variant = '3x3', canApply, onS
                             }
                         }}
                     >
-                        {`R${row + 1}C${col + 1}${digitPart}${countPart}`}
+                        {`${cellLabel}${digitPart}${countPart}`}
                     </button>
                 );
             })}
