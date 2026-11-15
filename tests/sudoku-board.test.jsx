@@ -74,12 +74,12 @@ describe('SudokuBoard & SpectatorHintsFeed React components', () => {
             />,
         );
 
-        const chip = screen.getByRole('button', { name: 'R2C4 → 7 ×2' });
+        const chip = screen.getByRole('button', { name: 'D2 → 7 ×2' });
         fireEvent.click(chip);
         expect(onApplyHint).toHaveBeenCalledWith(12, 7);
     });
 
-    it('uses roving tabIndex, renders R1-R9/C1-C9 axes, and shows partner digits & cursor in co-op', () => {
+    it('uses roving tabIndex, renders A-I/1-9 axes, and shows partner digits & cursor in co-op', () => {
         const puzzle = [...SAMPLE_SOLUTION];
         puzzle[0] = 0;
         puzzle[1] = 0;
@@ -111,8 +111,10 @@ describe('SudokuBoard & SpectatorHintsFeed React components', () => {
         expect(cells[1]).toHaveAttribute('aria-label', expect.stringContaining('by partner'));
         expect(cells[2]).toHaveAttribute('aria-label', expect.stringContaining('partner cursor'));
 
-        expect(document.querySelectorAll('.board-col-axes .board-axis-label')).toHaveLength(9);
-        expect(document.querySelectorAll('.board-row-axes .board-axis-label')).toHaveLength(9);
+        const colAxes = Array.from(document.querySelectorAll('.board-col-axes .board-axis-label')).map((el) => el.textContent);
+        const rowAxes = Array.from(document.querySelectorAll('.board-row-axes .board-axis-label')).map((el) => el.textContent);
+        expect(colAxes).toEqual(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']);
+        expect(rowAxes).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9']);
     });
 
     it('highlights all matching digits and matching pencil notes when activeDigit is locked', () => {
@@ -144,7 +146,7 @@ describe('SudokuBoard & SpectatorHintsFeed React components', () => {
         expect(matchedNotes[0]).toHaveTextContent('5');
     });
 
-    it('renders 2x3 (6x6) grid with 36 cells, R1-R6/C1-C6 axes, and 2x3 box borders', () => {
+    it('renders 2x3 (6x6) grid with 36 cells, A-F/1-6 axes, and 2x3 box borders', () => {
         const solution2x3 = [
             1, 2, 3, 4, 5, 6,
             4, 5, 6, 1, 2, 3,
@@ -185,7 +187,7 @@ describe('SudokuBoard & SpectatorHintsFeed React components', () => {
         expect(cells[0].querySelectorAll('.sudoku-cell__notes--2x3 .sudoku-cell__note')).toHaveLength(6);
         expect(document.querySelectorAll('.board-col-axes .board-axis-label')).toHaveLength(6);
         expect(document.querySelectorAll('.board-row-axes .board-axis-label')).toHaveLength(6);
-        expect(screen.getByRole('button', { name: 'R3C3 → 1' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'C3 → 1' })).toBeInTheDocument();
     });
 
     it('renders unit completion reward overlay with staggered delay for celebrating cells', () => {

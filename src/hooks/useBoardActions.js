@@ -10,6 +10,7 @@ import {
     undoLastMove,
 } from '../domain/sudoku-engine.js';
 import {
+    formatCellCoord,
     getCellCoords,
     getVariantSpec,
     inferVariantFromBoardLength,
@@ -17,6 +18,7 @@ import {
 
 function formatLogicalHintMessage(hint, activeVariant, messages, isPreview) {
     const { row, col } = getCellCoords(hint.index, activeVariant);
+    const cell = formatCellCoord(hint.index, activeVariant);
     const unitLabel = hint.unitType === 'box'
         ? (messages?.hintUnitBox || 'box')
         : (hint.unitType === 'row'
@@ -24,21 +26,22 @@ function formatLogicalHintMessage(hint, activeVariant, messages, isPreview) {
             : (messages?.hintUnitCol || 'column'));
 
     const previewTemplates = {
-        full_house: messages?.hintPreviewFullHouse || 'Hint: Check R{row} C{col} (last empty cell in {unit}). Tap Hint again to fill.',
-        hidden_single: messages?.hintPreviewHiddenSingle || 'Hint: Check R{row} C{col} (only spot for one digit in {unit}). Tap Hint again to fill.',
-        naked_single: messages?.hintPreviewNakedSingle || 'Hint: Check R{row} C{col} (only one candidate left here). Tap Hint again to fill.',
+        full_house: messages?.hintPreviewFullHouse || 'Hint: Check {cell} (last empty cell in {unit}). Tap Hint again to fill.',
+        hidden_single: messages?.hintPreviewHiddenSingle || 'Hint: Check {cell} (only spot for one digit in {unit}). Tap Hint again to fill.',
+        naked_single: messages?.hintPreviewNakedSingle || 'Hint: Check {cell} (only one candidate left here). Tap Hint again to fill.',
     };
     const solveTemplates = {
-        full_house: messages?.hintReasonFullHouse || 'Hint: R{row} C{col} = {digit} (last empty cell in {unit}).',
-        hidden_single: messages?.hintReasonHiddenSingle || 'Hint: R{row} C{col} = {digit} (only spot for {digit} in {unit}).',
-        naked_single: messages?.hintReasonNakedSingle || 'Hint: R{row} C{col} = {digit} (only possible candidate for this cell).',
+        full_house: messages?.hintReasonFullHouse || 'Hint: {cell} = {digit} (last empty cell in {unit}).',
+        hidden_single: messages?.hintReasonHiddenSingle || 'Hint: {cell} = {digit} (only spot for {digit} in {unit}).',
+        naked_single: messages?.hintReasonNakedSingle || 'Hint: {cell} = {digit} (only possible candidate for this cell).',
     };
 
     const template = isPreview
-        ? (previewTemplates[hint.technique] || messages?.hintPreviewFallback || 'Hint: Check R{row} C{col}. Tap Hint again to fill.')
-        : (solveTemplates[hint.technique] || messages?.hintReasonFallback || 'Hint: R{row} C{col} = {digit}.');
+        ? (previewTemplates[hint.technique] || messages?.hintPreviewFallback || 'Hint: Check {cell}. Tap Hint again to fill.')
+        : (solveTemplates[hint.technique] || messages?.hintReasonFallback || 'Hint: {cell} = {digit}.');
 
     return template
+        .replaceAll('{cell}', cell)
         .replaceAll('{row}', String(row + 1))
         .replaceAll('{col}', String(col + 1))
         .replaceAll('{digit}', String(hint.digit))

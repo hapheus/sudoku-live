@@ -9,8 +9,10 @@
 import {
     DIFFICULTY_PRESETS,
     SUDOKU_VARIANTS,
+    formatCellCoord,
     getBoxIndex,
     getCellCoords,
+    getColLabel,
     getVariantSpec,
     inferVariantFromBoardLength,
     normalizeVariant,
@@ -20,8 +22,10 @@ import {
 export {
     DIFFICULTY_PRESETS,
     SUDOKU_VARIANTS,
+    formatCellCoord,
     getBoxIndex,
     getCellCoords,
+    getColLabel,
     getVariantSpec,
     inferVariantFromBoardLength,
     normalizeVariant,
