@@ -337,6 +337,7 @@ export function App() {
         handleVariantChange,
         handlePlayFromSetup,
         handleResumeFromSetup,
+        handleContinueSolo,
         handleBackToSetup,
     } = useNavigationAndSetup({
         isNativeApp,
@@ -601,6 +602,7 @@ export function App() {
                         spectatedGameMode={spectatedGameMode}
                         gameState={gameState}
                         onReconnect={handleReconnect}
+                        onContinueSolo={handleContinueSolo}
                         selectedIndex={selectedIndex}
                         activeDigit={activeDigit}
                         hintsByCell={hintsByCell}
@@ -617,6 +619,7 @@ export function App() {
                         restartLabel={restartLabel}
                         restartDisabled={restartDisabled}
                         onPlayAgain={handleNewPuzzleAction}
+                        onBackToSetup={handleBackToSetup}
                         activeBoardVariant={activeBoardVariant}
                         onSelectHint={(idx) => {
                             focusCell(idx);
@@ -718,6 +721,7 @@ export function App() {
                         spectatedGameMode={spectatedGameMode}
                         gameState={gameState}
                         onReconnect={handleReconnect}
+                        onContinueSolo={handleContinueSolo}
                         selectedIndex={selectedIndex}
                         activeDigit={selectedIndex === null ? remoteActiveDigit : activeDigit}
                         hintsByCell={hintsByCell}
@@ -734,6 +738,7 @@ export function App() {
                         restartLabel={restartLabel}
                         restartDisabled={restartDisabled}
                         onPlayAgain={handleNewPuzzleAction}
+                        onBackToSetup={handleBackToSetup}
                         activeBoardVariant={activeBoardVariant}
                         onSelectHint={(idx) => {
                             focusCell(idx);

@@ -511,4 +511,87 @@ describe('UI/UX components & Solo persistence', () => {
         expect(appDelegate).toMatch(/supportedInterfaceOrientationsFor[\s\S]*return \.portrait/);
         expect(manifest.orientation).toBe('portrait');
     });
+
+    it('keeps reveal scrim on artwork cells during hint previews in CSS', () => {
+        const css = fs.readFileSync(path.join(process.cwd(), 'src/styles/app.css'), 'utf8');
+        expect(css).toMatch(
+            /\.sudoku-board--has-artwork:not\(\.sudoku-board--solved\)\s+\.sudoku-cell--revealed\.sudoku-cell--hint-preview\.sudoku-cell--hint-context[\s\S]*?linear-gradient\(var\(--color-hint-bg\),\s*var\(--color-hint-bg\)\),\s*var\(--color-reveal-scrim\)/,
+        );
+        expect(css).toMatch(
+            /\.sudoku-board--has-artwork:not\(\.sudoku-board--solved\)\s+\.sudoku-cell--revealed\.sudoku-cell--unit-revealed\.sudoku-cell--hint-preview\.sudoku-cell--hint-context[\s\S]*?linear-gradient\(var\(--color-hint-bg\),\s*var\(--color-hint-bg\)\),\s*var\(--color-reveal-unit-scrim\)/,
+        );
+    });
+
+    it('renders Back to Setup alongside Play Again in SolveSummary', () => {
+        const onPlayAgain = vi.fn();
+        const onBackToSetup = vi.fn();
+
+        render(
+            <SolveSummary
+                difficulty="medium"
+                elapsedSeconds={90}
+                mode="online"
+                isSpectating={false}
+                restartLabel="New Puzzle"
+                restartDisabled={false}
+                onPlayAgain={onPlayAgain}
+                onBackToSetup={onBackToSetup}
+            />,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back to Setup' }));
+        expect(onBackToSetup).toHaveBeenCalledTimes(1);
+        expect(screen.getByRole('button', { name: 'Play Again' })).toBeInTheDocument();
+    });
+
+    it('offers Continue Solo in StatusBanner only when co-op partner is disconnected', () => {
+        const puzzle = [...SAMPLE_2X3_SOLUTION];
+        puzzle[0] = 0;
+        const gameState = createSudokuGame({
+            difficulty: 'medium',
+            variant: '2x3',
+            puzzle,
+            solution: SAMPLE_2X3_SOLUTION,
+        });
+        const onContinueSolo = vi.fn();
+
+        const { rerender } = render(
+            <StatusBanner
+                connectionStatus="connected"
+                mode="online"
+                isSpectating={false}
+                myRole="guest"
+                myClientId="guest-1"
+                currentMembers={[{ id: 'guest-1', role: 'guest' }]}
+                spectatedGameMode={null}
+                gameState={gameState}
+                onReconnect={vi.fn()}
+                onContinueSolo={onContinueSolo}
+            />,
+        );
+
+        expect(screen.getByText('Partner disconnected')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Continue Solo' }));
+        expect(onContinueSolo).toHaveBeenCalledTimes(1);
+
+        rerender(
+            <StatusBanner
+                connectionStatus="connected"
+                mode="online"
+                isSpectating={false}
+                myRole="guest"
+                myClientId="guest-1"
+                currentMembers={[
+                    { id: 'host-1', role: 'host' },
+                    { id: 'guest-1', role: 'guest' },
+                ]}
+                spectatedGameMode={null}
+                gameState={gameState}
+                onReconnect={vi.fn()}
+                onContinueSolo={onContinueSolo}
+            />,
+        );
+
+        expect(screen.queryByRole('button', { name: 'Continue Solo' })).not.toBeInTheDocument();
+    });
 });

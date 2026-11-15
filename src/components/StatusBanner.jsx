@@ -18,6 +18,7 @@ export function StatusBanner({
     spectatedGameMode,
     gameState,
     onReconnect,
+    onContinueSolo = null,
     messages = enMessages,
 }) {
     const variant = gameState.variant || inferVariantFromBoardLength(gameState.board?.length);
@@ -82,6 +83,7 @@ export function StatusBanner({
 
     // Presence badges
     let opponentBadge = null;
+    let continueSoloBtn = null;
     let spectatorBadge = null;
     let coopLegend = null;
     const spectatorCount = currentMembers.filter((m) => m.role === 'spectator').length;
@@ -100,6 +102,19 @@ export function StatusBanner({
                     {partnerStatusLabel}
                 </span>
             );
+
+            if (!partnerOnline && gameState.status !== 'solved' && onContinueSolo) {
+                continueSoloBtn = (
+                    <button
+                        type="button"
+                        id="continue-solo-btn"
+                        className="connection-retry-btn"
+                        onClick={onContinueSolo}
+                    >
+                        {messages.continueSolo || 'Continue Solo'}
+                    </button>
+                );
+            }
 
             coopLegend = (
                 <span className="coop-legend" aria-label="Cell ownership colors">
@@ -146,7 +161,7 @@ export function StatusBanner({
         );
     }
 
-    const hasMetaBadges = Boolean(connectionBadge || canRetryConnection || opponentBadge || spectatorBadge || coopLegend);
+    const hasMetaBadges = Boolean(connectionBadge || canRetryConnection || opponentBadge || continueSoloBtn || spectatorBadge || coopLegend);
 
     return (
         <section className="status-banner" aria-label="Game Status">
@@ -164,6 +179,7 @@ export function StatusBanner({
                         </button>
                     )}
                     {opponentBadge}
+                    {continueSoloBtn}
                     {spectatorBadge}
                     {coopLegend}
                 </div>

@@ -1182,6 +1182,20 @@ body {
     cursor: not-allowed;
 }
 
+.solve-summary__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.solve-summary__secondary-btn {
+    min-height: var(--touch-min);
+    padding: 0.5rem 0.95rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+}
+
 /* Spectator Hints Feed */
 .hints-feed {
     display: flex;
@@ -2487,6 +2501,16 @@ body {
 
 .sudoku-board--has-artwork .sudoku-cell--revealed.sudoku-cell--unit-revealed {
     background: var(--color-reveal-unit-scrim);
+}
+
+.sudoku-board--has-artwork:not(.sudoku-board--solved) .sudoku-cell--revealed.sudoku-cell--hint-preview.sudoku-cell--hint-context,
+.sudoku-board--has-artwork:not(.sudoku-board--solved) .sudoku-cell--revealed.sudoku-cell--hint-preview.sudoku-cell--hint-target {
+    background: linear-gradient(var(--color-hint-bg), var(--color-hint-bg)), var(--color-reveal-scrim);
+}
+
+.sudoku-board--has-artwork:not(.sudoku-board--solved) .sudoku-cell--revealed.sudoku-cell--unit-revealed.sudoku-cell--hint-preview.sudoku-cell--hint-context,
+.sudoku-board--has-artwork:not(.sudoku-board--solved) .sudoku-cell--revealed.sudoku-cell--unit-revealed.sudoku-cell--hint-preview.sudoku-cell--hint-target {
+    background: linear-gradient(var(--color-hint-bg), var(--color-hint-bg)), var(--color-reveal-unit-scrim);
 }
 
 .sudoku-board--has-artwork:not(.sudoku-board--solved) .sudoku-cell--revealed:hover,
