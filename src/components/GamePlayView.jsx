@@ -17,6 +17,7 @@ export function GamePlayView({
     spectatedGameMode,
     gameState,
     onReconnect,
+    onContinueSolo = null,
     selectedIndex,
     activeDigit,
     hintsByCell,
@@ -33,6 +34,7 @@ export function GamePlayView({
     restartLabel,
     restartDisabled,
     onPlayAgain,
+    onBackToSetup = null,
     activeBoardVariant,
     onSelectHint,
     onApplyHint,
@@ -53,6 +55,7 @@ export function GamePlayView({
                 spectatedGameMode={spectatedGameMode}
                 gameState={gameState}
                 onReconnect={onReconnect}
+                onContinueSolo={onContinueSolo}
                 messages={messages}
             />
 
@@ -87,6 +90,7 @@ export function GamePlayView({
                     restartLabel={restartLabel}
                     restartDisabled={restartDisabled}
                     onPlayAgain={onPlayAgain}
+                    onBackToSetup={onBackToSetup}
                     messages={messages}
                 />
             )}

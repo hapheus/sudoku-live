@@ -503,6 +503,48 @@ export function useNavigationAndSetup({
         stateRef,
     ]);
 
+    const detachCoopToSolo = useCallback((cur) => {
+        onlineClientRef.current?.leaveGameChannel();
+        onlineClientRef.current?.leaveLobby();
+        setMode('solo');
+        stateRef.current.mode = 'solo';
+        setMyRole('host');
+        stateRef.current.myRole = 'host';
+        setOnlineGameId(null);
+        stateRef.current.onlineGameId = null;
+        setCurrentMembers([]);
+        stateRef.current.currentMembers = [];
+        setHostCursorIndex(null);
+        setGuestCursors(new Map());
+        setRemoteActiveDigit(null);
+        setRematchRequestedBy(null);
+        setHintsMap(new Map());
+        updateBrowserUrl('/');
+        if (cur.gameState && cur.gameState.status !== 'solved') {
+            saveSoloGameSnapshot(cur.gameState, cur.boardBackground?.id || null);
+        }
+    }, [
+        onlineClientRef,
+        setCurrentMembers,
+        setGuestCursors,
+        setHintsMap,
+        setHostCursorIndex,
+        setMode,
+        setMyRole,
+        setOnlineGameId,
+        setRematchRequestedBy,
+        setRemoteActiveDigit,
+        stateRef,
+    ]);
+
+    const handleContinueSolo = useCallback(() => {
+        const cur = stateRef.current;
+        if (cur.isSpectating) return;
+        detachCoopToSolo(cur);
+        showFeedback('Continuing as a solo game.');
+        announce('Continuing current board as a solo game.');
+    }, [announce, detachCoopToSolo, showFeedback, stateRef]);
+
     const handleBackToSetup = useCallback(() => {
         setIsPlayingGame(false);
         stateRef.current.isPlayingGame = false;
@@ -515,10 +557,14 @@ export function useNavigationAndSetup({
             accepted: false,
             reason: 'declined',
         });
+        if (cur.myRole === 'guest' || (!hasPartner && cur.mode === 'online')) {
+            detachCoopToSolo(cur);
+            return;
+        }
         if (!hasPartner && cur.myRole === 'host') {
             onlineClientRef.current?.leaveLobby();
         }
-    }, [onlineClientRef, setIncomingJoinRequests, setIsPlayingGame, stateRef]);
+    }, [detachCoopToSolo, onlineClientRef, setIncomingJoinRequests, setIsPlayingGame, stateRef]);
 
     return {
         switchMode,
@@ -532,6 +578,7 @@ export function useNavigationAndSetup({
         handleVariantChange,
         handlePlayFromSetup,
         handleResumeFromSetup,
+        handleContinueSolo,
         handleBackToSetup,
     };
 }

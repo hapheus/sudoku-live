@@ -15,6 +15,7 @@ export function SolveSummary({
     restartLabel,
     restartDisabled,
     onPlayAgain,
+    onBackToSetup = null,
     messages = enMessages,
 }) {
     const diffMap = {
@@ -40,14 +41,26 @@ export function SolveSummary({
                 </p>
             </div>
             {!isSpectating && (
-                <button
-                    type="button"
-                    className="solve-summary__cta"
-                    disabled={restartDisabled}
-                    onClick={onPlayAgain}
-                >
-                    {isDefaultNewPuzzle ? messages.playAgain : restartLabel}
-                </button>
+                <div className="solve-summary__actions">
+                    <button
+                        type="button"
+                        className="solve-summary__cta"
+                        disabled={restartDisabled}
+                        onClick={onPlayAgain}
+                    >
+                        {isDefaultNewPuzzle ? messages.playAgain : restartLabel}
+                    </button>
+                    {onBackToSetup && (
+                        <button
+                            type="button"
+                            id="solve-setup-btn"
+                            className="btn-secondary solve-summary__secondary-btn"
+                            onClick={onBackToSetup}
+                        >
+                            {messages.backToSetupFull || 'Back to Setup'}
+                        </button>
+                    )}
+                </div>
             )}
         </section>
     );
