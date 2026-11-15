@@ -10,6 +10,7 @@ export default [
             'coverage/**',
             'node_modules/**',
             'ios/**',
+            'android/**',
             'playwright-report/**',
             'test-results/**',
         ],
