@@ -5,7 +5,7 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-      day: "tuesday"
+      day: "wednesday"
     commit-message:
       prefix: "ci(deps)"
       include: "scope"
@@ -20,7 +20,7 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-      day: "tuesday"
+      day: "wednesday"
     commit-message:
       prefix: "chore(deps)"
       include: "scope"
@@ -35,7 +35,7 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-      day: "tuesday"
+      day: "wednesday"
     commit-message:
       prefix: "chore(deps)"
       include: "scope"
