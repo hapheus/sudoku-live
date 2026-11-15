@@ -74,7 +74,7 @@ describe('Easter Eggs UI (Retro Mode & Fist Bump)', () => {
     });
 
     it('renders the fist bump emoji and phrase on the target cell in SudokuBoard', () => {
-        const gameState = createSudokuGame('easy', '2x3');
+        const gameState = createSudokuGame({ difficulty: 'easy', variant: '2x3' });
         const { container } = render(
             <SudokuBoard
                 gameState={gameState}
