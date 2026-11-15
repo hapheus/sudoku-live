@@ -44,4 +44,26 @@ describe('useFeedbackTimers', () => {
         });
         expect(result.current.hintHighlight.targetIndex).toBeNull();
     });
+
+    it('triggers and auto-clears fistBump after 1800ms', () => {
+        const { result } = renderHook(() => useFeedbackTimers({
+            onBroadcastHintClear: vi.fn(),
+        }));
+
+        expect(result.current.fistBump).toBeNull();
+
+        act(() => {
+            result.current.triggerFistBump({ index: 12, phraseKey: 'fistBumpAwesome' });
+        });
+        expect(result.current.fistBump).toEqual({
+            id: 1,
+            index: 12,
+            phraseKey: 'fistBumpAwesome',
+        });
+
+        act(() => {
+            vi.advanceTimersByTime(1800);
+        });
+        expect(result.current.fistBump).toBeNull();
+    });
 });

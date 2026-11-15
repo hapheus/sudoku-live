@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createCoopFistBumpTracker } from './domain/coop-fist-bump.js';
+import { advanceKonamiState, createKonamiState } from './domain/konami-code.js';
 import {
+    formatCellCoord,
     inferVariantFromBoardLength,
     normalizeVariant,
 } from './domain/sudoku-variants.js';
@@ -102,6 +105,11 @@ export function App() {
     const cellRefs = useRef([]);
     const reactionSeq = useRef(0);
     const pendingJoinTimerRef = useRef(null);
+    const [konamiState, setKonamiState] = useState(() => createKonamiState());
+    const [isRetroMode, setIsRetroMode] = useState(false);
+    const retroYear = useMemo(() => new Date().getFullYear(), []);
+    const coopFistBumpTrackerRef = useRef(createCoopFistBumpTracker({ windowMs: 500, dedupeMs: 1200 }));
+
     const confirmCancelRef = useRef(null);
     const onlineClientRef = useRef(null);
     const messagesRef = useRef(messages);
@@ -121,6 +129,7 @@ export function App() {
         hintHighlight,
         pendingHint,
         setPendingHint,
+        fistBump,
         announce,
         showFeedback,
         clearHintHighlight,
@@ -128,6 +137,7 @@ export function App() {
         clearPendingHint,
         triggerHintHighlight,
         triggerUnitCelebration,
+        triggerFistBump,
     } = useFeedbackTimers({
         messagesRef,
         onBroadcastHintClear: handleBroadcastHintClear,
@@ -209,6 +219,80 @@ export function App() {
         }
     }, []);
 
+    useEffect(() => {
+        soundEffectsRef.current?.setRetroMode?.(isRetroMode);
+        if (typeof document !== 'undefined') {
+            if (isRetroMode) {
+                document.documentElement.dataset.retro = 'true';
+            } else {
+                delete document.documentElement.dataset.retro;
+            }
+        }
+        return () => {
+            if (typeof document !== 'undefined') {
+                delete document.documentElement.dataset.retro;
+            }
+        };
+    }, [isRetroMode, soundEffectsRef]);
+
+    const triggerFistBumpEffect = useCallback(({ index, phraseKey = 'fistBumpAwesome', value = null }) => {
+        const dedupeVal = Number.isInteger(value) ? value : 0;
+        if (!coopFistBumpTrackerRef.current.claimEffect(index, dedupeVal)) {
+            return;
+        }
+        soundEffectsRef.current?.playFistBump?.();
+        triggerFistBump({ index, phraseKey });
+        const cur = stateRef.current;
+        const activeVariant = cur.gameState.variant || inferVariantFromBoardLength(cur.gameState.board?.length);
+        const cellCoord = formatCellCoord(index, activeVariant);
+        const phrase = cur.messages?.[phraseKey] || 'Awesome!';
+        const template = cur.messages?.fistBumpAnnouncement || 'Fist bump! Both players solved {cell} at the same time — {phrase}';
+        announce(template.replace('{cell}', cellCoord).replace('{phrase}', phrase));
+    }, [announce, soundEffectsRef, triggerFistBump]);
+
+    const broadcastAndTriggerFistBump = useCallback((index, value) => {
+        const cur = stateRef.current;
+        if (!cur.onlineGameId || cur.isSpectating || (cur.myRole !== 'host' && cur.myRole !== 'guest')) {
+            return;
+        }
+        const phraseKey = index % 2 === 0 ? 'fistBumpAwesome' : 'fistBumpAmazing';
+        triggerFistBumpEffect({ index, phraseKey, value });
+        onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'fist-bump', {
+            index,
+            value,
+            phraseKey,
+            senderId: onlineClientRef.current?.clientId,
+        });
+    }, [triggerFistBumpEffect]);
+
+    const handleLocalCellSolveForFistBump = useCallback((index, value) => {
+        const cur = stateRef.current;
+        if (!cur.onlineGameId || cur.isSpectating || (cur.myRole !== 'host' && cur.myRole !== 'guest')) {
+            return;
+        }
+        const match = coopFistBumpTrackerRef.current.recordLocalSolve(index, value);
+        if (match.matched) {
+            broadcastAndTriggerFistBump(index, value);
+        }
+    }, [broadcastAndTriggerFistBump]);
+
+    const handleRemoteCellSolveForFistBump = useCallback((data, patchedState) => {
+        const cur = stateRef.current;
+        if (!cur.onlineGameId || cur.isSpectating || (cur.myRole !== 'host' && cur.myRole !== 'guest')) {
+            return;
+        }
+        if (!data || !Number.isInteger(data.index) || !Number.isInteger(data.value) || data.value <= 0) {
+            return;
+        }
+        const expected = patchedState?.solution?.[data.index];
+        const isCorrect = expected > 0 ? data.value === expected : !patchedState?.conflicts?.includes(data.index);
+        if (!isCorrect) return;
+        const match = coopFistBumpTrackerRef.current.recordRemoteSolve(data.index, data.value);
+        if (match.matched) {
+            broadcastAndTriggerFistBump(data.index, data.value);
+        }
+    }, [broadcastAndTriggerFistBump]);
+
     const triggerFloatingReaction = useCallback((emoji) => {
         if (!ALLOWED_REACTIONS.has(emoji)) return;
         soundEffectsRef.current?.playSpectatorCheer();
@@ -272,6 +356,8 @@ export function App() {
         triggerUnitCelebration,
         playMoveSoundFeedback,
         triggerFloatingReaction,
+        triggerFistBumpEffect,
+        handleRemoteCellSolveForFistBump,
         announce,
         showFeedback,
     });
@@ -324,7 +410,42 @@ export function App() {
         buildSyncPayload,
         announce,
         showFeedback,
+        onLocalCellSolveForFistBump: handleLocalCellSolveForFistBump,
+        isRetroMode,
     });
+
+    const handleKonamiInput = useCallback((input) => {
+        if (isRetroMode) return;
+        setKonamiState((prev) => {
+            const next = advanceKonamiState(prev, input);
+            if (next.completed) {
+                setIsRetroMode(true);
+                soundEffectsRef.current?.setRetroMode?.(true);
+                soundEffectsRef.current?.playRetroActivate?.();
+                const msg = messagesRef.current?.retroModeActivated || '1981 Retro Mode activated! No shifting back then.';
+                showFeedback(msg);
+            }
+            return { phase: next.phase, progress: next.progress };
+        });
+    }, [isRetroMode, showFeedback, soundEffectsRef]);
+
+    const handleShiftWithKonami = useCallback((axis, dir) => {
+        if (isRetroMode) return;
+        const directionKey = axis === 'row'
+            ? (dir < 0 ? 'up' : 'down')
+            : (dir < 0 ? 'left' : 'right');
+        handleShift(axis, dir);
+        handleKonamiInput(directionKey);
+    }, [handleKonamiInput, handleShift, isRetroMode]);
+
+    const handleExitRetro = useCallback(() => {
+        setIsRetroMode(false);
+        setKonamiState(createKonamiState());
+        soundEffectsRef.current?.setRetroMode?.(false);
+        soundEffectsRef.current?.playRetroExit?.();
+        const template = messagesRef.current?.retroModeDeactivated || 'Welcome back to {year}!';
+        showFeedback(template.replace('{year}', String(retroYear)));
+    }, [retroYear, showFeedback, soundEffectsRef]);
 
     const {
         openLegalPage,
@@ -451,6 +572,7 @@ export function App() {
 
     const showLegalPage = !isNativeApp && Boolean(legalPage);
     const showBottomNav = showLegalPage || !((navTab === 'play' && isPlayingGame) || (navTab === 'watch' && isSpectating));
+    const showGlobalRetroBar = isRetroMode && (showLegalPage || navTab !== 'play' || !isPlayingGame);
 
     return (
         <>
@@ -458,6 +580,22 @@ export function App() {
                 <div id="game-announcements" className="sr-only" aria-live="polite" aria-atomic="true">
                     {announcement}
                 </div>
+
+                {showGlobalRetroBar && (
+                    <div id="retro-global-bar" className="retro-global-bar" role="region" aria-label={messages.retroLabel || '1981'}>
+                        <span className="retro-global-bar__badge" aria-hidden="true">
+                            {messages.retroLabel || '1981'}
+                        </span>
+                        <button
+                            type="button"
+                            id="retro-global-exit-btn"
+                            className="shift-btn shift-btn--retro-exit"
+                            onClick={handleExitRetro}
+                        >
+                            {(messages.retroBackToYear || 'Back to {year}').replace('{year}', String(retroYear))}
+                        </button>
+                    </div>
+                )}
 
                 {showLegalPage && (
                     <LegalPage
@@ -613,6 +751,7 @@ export function App() {
                         partnerCursorIndices={playPartnerCursorIndices}
                         unitCelebration={unitCelebration}
                         hintHighlight={hintHighlight}
+                        fistBump={fistBump}
                         boardBackground={boardBackground}
                         actionFeedback={actionFeedback}
                         isCoopSession={isCoopSession}
@@ -637,14 +776,19 @@ export function App() {
                                 isSolved={gameState.status === 'solved'}
                                 isHintArmed={Boolean(pendingHint)}
                                 canShift={selectedIndex !== null && !isSpectating}
+                                konamiPhase={konamiState.phase}
+                                isRetroMode={isRetroMode}
+                                retroYear={retroYear}
                                 onUndo={handleUndo}
                                 onErase={() => applyPlayerDigit(0)}
                                 onToggleNotes={() => setNotesMode((prev) => !prev)}
                                 onFillCandidates={handleFillCandidates}
                                 onClearNotes={handleClearNotes}
                                 onLocalHint={handleLocalHint}
-                                onShiftRow={(dir) => handleShift('row', dir)}
-                                onShiftCol={(dir) => handleShift('col', dir)}
+                                onShiftRow={(dir) => handleShiftWithKonami('row', dir)}
+                                onShiftCol={(dir) => handleShiftWithKonami('col', dir)}
+                                onKonamiButton={handleKonamiInput}
+                                onExitRetro={handleExitRetro}
                                 onDigit={applyPlayerDigit}
                                 messages={messages}
                             />
@@ -732,6 +876,7 @@ export function App() {
                         partnerCursorIndices={watchPartnerCursorIndices}
                         unitCelebration={unitCelebration}
                         hintHighlight={hintHighlight}
+                        fistBump={fistBump}
                         boardBackground={boardBackground}
                         actionFeedback={actionFeedback}
                         isCoopSession={isCoopSession}

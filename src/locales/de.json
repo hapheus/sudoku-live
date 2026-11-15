@@ -144,5 +144,13 @@
   "shiftRowDown": "Zeile nach unten schieben",
   "shiftColLeft": "Spalte nach links schieben",
   "shiftColRight": "Spalte nach rechts schieben",
-  "shiftHintNoCell": "Zelle wählen, um Zeile oder Spalte im Block zu verschieben"
+  "shiftHintNoCell": "Zelle wählen, um Zeile oder Spalte im Block zu verschieben",
+  "retroLabel": "1981",
+  "retroBackToYear": "Zurück zu {year}",
+  "retroModeActivated": "1981 Retro-Modus aktiviert! Damals gab es noch kein Shift.",
+  "retroModeDeactivated": "Willkommen zurück in {year}!",
+  "konamiAbPrompt": "Code",
+  "fistBumpAwesome": "Awesome!",
+  "fistBumpAmazing": "Amazing!",
+  "fistBumpAnnouncement": "Fist Bump! Beide haben {cell} gleichzeitig gelöst — {phrase}"
 }

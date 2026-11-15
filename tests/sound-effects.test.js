@@ -187,4 +187,40 @@ describe('SoundEffectsPlayer', () => {
 
         player.destroy();
     });
+
+    it('supports retro 8-bit chiptune mode and fist-bump/retro transition effects', () => {
+        const mockCtx = createMockAudioContext();
+        const player = createSoundEffectsPlayer({
+            contextFactory: () => mockCtx,
+        });
+
+        expect(player.isRetroMode()).toBe(false);
+        expect(player.playFistBump()).toBe(true);
+        const afterFistBump = mockCtx.__oscillators.length;
+        expect(afterFistBump).toBeGreaterThan(0);
+
+        player.setRetroMode(true);
+        expect(player.isRetroMode()).toBe(true);
+
+        expect(player.playRetroActivate()).toBe(true);
+        const retroOscs = mockCtx.__oscillators.slice(afterFistBump);
+        expect(retroOscs.length).toBeGreaterThanOrEqual(4);
+        expect(retroOscs.some((osc) => osc.type === 'square')).toBe(true);
+
+        const beforeCorrect = mockCtx.__oscillators.length;
+        expect(player.playCorrectDigit()).toBe(true);
+        const retroCorrectOscs = mockCtx.__oscillators.slice(beforeCorrect);
+        expect(retroCorrectOscs.some((osc) => osc.type === 'square')).toBe(true);
+
+        const beforeWrong = mockCtx.__oscillators.length;
+        expect(player.play('wrong')).toBe(true);
+        expect(mockCtx.__oscillators.slice(beforeWrong).some((osc) => osc.type === 'square' || osc.type === 'sawtooth')).toBe(true);
+
+        expect(player.play('fist-bump')).toBe(true);
+        expect(player.playRetroExit()).toBe(true);
+
+        player.setRetroMode(false);
+        expect(player.isRetroMode()).toBe(false);
+        player.destroy();
+    });
 });

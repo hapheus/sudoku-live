@@ -144,5 +144,13 @@
   "shiftRowDown": "Shift row down",
   "shiftColLeft": "Shift column left",
   "shiftColRight": "Shift column right",
-  "shiftHintNoCell": "Select a cell to shift its row or column within its box"
+  "shiftHintNoCell": "Select a cell to shift its row or column within its box",
+  "retroLabel": "1981",
+  "retroBackToYear": "Back to {year}",
+  "retroModeActivated": "1981 Retro Mode activated! No shifting back then.",
+  "retroModeDeactivated": "Welcome back to {year}!",
+  "konamiAbPrompt": "Code",
+  "fistBumpAwesome": "Awesome!",
+  "fistBumpAmazing": "Amazing!",
+  "fistBumpAnnouncement": "Fist bump! Both players solved {cell} at the same time — {phrase}"
 }

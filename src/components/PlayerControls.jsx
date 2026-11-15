@@ -1,4 +1,5 @@
 import React from 'react';
+import { KONAMI_BUTTON_LABELS } from '../domain/konami-code.js';
 import { getDigitCounts } from '../domain/sudoku-engine.js';
 import { getVariantSpec, inferVariantFromBoardLength } from '../domain/sudoku-generator.js';
 import enMessages from '../locales/en.json';
@@ -13,6 +14,9 @@ export function PlayerControls({
     isSolved = false,
     isHintArmed = false,
     canShift = false,
+    konamiPhase = 'arrows',
+    isRetroMode = false,
+    retroYear = new Date().getFullYear(),
     onUndo,
     onErase,
     onToggleNotes,
@@ -21,6 +25,8 @@ export function PlayerControls({
     onLocalHint,
     onShiftRow = null,
     onShiftCol = null,
+    onKonamiButton = null,
+    onExitRetro = null,
     onDigit,
     messages = enMessages,
 }) {
@@ -28,6 +34,88 @@ export function PlayerControls({
     const { maxDigit, gridSize } = getVariantSpec(resolvedVariant);
     const counts = getDigitCounts(board, resolvedVariant);
     const digits = Array.from({ length: maxDigit }, (_, i) => i + 1);
+    let shiftBarLabelText = messages.shiftLabel || 'Shift';
+    if (isRetroMode) {
+        shiftBarLabelText = messages.retroLabel || '1981';
+    } else if (konamiPhase === 'ab') {
+        shiftBarLabelText = messages.konamiAbPrompt || 'Code';
+    }
+
+    const renderShiftActions = () => {
+        if (isRetroMode) {
+            return (
+                <button
+                    type="button"
+                    id="retro-exit-btn"
+                    className="shift-btn shift-btn--retro-exit"
+                    onClick={() => onExitRetro?.()}
+                >
+                    {(messages.retroBackToYear || 'Back to {year}').replace('{year}', String(retroYear))}
+                </button>
+            );
+        }
+        if (konamiPhase === 'ab') {
+            return KONAMI_BUTTON_LABELS.map((letter) => (
+                <button
+                    key={letter}
+                    type="button"
+                    id={`konami-btn-${letter.toLowerCase()}`}
+                    className="shift-btn shift-btn--konami"
+                    onClick={() => onKonamiButton?.(letter)}
+                >
+                    {letter}
+                </button>
+            ));
+        }
+        return (
+            <>
+                <button
+                    type="button"
+                    id="shift-row-up-btn"
+                    className="shift-btn"
+                    disabled={!canShift || isSolved}
+                    aria-label={messages.shiftRowUp || 'Shift row up'}
+                    title={`${messages.shiftRowUp || 'Shift row up'} (Shift + ↑)`}
+                    onClick={() => onShiftRow?.(-1)}
+                >
+                    ↑
+                </button>
+                <button
+                    type="button"
+                    id="shift-row-down-btn"
+                    className="shift-btn"
+                    disabled={!canShift || isSolved}
+                    aria-label={messages.shiftRowDown || 'Shift row down'}
+                    title={`${messages.shiftRowDown || 'Shift row down'} (Shift + ↓)`}
+                    onClick={() => onShiftRow?.(1)}
+                >
+                    ↓
+                </button>
+                <button
+                    type="button"
+                    id="shift-col-left-btn"
+                    className="shift-btn"
+                    disabled={!canShift || isSolved}
+                    aria-label={messages.shiftColLeft || 'Shift column left'}
+                    title={`${messages.shiftColLeft || 'Shift column left'} (Shift + ←)`}
+                    onClick={() => onShiftCol?.(-1)}
+                >
+                    ←
+                </button>
+                <button
+                    type="button"
+                    id="shift-col-right-btn"
+                    className="shift-btn"
+                    disabled={!canShift || isSolved}
+                    aria-label={messages.shiftColRight || 'Shift column right'}
+                    title={`${messages.shiftColRight || 'Shift column right'} (Shift + →)`}
+                    onClick={() => onShiftCol?.(1)}
+                >
+                    →
+                </button>
+            </>
+        );
+    };
 
     return (
         <section id="player-controls" className="player-controls" aria-label="Puzzle Controls">
@@ -128,59 +216,30 @@ export function PlayerControls({
                 })}
             </div>
 
-            {(onShiftRow || onShiftCol) && (
+            {(onShiftRow || onShiftCol || isRetroMode) && (
                 <div
-                    className="shift-bar"
+                    className={[
+                        'shift-bar',
+                        isRetroMode ? 'shift-bar--retro' : '',
+                        konamiPhase === 'ab' && !isRetroMode ? 'shift-bar--konami' : '',
+                    ].filter(Boolean).join(' ')}
                     role="toolbar"
-                    aria-label={messages.shiftToolbarLabel || 'Shift row or column within box'}
-                    title={!canShift ? (messages.shiftHintNoCell || 'Select a cell to shift its row or column within its box') : undefined}
+                    aria-label={
+                        isRetroMode
+                            ? (messages.retroLabel || '1981')
+                            : (messages.shiftToolbarLabel || 'Shift row or column within box')
+                    }
+                    title={
+                        !isRetroMode && konamiPhase !== 'ab' && !canShift
+                            ? (messages.shiftHintNoCell || 'Select a cell to shift its row or column within its box')
+                            : undefined
+                    }
                 >
-                    <span className="shift-bar__label" aria-hidden="true">{messages.shiftLabel || 'Shift'}</span>
+                    <span className="shift-bar__label" aria-hidden="true">
+                        {shiftBarLabelText}
+                    </span>
                     <div className="shift-bar__actions">
-                        <button
-                            type="button"
-                            id="shift-row-up-btn"
-                            className="shift-btn"
-                            disabled={!canShift || isSolved}
-                            aria-label={messages.shiftRowUp || 'Shift row up'}
-                            title={`${messages.shiftRowUp || 'Shift row up'} (Shift + ↑)`}
-                            onClick={() => onShiftRow?.(-1)}
-                        >
-                            ↑
-                        </button>
-                        <button
-                            type="button"
-                            id="shift-row-down-btn"
-                            className="shift-btn"
-                            disabled={!canShift || isSolved}
-                            aria-label={messages.shiftRowDown || 'Shift row down'}
-                            title={`${messages.shiftRowDown || 'Shift row down'} (Shift + ↓)`}
-                            onClick={() => onShiftRow?.(1)}
-                        >
-                            ↓
-                        </button>
-                        <button
-                            type="button"
-                            id="shift-col-left-btn"
-                            className="shift-btn"
-                            disabled={!canShift || isSolved}
-                            aria-label={messages.shiftColLeft || 'Shift column left'}
-                            title={`${messages.shiftColLeft || 'Shift column left'} (Shift + ←)`}
-                            onClick={() => onShiftCol?.(-1)}
-                        >
-                            ←
-                        </button>
-                        <button
-                            type="button"
-                            id="shift-col-right-btn"
-                            className="shift-btn"
-                            disabled={!canShift || isSolved}
-                            aria-label={messages.shiftColRight || 'Shift column right'}
-                            title={`${messages.shiftColRight || 'Shift column right'} (Shift + →)`}
-                            onClick={() => onShiftCol?.(1)}
-                        >
-                            →
-                        </button>
+                        {renderShiftActions()}
                     </div>
                 </div>
             )}

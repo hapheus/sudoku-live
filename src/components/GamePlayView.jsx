@@ -28,6 +28,7 @@ export function GamePlayView({
     partnerCursorIndices,
     unitCelebration,
     hintHighlight,
+    fistBump = null,
     boardBackground,
     actionFeedback,
     isCoopSession,
@@ -72,7 +73,9 @@ export function GamePlayView({
                 partnerCursorIndices={partnerCursorIndices}
                 unitCelebration={unitCelebration}
                 hintHighlight={hintHighlight}
+                fistBump={fistBump}
                 boardBackground={boardBackground}
+                messages={messages}
             />
 
             {actionFeedback && (

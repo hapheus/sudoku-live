@@ -13,6 +13,7 @@ export function useFeedbackTimers({ messagesRef = null, onBroadcastHintClear = n
     }));
     const [pendingHint, setPendingHint] = useState(null);
     const [floatingReactions, setFloatingReactions] = useState([]);
+    const [fistBump, setFistBump] = useState(null);
 
     const pendingHintRef = useRef(null);
     pendingHintRef.current = pendingHint;
@@ -20,12 +21,15 @@ export function useFeedbackTimers({ messagesRef = null, onBroadcastHintClear = n
     const feedbackTimerRef = useRef(null);
     const unitCelebrationTimerRef = useRef(null);
     const hintHighlightTimerRef = useRef(null);
+    const fistBumpTimerRef = useRef(null);
     const reactionSeqRef = useRef(0);
+    const fistBumpSeqRef = useRef(0);
 
     useEffect(() => () => {
         if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
         if (unitCelebrationTimerRef.current) clearTimeout(unitCelebrationTimerRef.current);
         if (hintHighlightTimerRef.current) clearTimeout(hintHighlightTimerRef.current);
+        if (fistBumpTimerRef.current) clearTimeout(fistBumpTimerRef.current);
     }, []);
 
     const announce = useCallback((msg) => {
@@ -139,6 +143,27 @@ export function useFeedbackTimers({ messagesRef = null, onBroadcastHintClear = n
         }, 2000);
     }, []);
 
+    const clearFistBump = useCallback(() => {
+        if (fistBumpTimerRef.current) {
+            clearTimeout(fistBumpTimerRef.current);
+            fistBumpTimerRef.current = null;
+        }
+        setFistBump(null);
+    }, []);
+
+    const triggerFistBump = useCallback(({ index, phraseKey = 'fistBumpAwesome' }) => {
+        if (!Number.isInteger(index)) return;
+        if (fistBumpTimerRef.current) {
+            clearTimeout(fistBumpTimerRef.current);
+        }
+        const id = ++fistBumpSeqRef.current;
+        setFistBump({ id, index, phraseKey });
+        fistBumpTimerRef.current = setTimeout(() => {
+            fistBumpTimerRef.current = null;
+            setFistBump((prev) => (prev?.id === id ? null : prev));
+        }, 1800);
+    }, []);
+
     return {
         announcement,
         setAnnouncement,
@@ -148,6 +173,7 @@ export function useFeedbackTimers({ messagesRef = null, onBroadcastHintClear = n
         pendingHint,
         setPendingHint,
         floatingReactions,
+        fistBump,
         announce,
         showFeedback,
         clearHintHighlight,
@@ -156,5 +182,7 @@ export function useFeedbackTimers({ messagesRef = null, onBroadcastHintClear = n
         triggerHintHighlight,
         triggerUnitCelebration,
         addFloatingReaction,
+        triggerFistBump,
+        clearFistBump,
     };
 }
