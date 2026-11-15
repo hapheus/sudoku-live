@@ -3003,6 +3003,11 @@ body {
    Easter Eggs: Co-op Fist Bump & 1981 C64 Retro Pixel Mode
    ========================================================================== */
 
+.sudoku-row:has(.sudoku-cell--fist-bump) {
+    position: relative;
+    z-index: 20;
+}
+
 .sudoku-cell--fist-bump {
     overflow: visible;
     z-index: 8;
@@ -3029,6 +3034,11 @@ body {
     pointer-events: none;
     z-index: 20;
     animation: fistBumpPop 1.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.sudoku-cell__fist-bump--below {
+    bottom: auto;
+    top: calc(100% + 4px);
 }
 
 .sudoku-cell__fist-bump-emoji {

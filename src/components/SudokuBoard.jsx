@@ -275,7 +275,7 @@ export function SudokuBoard({
                                             {isFistBumpCell && (
                                                 <span
                                                     key={`fist-bump-${fistBump.id}`}
-                                                    className="sudoku-cell__fist-bump"
+                                                    className={`sudoku-cell__fist-bump ${r === 0 ? 'sudoku-cell__fist-bump--below' : ''}`}
                                                     aria-hidden="true"
                                                 >
                                                     <span className="sudoku-cell__fist-bump-emoji">🤜🤛</span>
