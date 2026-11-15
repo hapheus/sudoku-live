@@ -16,7 +16,11 @@
         "dup": "jscpd",
         "quality": "node scripts/quality-score.mjs",
         "cap:sync": "npm run build && cap sync ios",
+        "cap:sync:android": "npm run build && cap sync android",
         "cap:open:ios": "cap open ios",
+        "cap:open:android": "cap open android",
+        "android:build": "node scripts/android-build.mjs",
+        "android:release": "node scripts/android-build.mjs --release",
         "ios:preflight": "cd ios && fastlane preflight",
         "ios:devices": "node scripts/ios-device.mjs --list",
         "ios:device": "node scripts/ios-device.mjs",
@@ -29,6 +33,7 @@
         "e2e:headed": "playwright test --headed"
     },
     "dependencies": {
+        "@capacitor/android": "^8.6.2",
         "@capacitor/core": "^8.3.0",
         "@capacitor/ios": "^8.6.2",
         "centrifuge": "^5.8.0",
