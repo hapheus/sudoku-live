@@ -44,11 +44,21 @@ Run via `npm` scripts from the repository root or directly inside `ios/`:
 | Command | Fastlane Lane | Purpose |
 |---|---|---|
 | `npm run ios:preflight` | `fastlane preflight` | Validates `capacitor.config.json`, Xcode, `npx cap ls`, build number, and ASC API key status |
+| `npm run ios:devices` | — | Lists connected physical Apple devices (with UDIDs) and iOS simulators via `devicectl` |
+| `npm run ios:device -- <name\|udid>` | — | Builds web assets and deploys directly to a physical device or simulator without opening Xcode (supports `--no-sync`) |
 | `cd ios && fastlane sync_web` | `fastlane sync_web` | Builds Vite (`VITE_WS_URL` defaulting to `wss://sudoku-ws.fraha.dev/connection/websocket`) and runs `cap sync ios` |
 | `cd ios && fastlane simulator` | `fastlane simulator` | Builds unsigned Debug app for `generic/platform=iOS Simulator` (no paid Apple Developer account needed) |
 | `cd ios && fastlane register_app` | `fastlane register_app` | Registers Bundle ID and App Store Connect entry via `produce` (`APP_LANGUAGE` defaults to `English`) |
 | `npm run ios:archive` | `fastlane archive` | Builds and exports a signed App Store IPA to `ios/App/build/SudokuLive.ipa` |
 | `npm run ios:testflight` | `fastlane beta` | Auto-bumps `CURRENT_PROJECT_VERSION` above local & remote TestFlight, builds IPA, and uploads to TestFlight |
+
+Direct device deploy examples:
+
+```bash
+npm run ios:devices
+npm run ios:device -- haPhone
+npm run ios:device -- haPhone --no-sync
+```
 
 Optional lane flags:
 - `skip_web:true` — Skip Vite build + `cap sync ios` when `ios/App/App/public` is already up to date.

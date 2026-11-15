@@ -18,6 +18,8 @@
         "cap:sync": "npm run build && cap sync ios",
         "cap:open:ios": "cap open ios",
         "ios:preflight": "cd ios && fastlane preflight",
+        "ios:devices": "node scripts/ios-device.mjs --list",
+        "ios:device": "node scripts/ios-device.mjs",
         "ios:archive": "cd ios && fastlane archive",
         "ios:testflight": "cd ios && fastlane beta",
         "docker:up": "docker compose up -d --build",

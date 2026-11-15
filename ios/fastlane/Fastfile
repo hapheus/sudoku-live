@@ -1,6 +1,19 @@
 opt_out_usage
 default_platform(:ios)
 
+# devenv/nix injects DEVELOPER_DIR, SDKROOT, CC/LD, NIX_*, and clang-wrapper into PATH,
+# which breaks Xcode iOS builds (linking CapApp-SPM with macOS/nix ld).
+if ENV["IN_NIX_SHELL"] || ENV["DEVELOPER_DIR"].to_s.start_with?("/nix/store/")
+  if File.directory?("/Applications/Xcode.app/Contents/Developer")
+    ENV["DEVELOPER_DIR"] = "/Applications/Xcode.app/Contents/Developer"
+  end
+  %w[SDKROOT CC CXX LD AR NM RANLIB STRIP CFLAGS CXXFLAGS LDFLAGS IN_NIX_SHELL].each { |k| ENV.delete(k) }
+  ENV.keys.select { |k| k.start_with?("NIX_") }.each { |k| ENV.delete(k) }
+  ENV["PATH"] = ENV["PATH"].to_s.split(File::PATH_SEPARATOR).reject { |p|
+    p.start_with?("/nix/store/") && p.match?(/clang-wrapper|cctools|binutils|llvm/)
+  }.join(File::PATH_SEPARATOR)
+end
+
 require "xcodeproj"
 
 REPO_ROOT = File.expand_path("../..", __dir__)
