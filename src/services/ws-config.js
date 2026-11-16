@@ -55,9 +55,28 @@ export function resolveRuntimeWsConfig(explicitConfig = {}) {
     };
 }
 
+export function isLocalDevHostname(hostname) {
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+}
+
+export function enforceSecureWsUrl(rawUrl) {
+    if (typeof rawUrl !== 'string' || rawUrl.trim() === '') return '';
+    const trimmed = rawUrl.trim();
+    try {
+        const parsed = new URL(trimmed);
+        if (parsed.protocol === 'ws:' && !isLocalDevHostname(parsed.hostname)) {
+            parsed.protocol = 'wss:';
+            return parsed.toString();
+        }
+        return trimmed;
+    } catch {
+        return trimmed;
+    }
+}
+
 export function buildWsUrl(wsConfig = {}) {
     if (typeof wsConfig.wsUrl === 'string' && wsConfig.wsUrl.trim() !== '') {
-        return wsConfig.wsUrl.trim();
+        return enforceSecureWsUrl(wsConfig.wsUrl);
     }
 
     const browserProtocol = typeof window !== 'undefined' && window.location ? window.location.protocol : 'http:';
@@ -68,22 +87,23 @@ export function buildWsUrl(wsConfig = {}) {
         return 'wss://sudoku-ws.fraha.dev/connection/websocket';
     }
 
-    const isLocalOrigin = browserHostname === 'localhost' || browserHostname === '127.0.0.1';
-    const isHttps = wsConfig.scheme
-        ? wsConfig.scheme === 'https'
-        : browserProtocol === 'https:';
-    const wsScheme = isHttps ? 'wss' : 'ws';
-
     let host = wsConfig.host;
-    if (!host || host === 'localhost' || host === '127.0.0.1') {
-        if (!isLocalOrigin && browserHostname.startsWith('sudoku.')) {
+    if (!host || isLocalDevHostname(host)) {
+        if (!isLocalDevHostname(browserHostname) && browserHostname.startsWith('sudoku.')) {
             host = `sudoku-ws.${browserHostname.slice('sudoku.'.length)}`;
         } else {
             host = browserHostname || 'localhost';
         }
     }
 
-    const defaultPort = isLocalOrigin ? 8081 : (isHttps ? 443 : 80);
+    const isLocalTarget = isLocalDevHostname(host);
+    const wantsHttps = wsConfig.scheme
+        ? wsConfig.scheme === 'https'
+        : browserProtocol === 'https:';
+    const isHttps = !isLocalTarget || wantsHttps || isNativeCapacitor;
+    const wsScheme = isHttps ? 'wss' : 'ws';
+
+    const defaultPort = isLocalTarget ? 8081 : (isHttps ? 443 : 80);
     const port = parseInt(wsConfig.port || defaultPort, 10);
     const omitPort = Number.isNaN(port) || (isHttps && port === 443) || (!isHttps && port === 80);
     const portSuffix = omitPort ? '' : `:${port}`;

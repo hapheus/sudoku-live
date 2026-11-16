@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { getVariantSpec, inferVariantFromBoardLength } from '../domain/sudoku-generator.js';
+import { checkProtocolCompatibility } from '../services/multiplayer-protocol.js';
 import { isValidGameId } from '../services/online-game-client.js';
 import { formatPlayerTag } from '../services/player-name.js';
 import { formatGameDuration } from '../utils/format-duration.js';
@@ -17,7 +18,9 @@ function resolveRoomLabels(game, difficultyLabels, pendingJoinGameId, messages) 
     const diffLabel = difficultyLabels[game.difficulty] || messages.diffMedium;
     const hasGuest = Boolean(game.has_guest);
     const joinPolicy = game.join_policy || 'auto';
-    const joinsDisabled = joinPolicy === 'disabled';
+    const compat = checkProtocolCompatibility(game);
+    const updateRequired = !compat.compatible && compat.requiresUpdate === 'local';
+    const joinsDisabled = joinPolicy === 'disabled' || updateRequired;
     const isPendingJoin = pendingJoinGameId === game.game_id;
     const durationText = Number.isFinite(game.elapsed_seconds)
         ? formatGameDuration(game.elapsed_seconds)
@@ -27,7 +30,9 @@ function resolveRoomLabels(game, difficultyLabels, pendingJoinGameId, messages) 
         : null;
 
     let statusLabel = messages.watchOpen;
-    if (hasGuest) {
+    if (updateRequired) {
+        statusLabel = messages.watchUpdateRequired || 'Update required';
+    } else if (hasGuest) {
         statusLabel = messages.watchCoop;
     } else if (joinPolicy === 'disabled') {
         statusLabel = messages.watchJoinsClosed || 'Watching only';
@@ -36,7 +41,9 @@ function resolveRoomLabels(game, difficultyLabels, pendingJoinGameId, messages) 
     }
 
     let joinBtnLabel = messages.watchJoin;
-    if (joinsDisabled) {
+    if (updateRequired) {
+        joinBtnLabel = messages.watchJoin;
+    } else if (joinsDisabled) {
         joinBtnLabel = messages.watchJoinsDisabled || 'Closed';
     } else if (isPendingJoin) {
         joinBtnLabel = messages.watchJoinPending || 'Waiting...';
@@ -51,7 +58,7 @@ function resolveRoomLabels(game, difficultyLabels, pendingJoinGameId, messages) 
         game.tic_tac_toe ? (messages?.watchTicTacToeTag || 'Tic Tac Toe') : null,
     ].filter(Boolean).join(' • ');
 
-    return { hostTag, metaText, joinsDisabled, joinBtnLabel };
+    return { hostTag, metaText, joinsDisabled, updateRequired, joinBtnLabel };
 }
 
 function WatchGameCard({
@@ -62,7 +69,7 @@ function WatchGameCard({
     onWatchGame,
     messages,
 }) {
-    const { hostTag, metaText, joinsDisabled, joinBtnLabel } = resolveRoomLabels(
+    const { hostTag, metaText, joinsDisabled, updateRequired, joinBtnLabel } = resolveRoomLabels(
         game,
         difficultyLabels,
         pendingJoinGameId,
@@ -94,6 +101,7 @@ function WatchGameCard({
                     type="button"
                     className="live-game-card__action-btn"
                     data-watch-id={game.game_id}
+                    disabled={updateRequired}
                     onClick={() => onWatchGame(game.game_id)}
                 >
                     {messages.watchLiveBtn}

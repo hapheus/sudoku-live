@@ -36,4 +36,13 @@ describe('ws-config', () => {
         window.__APP_CONFIG__ = { wsHost: 'sudoku-ws.fraha.dev', wsPort: '443', wsScheme: 'https' };
         expect(buildWsUrl(resolveRuntimeWsConfig())).toBe('wss://sudoku-ws.fraha.dev/connection/websocket');
     });
+
+    it('enforces wss:// for non-local hosts even when ws:// or http is configured', () => {
+        expect(buildWsUrl(resolveRuntimeWsConfig({ wsUrl: 'ws://sudoku-ws.fraha.dev/connection/websocket' })))
+            .toBe('wss://sudoku-ws.fraha.dev/connection/websocket');
+        expect(buildWsUrl(resolveRuntimeWsConfig({ host: 'sudoku-ws.fraha.dev', port: 443, scheme: 'http' })))
+            .toBe('wss://sudoku-ws.fraha.dev/connection/websocket');
+        expect(buildWsUrl(resolveRuntimeWsConfig({ wsUrl: 'ws://127.0.0.1:8081/connection/websocket' })))
+            .toBe('ws://127.0.0.1:8081/connection/websocket');
+    });
 });
