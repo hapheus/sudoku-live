@@ -315,7 +315,16 @@ export class OnlineGameClient {
                             if (eventId && this.rememberEvent(eventId)) {
                                 continue;
                             }
-                            if (payload.type === 'init' || payload.type === 'sync' || payload.type === 'cell-update' || payload.type === 'new-puzzle-accept' || payload.type === 'new-puzzle-request' || payload.type === 'join-policy') {
+                            if (
+                                payload.type === 'init'
+                                || payload.type === 'sync'
+                                || payload.type === 'cell-update'
+                                || payload.type === 'new-puzzle-accept'
+                                || payload.type === 'new-puzzle-request'
+                                || payload.type === 'join-policy'
+                                || payload.type === 'tic-tac-toe-state'
+                                || payload.type === 'retro-mode'
+                            ) {
                                 onEvent(payload.type, payload.data || {});
                             }
                         }

@@ -113,6 +113,8 @@ export function App() {
     const pendingJoinTimerRef = useRef(null);
     const [konamiState, setKonamiState] = useState(() => createKonamiState());
     const [isRetroMode, setIsRetroMode] = useState(false);
+    const [remoteRetroMode, setRemoteRetroMode] = useState(false);
+    const effectiveRetroMode = isSpectating ? remoteRetroMode : isRetroMode;
     const retroYear = useMemo(() => new Date().getFullYear(), []);
     const coopFistBumpTrackerRef = useRef(createCoopFistBumpTracker({ windowMs: 500, dedupeMs: 1200 }));
 
@@ -205,6 +207,8 @@ export function App() {
 
     const ticTacToe = useTicTacToe({ stateRef, onlineClientRef });
     stateRef.current.ticTacToeActive = Boolean(ticTacToe.challenge.game);
+    stateRef.current.ticTacToeChallenge = ticTacToe.challenge;
+    stateRef.current.isRetroMode = isRetroMode;
     const setTicTacToeRoom = ticTacToe.setRoom;
 
     useEffect(() => {
@@ -236,9 +240,9 @@ export function App() {
     }, []);
 
     useEffect(() => {
-        soundEffectsRef.current?.setRetroMode?.(isRetroMode);
+        soundEffectsRef.current?.setRetroMode?.(effectiveRetroMode);
         if (typeof document !== 'undefined') {
-            if (isRetroMode) {
+            if (effectiveRetroMode) {
                 document.documentElement.dataset.retro = 'true';
             } else {
                 delete document.documentElement.dataset.retro;
@@ -249,7 +253,7 @@ export function App() {
                 delete document.documentElement.dataset.retro;
             }
         };
-    }, [isRetroMode, soundEffectsRef]);
+    }, [effectiveRetroMode, soundEffectsRef]);
 
     const triggerFistBumpEffect = useCallback(({ index, phraseKey = 'fistBumpAwesome', value = null }) => {
         const dedupeVal = Number.isInteger(value) ? value : 0;
@@ -366,6 +370,7 @@ export function App() {
         setIncomingJoinRequests,
         setPendingJoinRequest,
         setActiveLobbyRooms,
+        setRemoteRetroMode,
         triggerHintHighlight,
         clearHintHighlight,
         clearUnitCelebration,
@@ -445,6 +450,13 @@ export function App() {
                 setIsRetroMode(true);
                 soundEffectsRef.current?.setRetroMode?.(true);
                 soundEffectsRef.current?.playRetroActivate?.();
+                const cur = stateRef.current;
+                if (cur.onlineGameId && !cur.isSpectating) {
+                    onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'retro-mode', {
+                        enabled: true,
+                        senderId: onlineClientRef.current?.clientId,
+                    });
+                }
                 const msg = messagesRef.current?.retroModeActivated || '1981 Retro Mode activated! No shifting back then.';
                 showFeedback(msg);
             }
@@ -466,6 +478,13 @@ export function App() {
         setKonamiState(createKonamiState());
         soundEffectsRef.current?.setRetroMode?.(false);
         soundEffectsRef.current?.playRetroExit?.();
+        const cur = stateRef.current;
+        if (cur.onlineGameId && !cur.isSpectating) {
+            onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'retro-mode', {
+                enabled: false,
+                senderId: onlineClientRef.current?.clientId,
+            });
+        }
         const template = messagesRef.current?.retroModeDeactivated || 'Welcome back to {year}!';
         showFeedback(template.replace('{year}', String(retroYear)));
     }, [retroYear, showFeedback, soundEffectsRef]);

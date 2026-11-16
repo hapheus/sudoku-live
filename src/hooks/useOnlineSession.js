@@ -16,6 +16,7 @@ import {
 } from '../services/online-game-client.js';
 import { createRemoteEventRouter } from '../services/remote-event-router.js';
 import { normalizeJoinPolicy } from '../services/join-settings.js';
+import { validateIncomingGameMessage } from '../services/message-security.js';
 import { checkProtocolCompatibility } from '../services/multiplayer-protocol.js';
 import {
     loadOnlineGameSnapshot,
@@ -119,6 +120,7 @@ export function useOnlineSession({
     setIncomingJoinRequests,
     setPendingJoinRequest,
     setActiveLobbyRooms,
+    setRemoteRetroMode = null,
     triggerHintHighlight,
     clearHintHighlight,
     clearUnitCelebration,
@@ -284,6 +286,7 @@ export function useOnlineSession({
         setHostJoinPolicy,
         setIncomingJoinRequests,
         setPendingJoinRequest,
+        setRemoteRetroMode,
         triggerHintHighlight,
         clearHintHighlight,
         clearUnitCelebration,
@@ -319,6 +322,7 @@ export function useOnlineSession({
         setPendingJoinRequest,
         setRematchRequestedBy,
         setRemoteActiveDigit,
+        setRemoteRetroMode,
         setSelectedIndex,
         showFeedback,
         stateRef,
@@ -332,11 +336,14 @@ export function useOnlineSession({
 
     const handleRemoteGameEvent = useCallback((type, data) => {
         if (type.startsWith('tic-tac-toe-')) {
+            const totalCells = stateRef.current.gameState?.board?.length || 81;
+            const maxDigit = totalCells === 36 ? 6 : 9;
+            if (!validateIncomingGameMessage(type, data, totalCells, maxDigit)) return;
             ticTacToe?.onEvent(type, data);
             return;
         }
         if (type === 'new-puzzle-accept') ticTacToe?.reset();
-        if ((type === 'sync' || type === 'init') && data?.ticTacToe && stateRef.current.myRole !== 'host') {
+        if ((type === 'sync' || type === 'init' || type === 'ping') && data?.ticTacToe && stateRef.current.myRole !== 'host') {
             ticTacToe?.update(data.ticTacToe);
         }
         routeRemoteGameEvent(type, data);
@@ -347,6 +354,7 @@ export function useOnlineSession({
         return {
             gameState: serializeGameState(cur.gameState),
             ticTacToe: ticTacToe?.challengeRef.current,
+            isRetroMode: Boolean(cur.isRetroMode),
             boardBackgroundId: cur.boardBackground?.id || null,
             rematchRequestedBy: cur.rematchRequestedBy,
             hints: Array.from(cur.hintsMap.entries()),
@@ -512,6 +520,7 @@ export function useOnlineSession({
         setCurrentMembers([]);
         setHintsMap(new Map());
         setRematchRequestedBy(null);
+        setRemoteRetroMode?.(false);
         const lobbyRoom = stateRef.current.activeLobbyRooms.find((r) => r.game_id === gameId);
         if (lobbyRoom) {
             const compat = checkProtocolCompatibility(lobbyRoom);
@@ -557,6 +566,7 @@ export function useOnlineSession({
         handleGameMemberJoin,
         handleGameMemberLeave,
         handleGamePresenceChange,
+        handleIncompatibleClient,
         handleRemoteGameEvent,
         onlineClientRef,
         pendingJoinTimerRef,
@@ -566,6 +576,7 @@ export function useOnlineSession({
         setHintsMap,
         setHostJoinPolicy,
         setPendingJoinRequest,
+        setRemoteRetroMode,
         setRematchRequestedBy,
         setSpectatedGameMode,
         stateRef,
@@ -620,6 +631,7 @@ export function useOnlineSession({
         handleGameMemberJoin,
         handleGameMemberLeave,
         handleGamePresenceChange,
+        handleIncompatibleClient,
         handleRemoteGameEvent,
         onlineClientRef,
         setIsPlayingGame,
@@ -642,6 +654,7 @@ export function useOnlineSession({
         setNotesMode(false);
         setHintsMap(new Map());
         setRematchRequestedBy(null);
+        setRemoteRetroMode?.(false);
 
         if (initialGameState) {
             setGameState(initialGameState);
@@ -670,6 +683,7 @@ export function useOnlineSession({
         setNotesMode,
         setRematchRequestedBy,
         setRemoteActiveDigit,
+        setRemoteRetroMode,
         setSelectedIndex,
         showFeedback,
         stateRef,
@@ -803,6 +817,7 @@ export function useOnlineSession({
         handleGameMemberJoin,
         handleGameMemberLeave,
         handleGamePresenceChange,
+        handleIncompatibleClient,
         handleRemoteGameEvent,
         hostJoinPolicy,
         onlineClientRef,
@@ -920,6 +935,7 @@ export function useOnlineSession({
         setNotesMode(false);
         setHintsMap(new Map());
         setRematchRequestedBy(null);
+        setRemoteRetroMode?.(false);
         setIncomingJoinRequests([]);
         stateRef.current.incomingJoinRequests = [];
         setGameState(nextState);
@@ -975,6 +991,7 @@ export function useOnlineSession({
         setOnlineGameId,
         setRematchRequestedBy,
         setRemoteActiveDigit,
+        setRemoteRetroMode,
         setSelectedIndex,
         setVariant,
         stateRef,
@@ -1032,6 +1049,7 @@ export function useOnlineSession({
         enterSpectatorView,
         handleGameMemberJoin,
         handleGameMemberLeave,
+        handleIncompatibleClient,
         handleRemoteGameEvent,
         joinAsOnlinePlayer,
         onlineClientRef,

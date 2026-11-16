@@ -28,6 +28,7 @@ const VALID_GAME_TYPES = new Set([
     'new-puzzle-cancel',
     'ping',
     'fist-bump',
+    'retro-mode',
     'tic-tac-toe-state',
     'tic-tac-toe-shift',
     'tic-tac-toe-move',
@@ -163,6 +164,8 @@ export function validateIncomingGameMessage(type, data, totalCells = 81, maxDigi
         return validateGameStatePayload(data);
     case 'fist-bump':
         return isValidCellIndex(data.index, totalCells);
+    case 'retro-mode':
+        return typeof data.enabled === 'boolean';
     case 'tic-tac-toe-state':
         return isValidChallenge(data.challenge);
     case 'tic-tac-toe-shift':
