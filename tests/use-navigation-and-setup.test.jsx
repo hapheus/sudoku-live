@@ -29,7 +29,9 @@ describe('useNavigationAndSetup', () => {
             ...setters, stateRef, onlineClientRef: { current: client },
             ensureHostOnlineSession, showFeedback: vi.fn(), announce: vi.fn(),
         }));
+        window.history.replaceState({}, '', '/games/room-remaining');
         act(() => result.current.handleContinueSolo());
+        expect(window.location.pathname).toBe('/');
         expect(stateRef.current.mode).toBe('solo');
         expect(stateRef.current.myRole).toBe('host');
         expect(stateRef.current.onlineGameId).toBe('room-remaining');

@@ -522,7 +522,7 @@ export function useNavigationAndSetup({
         setRemoteActiveDigit(null);
         setRematchRequestedBy(null);
         setHintsMap(new Map());
-        updateBrowserUrl(roomId ? `/games/${roomId}` : '/');
+        updateBrowserUrl('/');
         if (cur.gameState && cur.gameState.status !== 'solved') {
             saveSoloGameSnapshot(cur.gameState, roomId, cur.boardBackground?.id || null);
         }
