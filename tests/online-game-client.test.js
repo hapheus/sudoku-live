@@ -116,7 +116,7 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
             has_guest: true,
             filled_count: 16,
         });
-        expect(client.hostedLobbyMeta).toEqual({
+        expect(client.hostedLobbyMeta).toMatchObject({
             id: client.clientId,
             game_id: 'solo-room-1',
             status: 'in_progress',
@@ -130,6 +130,7 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
             tic_tac_toe: true,
             host_name: client.playerName,
             elapsed_seconds: 0,
+            protocolVersion: 2,
         });
 
         const gamePublishSpy = vi.fn().mockResolvedValue({});
@@ -141,7 +142,10 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
         expect(client.gameJoinPolicy).toBe('auto');
         expect(gamePublishSpy).toHaveBeenCalledWith(expect.objectContaining({
             type: 'join-policy',
-            data: { joinPolicy: 'auto' },
+            data: expect.objectContaining({
+                joinPolicy: 'auto',
+                protocolVersion: 2,
+            }),
         }));
     });
 
@@ -335,5 +339,98 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
         expect(client.getGameMembers()).toHaveLength(1);
         expect(client.getGameMembers()[0].displayName).toBe('CleverLynx');
         expect(publishSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects duplicate, out-of-order, and spoofed-identity live publications and notifies incompatible clients', async () => {
+        const handlers = new Map();
+        const publishSpy = vi.fn().mockResolvedValue({});
+        const sub = {
+            on: (evt, cb) => handlers.set(evt, cb),
+            subscribe: async () => {
+                await handlers.get('subscribed')?.();
+            },
+            unsubscribe: vi.fn(),
+            presence: vi.fn().mockResolvedValue({ clients: { 'sc-self': {} } }),
+            history: vi.fn().mockResolvedValue({ publications: [] }),
+            publish: publishSpy,
+        };
+
+        const client = new OnlineGameClient({
+            wsConfig: { host: 'localhost', port: 8081, scheme: 'http' },
+            playerName: 'HostOne',
+        });
+        client.serverClientId = 'sc-self';
+        client.client = {
+            state: 'connected',
+            connect: vi.fn(),
+            newSubscription: vi.fn(() => sub),
+            removeSubscription: vi.fn(),
+        };
+
+        const events = [];
+        const incompatible = [];
+        client.joinGameChannel('room-sec-1', {
+            role: 'host',
+            gameMode: 'online',
+            onEvent: (type, data) => events.push({ type, data }),
+            onIncompatibleClient: (compat) => incompatible.push(compat),
+        });
+
+        await Promise.resolve();
+        await Promise.resolve();
+
+        // Whisper events also include eventId and protocolVersion
+        client.sendWhisperEvent('cursor', { index: 1, role: 'host' });
+        expect(publishSpy).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'cursor',
+            data: expect.objectContaining({
+                eventId: expect.any(String),
+                protocolVersion: 2,
+                seq: expect.any(Number),
+            }),
+        }));
+
+        // Bind peer sc-peer -> peer-1
+        handlers.get('publication')?.({
+            info: { client: 'sc-peer', user: 'u-peer' },
+            data: {
+                type: 'presence-announce',
+                data: { id: 'peer-1', serverClientId: 'sc-peer', role: 'guest', name: 'Peer', protocolVersion: 99, minProtocolVersion: 99 },
+            },
+        });
+        expect(incompatible).toHaveLength(1);
+        expect(incompatible[0].requiresUpdate).toBe('local');
+
+        const now = Date.now();
+        // Valid live event seq 2
+        handlers.get('publication')?.({
+            info: { client: 'sc-peer', user: 'u-peer' },
+            data: { type: 'cell-update', data: { eventId: 'e-live-2', senderId: 'peer-1', seq: 2, sentAt: now, index: 1, value: 4 } },
+        });
+        // Duplicate eventId
+        handlers.get('publication')?.({
+            info: { client: 'sc-peer', user: 'u-peer' },
+            data: { type: 'cell-update', data: { eventId: 'e-live-2', senderId: 'peer-1', seq: 3, sentAt: now, index: 1, value: 4 } },
+        });
+        // Out-of-order seq 1
+        handlers.get('publication')?.({
+            info: { client: 'sc-peer', user: 'u-peer' },
+            data: { type: 'cell-update', data: { eventId: 'e-live-1', senderId: 'peer-1', seq: 1, sentAt: now, index: 2, value: 6 } },
+        });
+        // Spoofed senderId from sc-peer
+        handlers.get('publication')?.({
+            info: { client: 'sc-peer', user: 'u-peer' },
+            data: { type: 'cell-update', data: { eventId: 'e-spoof', senderId: 'other-player', seq: 1, sentAt: now, index: 3, value: 7 } },
+        });
+
+        expect(events.map((e) => e.data.eventId)).toEqual(['e-live-2']);
+
+        // Peer leaves (disconnects) and reconnects on a new serverClientId -> allowed cleanly
+        handlers.get('leave')?.({ info: { client: 'sc-peer' } });
+        handlers.get('publication')?.({
+            info: { client: 'sc-peer-reconnected', user: 'u-peer' },
+            data: { type: 'cell-update', data: { eventId: 'e-reconn-4', senderId: 'peer-1', seq: 4, sentAt: now, index: 4, value: 8 } },
+        });
+        expect(events.map((e) => e.data.eventId)).toEqual(['e-live-2', 'e-reconn-4']);
     });
 });

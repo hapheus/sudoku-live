@@ -188,4 +188,30 @@ describe('WatchDirectory React component', () => {
         expect(hasTitle('SwiftFox#abcd')).toBe(true);
         expect(hasTitle('CalmOwl#ef01')).toBe(true);
     });
+
+    it('disables Join and Watch with an update message for incompatible protocol rooms', () => {
+        render(
+            <WatchDirectory
+                rooms={[
+                    {
+                        game_id: 'future-room-1',
+                        host_name: 'FutureHost',
+                        status: 'in_progress',
+                        difficulty: 'medium',
+                        variant: '3x3',
+                        filled_count: 10,
+                        protocolVersion: 99,
+                        minProtocolVersion: 99,
+                    },
+                ]}
+                onRefresh={vi.fn()}
+                onWatchGame={vi.fn()}
+                onJoinGame={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByText(/Update required/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Join' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Watch Live' })).toBeDisabled();
+    });
 });

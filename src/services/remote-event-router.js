@@ -1,6 +1,7 @@
 import { applyRemoteCellPatch, hydrateGameState } from '../domain/sudoku-engine.js';
 import { getBoardBackgroundById, selectBoardBackground } from './board-backgrounds.js';
 import { normalizeJoinPolicy } from './join-settings.js';
+import { validateIncomingGameMessage } from './message-security.js';
 import { sanitizePlayerName } from './player-name.js';
 
 function applySyncedVisuals(ctx, payload, boardLen, isSpectating) {
@@ -373,6 +374,10 @@ export function createRemoteEventRouter(ctx) {
     return (type, data) => {
         const handler = handlers[type];
         if (!handler) return;
-        handler(data, ctx.stateRef.current);
+        const cur = ctx.stateRef.current;
+        const totalCells = cur.gameState?.board?.length || 81;
+        const maxDigit = totalCells === 36 ? 6 : 9;
+        if (!validateIncomingGameMessage(type, data, totalCells, maxDigit)) return;
+        handler(data, cur);
     };
 }

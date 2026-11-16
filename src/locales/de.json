@@ -178,5 +178,8 @@
   "watchFilterVariantAll": "Alle Größen",
   "watchNoMatches": "Keine passenden Live-Spiele gefunden.",
   "watchClearFilters": "Filter zurücksetzen",
-  "watchDurationLabel": "Dauer"
+  "watchDurationLabel": "Dauer",
+  "watchUpdateRequired": "Update erforderlich",
+  "protocolUpdateRequired": "Für diese Partie ist eine neuere Version von Sudoku Shift erforderlich. Bitte aktualisiere die App.",
+  "protocolPartnerOutdated": "Ein anderer Spieler nutzt eine ältere App-Version. Einige Funktionen sind eventuell nicht verfügbar."
 }

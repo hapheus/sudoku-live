@@ -16,6 +16,7 @@ import {
 } from '../services/online-game-client.js';
 import { createRemoteEventRouter } from '../services/remote-event-router.js';
 import { normalizeJoinPolicy } from '../services/join-settings.js';
+import { checkProtocolCompatibility } from '../services/multiplayer-protocol.js';
 import {
     loadOnlineGameSnapshot,
     loadParticipantSession,
@@ -469,6 +470,15 @@ export function useOnlineSession({
         ticTacToe,
     ]);
 
+    const handleIncompatibleClient = useCallback((compat) => {
+        const m = stateRef.current.messages;
+        if (compat?.requiresUpdate === 'local') {
+            showFeedback(m?.protocolUpdateRequired || 'A newer version of Sudoku Shift is required for this match. Please update the app.');
+        } else if (compat?.requiresUpdate === 'remote') {
+            showFeedback(m?.protocolPartnerOutdated || 'Another player is using an older app version. Some features may be unavailable.');
+        }
+    }, [showFeedback, stateRef]);
+
     const enterSpectatorView = useCallback((gameId, announcementText = null) => {
         setNavTab('watch');
         setMode('watch');
@@ -503,6 +513,13 @@ export function useOnlineSession({
         setHintsMap(new Map());
         setRematchRequestedBy(null);
         const lobbyRoom = stateRef.current.activeLobbyRooms.find((r) => r.game_id === gameId);
+        if (lobbyRoom) {
+            const compat = checkProtocolCompatibility(lobbyRoom);
+            if (!compat.compatible && compat.requiresUpdate === 'local') {
+                handleIncompatibleClient(compat);
+                return;
+            }
+        }
         setHostJoinPolicy(normalizeJoinPolicy(lobbyRoom?.join_policy));
 
         const snapshot = loadOnlineGameSnapshot(gameId);
@@ -532,6 +549,7 @@ export function useOnlineSession({
             },
             onMemberJoin: handleGameMemberJoin,
             onMemberLeave: handleGameMemberLeave,
+            onIncompatibleClient: handleIncompatibleClient,
         });
     }, [
         clearUnitCelebration,
@@ -580,6 +598,7 @@ export function useOnlineSession({
             onPresenceChange: handleGamePresenceChange,
             onMemberJoin: handleGameMemberJoin,
             onMemberLeave: handleGameMemberLeave,
+            onIncompatibleClient: handleIncompatibleClient,
         });
 
         if (role === 'host') {
@@ -695,6 +714,13 @@ export function useOnlineSession({
         const cur = stateRef.current;
         const fromSpectatingSameRoom = cur.isSpectating && cur.onlineGameId === gameId;
         const lobbyRoom = cur.activeLobbyRooms.find((r) => r.game_id === gameId);
+        if (lobbyRoom) {
+            const compat = checkProtocolCompatibility(lobbyRoom);
+            if (!compat.compatible && compat.requiresUpdate === 'local') {
+                handleIncompatibleClient(compat);
+                return;
+            }
+        }
         const effectivePolicy = fromSpectatingSameRoom
             ? hostJoinPolicy
             : normalizeJoinPolicy(knownJoinPolicy || lobbyRoom?.join_policy);
@@ -1000,6 +1026,7 @@ export function useOnlineSession({
             },
             onMemberJoin: handleGameMemberJoin,
             onMemberLeave: handleGameMemberLeave,
+            onIncompatibleClient: handleIncompatibleClient,
         });
     }, [
         enterSpectatorView,

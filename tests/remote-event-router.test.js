@@ -109,4 +109,32 @@ describe('remote-event-router', () => {
         expect(setGameState).toHaveBeenCalled();
         expect(stateRef.current.gameState.elapsedSeconds).toBe(42);
     });
+
+    it('drops malformed game actions without mutating state', () => {
+        const setGameState = vi.fn();
+        const triggerFloatingReaction = vi.fn();
+        const setHostCursorIndex = vi.fn();
+        const router = createRemoteEventRouter({
+            stateRef: {
+                current: {
+                    isSpectating: true,
+                    gameState: { board: Array(81).fill(0), givens: Array(81).fill(false) },
+                },
+            },
+            onlineClientRef: { current: { clientId: 'c1' } },
+            setGameState,
+            triggerFloatingReaction,
+            setHostCursorIndex,
+        });
+
+        router('cell-update', { index: 999, value: 5 });
+        router('cell-update', { index: 0, value: 99 });
+        router('reaction', { emoji: 'malicious' });
+        router('cursor', { index: -5, role: 'host' });
+        router('ping', { gameState: 'not-an-object' });
+
+        expect(setGameState).not.toHaveBeenCalled();
+        expect(triggerFloatingReaction).not.toHaveBeenCalled();
+        expect(setHostCursorIndex).not.toHaveBeenCalled();
+    });
 });

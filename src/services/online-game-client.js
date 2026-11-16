@@ -2,6 +2,16 @@ import { Centrifuge } from 'centrifuge';
 import { createEventDeduper } from './event-deduper.js';
 import { normalizeJoinPolicy } from './join-settings.js';
 import {
+    createMessageOrderGuard,
+    createSenderIdentityGuard,
+} from './message-security.js';
+import {
+    buildProtocolMetadata,
+    checkProtocolCompatibility,
+    PROTOCOL_VERSION,
+    SUPPORTED_MULTIPLAYER_FEATURES,
+} from './multiplayer-protocol.js';
+import {
     assignUniqueMemberNames,
     loadOrCreatePlayerName,
     sanitizePlayerName,
@@ -47,8 +57,24 @@ export class OnlineGameClient {
         this.lobbyRoomsByGameId = new Map();
         this.hostedLobbyMeta = null;
         this.eventDeduper = createEventDeduper();
+        this.messageOrderGuard = createMessageOrderGuard();
+        this.senderIdentityGuard = createSenderIdentityGuard();
+        this.protocolMeta = buildProtocolMetadata();
+        this.negotiatedFeatures = new Set(SUPPORTED_MULTIPLAYER_FEATURES);
+        this.seqCounter = 0;
         this.clientId = getOrCreateClientId();
         this.playerName = sanitizePlayerName(playerName) || loadOrCreatePlayerName();
+    }
+
+    buildOutgoingEnvelope(data = {}) {
+        return {
+            ...data,
+            eventId: data.eventId || generateEventId(),
+            senderId: data.senderId || this.clientId,
+            seq: ++this.seqCounter,
+            sentAt: Date.now(),
+            protocolVersion: PROTOCOL_VERSION,
+        };
     }
 
     rememberEvent(eventId) {
@@ -165,6 +191,7 @@ export class OnlineGameClient {
         onPresenceChange = () => {},
         onMemberJoin = () => {},
         onMemberLeave = () => {},
+        onIncompatibleClient = () => {},
         onSubscribed = null,
     } = {}) {
         if (!isValidGameId(gameId)) {
@@ -173,6 +200,9 @@ export class OnlineGameClient {
 
         this.leaveGameChannel();
         this.eventDeduper.clear();
+        this.messageOrderGuard.clear();
+        this.senderIdentityGuard.clear();
+        this.negotiatedFeatures = new Set(SUPPORTED_MULTIPLAYER_FEATURES);
 
         this.currentGameId = gameId;
         this.activeServerClients.clear();
@@ -211,6 +241,7 @@ export class OnlineGameClient {
                     game_mode: this.gameMode,
                     join_policy: this.gameJoinPolicy,
                     name: this.playerName,
+                    ...this.protocolMeta,
                 },
             })).catch(() => {});
         };
@@ -270,6 +301,14 @@ export class OnlineGameClient {
                             if (!payload || !payload.type || payload.type === 'presence-announce') {
                                 continue;
                             }
+                            const histIdentityOk = this.senderIdentityGuard.verify({
+                                serverClientId: pub?.info?.client,
+                                serverUser: pub?.info?.user,
+                                senderId: payload.data?.senderId || payload.data?.id,
+                            });
+                            if (!histIdentityOk) {
+                                continue;
+                            }
                             const eventId = payload.data?.eventId;
                             if (eventId && this.rememberEvent(eventId)) {
                                 continue;
@@ -308,6 +347,7 @@ export class OnlineGameClient {
             if (!sc) return;
 
             this.activeServerClients.delete(sc);
+            this.senderIdentityGuard.releaseServerClient(sc);
             const leaving = this.gameMembersByServerClient.get(sc);
             this.gameMembersByServerClient.delete(sc);
 
@@ -321,11 +361,27 @@ export class OnlineGameClient {
             if (this.isSelfClientPublication(ctx)) return;
 
             const payload = ctx?.data;
-            if (!payload || !payload.type) return;
+            if (!payload || typeof payload.type !== 'string') return;
+
+            const claimedSenderId = payload.data?.senderId || payload.data?.id;
+            const identityOk = this.senderIdentityGuard.verify({
+                serverClientId: ctx?.info?.client,
+                serverUser: ctx?.info?.user,
+                senderId: claimedSenderId,
+            });
+            if (!identityOk) return;
 
             if (payload.type === 'presence-announce') {
                 const sc = ctx?.info?.client || payload.data?.serverClientId || payload.data?.id;
                 if (!sc || payload.data?.id === this.clientId) return;
+
+                const compat = checkProtocolCompatibility(payload.data || {});
+                if (!compat.compatible) {
+                    onIncompatibleClient(compat, payload.data || {});
+                } else {
+                    const nextNegotiated = compat.negotiatedFeatures.filter((f) => this.negotiatedFeatures.has(f));
+                    this.negotiatedFeatures = new Set(nextNegotiated);
+                }
 
                 const existed = this.gameMembersByServerClient.has(sc);
                 const member = {
@@ -335,6 +391,8 @@ export class OnlineGameClient {
                     game_mode: normalizeGameMode(payload.data?.game_mode),
                     join_policy: normalizeJoinPolicy(payload.data?.join_policy),
                     name: sanitizePlayerName(payload.data?.name) || 'Player',
+                    protocolVersion: compat.remoteVersion,
+                    clientPlatform: payload.data?.clientPlatform || 'web',
                 };
 
                 this.activeServerClients.add(sc);
@@ -362,6 +420,9 @@ export class OnlineGameClient {
             if (eventId && this.rememberEvent(eventId)) {
                 return;
             }
+            if (!this.messageOrderGuard.accept(payload.data || {})) {
+                return;
+            }
 
             onEvent(payload.type, payload.data || {});
         });
@@ -373,8 +434,10 @@ export class OnlineGameClient {
 
     sendWhisperEvent(type, data = {}) {
         if (this.gameChannel) {
+            const payloadData = this.buildOutgoingEnvelope(data);
+            this.rememberEvent(payloadData.eventId);
             try {
-                Promise.resolve(this.gameChannel.publish({ type, data })).catch(() => {});
+                Promise.resolve(this.gameChannel.publish({ type, data: payloadData })).catch(() => {});
             } catch {
                 // Ignore publish failure if channel is not ready
             }
@@ -388,13 +451,8 @@ export class OnlineGameClient {
     async broadcastGameEvent(gameId, type, data = {}) {
         if (!isValidGameId(gameId)) return;
 
-        const eventId = data.eventId || generateEventId();
-        const payloadData = {
-            ...data,
-            eventId,
-        };
-
-        this.rememberEvent(eventId);
+        const payloadData = this.buildOutgoingEnvelope(data);
+        this.rememberEvent(payloadData.eventId);
 
         if (this.gameChannel) {
             try {
@@ -474,6 +532,7 @@ export class OnlineGameClient {
                 join_policy: resolvedJoinPolicy,
                 host_name: resolvedHostName,
                 elapsed_seconds: resolvedElapsed,
+                ...this.protocolMeta,
             }
             : null;
 
@@ -649,6 +708,7 @@ export class OnlineGameClient {
             tic_tac_toe: Boolean(ticTacToe),
             host_name: resolvedHostName,
             elapsed_seconds: resolvedElapsed,
+            ...this.protocolMeta,
             updated_at: Date.now(),
         };
 
@@ -666,6 +726,7 @@ export class OnlineGameClient {
             tic_tac_toe: Boolean(ticTacToe),
             host_name: resolvedHostName,
             elapsed_seconds: resolvedElapsed,
+            ...this.protocolMeta,
         };
 
         if (this.lobbyChannel) {
@@ -693,6 +754,8 @@ export class OnlineGameClient {
             this.currentGameId = null;
             this.activeServerClients.clear();
             this.gameMembersByServerClient.clear();
+            this.messageOrderGuard.clear();
+            this.senderIdentityGuard.clear();
             this.gamePresenceReady = false;
         }
     }
