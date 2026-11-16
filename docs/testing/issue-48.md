@@ -10,4 +10,4 @@ Browser coverage: Dark/Light OS settings at 360×640, 390×844, 768×1024, 1280�
 
 Limits: Chromium/macOS, not Safari/native-device verification or full manual WCAG certification. Known fixed-nav full-element-capture artifact is documented in REPORT.md. Existing gameplay screenshot debt and >=90 quality remediation are outside this feature. No separate typecheck task exists.
 
-Final no-update Chromium run: **26/26 passed**, including all 36 Settings/System references and unchanged shift references.
+Final no-update Chromium run: **26/26 passed**, including all 24 Settings/System references and unchanged shift references.
