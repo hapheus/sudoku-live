@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import enMessages from '../locales/en.json';
 import { MAX_PLAYER_NAME_LENGTH, sanitizePlayerName } from '../services/player-name.js';
+import { PlayerTag } from './PlayerTag.jsx';
 import {
     IconAudioLines,
     IconBookOpen,
@@ -140,16 +141,7 @@ export function SettingsPanel({
                                 {messages.playerTagLabel || 'Your Tag'}:
                             </span>
                             <code id="player-tag-display" className="settings-player-name__tag">
-                                {(() => {
-                                    const hashIdx = playerTag.indexOf('#');
-                                    if (hashIdx === -1) return playerTag;
-                                    return (
-                                        <>
-                                            {playerTag.slice(0, hashIdx)}
-                                            <span className="player-tag__hash">{playerTag.slice(hashIdx)}</span>
-                                        </>
-                                    );
-                                })()}
+                                <PlayerTag tag={playerTag} />
                             </code>
                         </div>
                     )}

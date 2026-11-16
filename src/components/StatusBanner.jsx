@@ -3,6 +3,29 @@ import { getVariantSpec, inferVariantFromBoardLength } from '../domain/sudoku-ge
 import { formatGameDuration } from '../utils/format-duration.js';
 import enMessages from '../locales/en.json';
 
+function formatPartnerStatusLabel(partnerCount, partnerOnline, partnerMembers, messages) {
+    if (partnerCount > 1) {
+        return (messages.partnersOnline || '{count} Partners online').replace('{count}', String(partnerCount));
+    }
+    if (!partnerOnline) {
+        return messages.partnerDisconnected;
+    }
+    const singlePartnerName = partnerMembers[0]?.displayName;
+    return singlePartnerName ? `${singlePartnerName} (${messages.partnerOnline})` : messages.partnerOnline;
+}
+
+function formatSpectatorOpponentLabel(resolvedMode, hostOnline, guestCount, guestOnline) {
+    const hostState = hostOnline ? 'Online' : 'Offline';
+    if (resolvedMode === 'solo' && !guestOnline) {
+        return `Solo Player: ${hostState}`;
+    }
+    if (guestCount > 1) {
+        return `Host: ${hostState} | Partners: ${guestCount} Online`;
+    }
+    const guestState = guestOnline ? 'Online' : 'Offline';
+    return `Host: ${hostState} | Partner: ${guestState}`;
+}
+
 export function StatusBanner({
     connectionStatus,
     mode,
@@ -87,12 +110,7 @@ export function StatusBanner({
 
     if (!isSpectating) {
         if (isCoopActive && (myRole === 'host' || myRole === 'guest')) {
-            const singlePartnerName = partnerCount === 1 ? partnerMembers[0]?.displayName : null;
-            const partnerStatusLabel = partnerCount > 1
-                ? (messages.partnersOnline || '{count} Partners online').replace('{count}', String(partnerCount))
-                : (partnerOnline
-                    ? (singlePartnerName ? `${singlePartnerName} (${messages.partnerOnline})` : messages.partnerOnline)
-                    : messages.partnerDisconnected);
+            const partnerStatusLabel = formatPartnerStatusLabel(partnerCount, partnerOnline, partnerMembers, messages);
             opponentBadge = (
                 <span
                     id="opponent-status"
@@ -146,11 +164,7 @@ export function StatusBanner({
 
         opponentBadge = (
             <span id="opponent-status" className="presence-badge" aria-live="polite">
-                {resolvedMode === 'solo' && !guestOnline
-                    ? `Solo Player: ${hostOnline ? 'Online' : 'Offline'}`
-                    : guestCount > 1
-                        ? `Host: ${hostOnline ? 'Online' : 'Offline'} | Partners: ${guestCount} Online`
-                        : `Host: ${hostOnline ? 'Online' : 'Offline'} | Partner: ${guestOnline ? 'Online' : 'Offline'}`}
+                {formatSpectatorOpponentLabel(resolvedMode, hostOnline, guestCount, guestOnline)}
             </span>
         );
 

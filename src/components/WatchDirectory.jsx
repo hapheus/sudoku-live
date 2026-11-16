@@ -4,6 +4,104 @@ import { isValidGameId } from '../services/online-game-client.js';
 import { formatPlayerTag } from '../services/player-name.js';
 import { formatGameDuration } from '../utils/format-duration.js';
 import enMessages from '../locales/en.json';
+import { PlayerTag } from './PlayerTag.jsx';
+
+function resolveRoomLabels(game, difficultyLabels, pendingJoinGameId, messages) {
+    const inferredVariant = game.variant || inferVariantFromBoardLength(game.total_cells);
+    const spec = getVariantSpec(inferredVariant);
+    const totalCells = spec.totalCells;
+    const filledCount = Math.max(
+        0,
+        Math.min(totalCells, parseInt(game.filled_count ?? game.moves_count ?? 0, 10) || 0),
+    );
+    const diffLabel = difficultyLabels[game.difficulty] || messages.diffMedium;
+    const hasGuest = Boolean(game.has_guest);
+    const joinPolicy = game.join_policy || 'auto';
+    const joinsDisabled = joinPolicy === 'disabled';
+    const isPendingJoin = pendingJoinGameId === game.game_id;
+    const durationText = Number.isFinite(game.elapsed_seconds)
+        ? formatGameDuration(game.elapsed_seconds)
+        : null;
+    const hostTag = game.host_name
+        ? formatPlayerTag(game.host_name, game.host_tag || game.id || game.game_id)
+        : null;
+
+    let statusLabel = messages.watchOpen;
+    if (hasGuest) {
+        statusLabel = messages.watchCoop;
+    } else if (joinPolicy === 'disabled') {
+        statusLabel = messages.watchJoinsClosed || 'Watching only';
+    } else if (joinPolicy === 'confirm') {
+        statusLabel = messages.watchOpenConfirm || 'Approval needed';
+    }
+
+    let joinBtnLabel = messages.watchJoin;
+    if (joinsDisabled) {
+        joinBtnLabel = messages.watchJoinsDisabled || 'Closed';
+    } else if (isPendingJoin) {
+        joinBtnLabel = messages.watchJoinPending || 'Waiting...';
+    }
+
+    const metaText = [
+        spec.shortLabel,
+        diffLabel,
+        statusLabel,
+        `${filledCount}/${totalCells}`,
+        durationText,
+        game.tic_tac_toe ? (messages?.watchTicTacToeTag || 'Tic Tac Toe') : null,
+    ].filter(Boolean).join(' • ');
+
+    return { hostTag, metaText, joinsDisabled, joinBtnLabel };
+}
+
+function WatchGameCard({
+    game,
+    difficultyLabels,
+    pendingJoinGameId,
+    onJoinGame,
+    onWatchGame,
+    messages,
+}) {
+    const { hostTag, metaText, joinsDisabled, joinBtnLabel } = resolveRoomLabels(
+        game,
+        difficultyLabels,
+        pendingJoinGameId,
+        messages,
+    );
+    return (
+        <div className="live-game-card">
+            <div className="live-game-card__info">
+                <span className="live-game-card__title">
+                    {hostTag ? <PlayerTag tag={hostTag} /> : `Room #${game.game_id.slice(0, 8)}`}
+                </span>
+                <span className="live-game-card__meta">
+                    {metaText}
+                </span>
+            </div>
+            <div className="live-game-card__actions">
+                {onJoinGame && (
+                    <button
+                        type="button"
+                        className="live-game-card__join-btn"
+                        data-join-id={game.game_id}
+                        disabled={joinsDisabled || Boolean(game.tic_tac_toe) || Boolean(pendingJoinGameId)}
+                        onClick={() => onJoinGame(game.game_id)}
+                    >
+                        {joinBtnLabel}
+                    </button>
+                )}
+                <button
+                    type="button"
+                    className="live-game-card__action-btn"
+                    data-watch-id={game.game_id}
+                    onClick={() => onWatchGame(game.game_id)}
+                >
+                    {messages.watchLiveBtn}
+                </button>
+            </div>
+        </div>
+    );
+}
 
 export function WatchDirectory({
     rooms,
@@ -189,7 +287,7 @@ export function WatchDirectory({
             </div>
 
             <div id="live-games-list" className="live-games-list" role={filteredGames.length > 0 ? 'feed' : undefined}>
-                {liveGames.length === 0 ? (
+                {liveGames.length === 0 && (
                     <div className="watch-empty">
                         <p className="live-game-card__meta">
                             {canReconnect
@@ -200,7 +298,8 @@ export function WatchDirectory({
                             {messages.watchEmptySub}
                         </p>
                     </div>
-                ) : filteredGames.length === 0 ? (
+                )}
+                {liveGames.length > 0 && filteredGames.length === 0 && (
                     <div className="watch-empty">
                         <p className="live-game-card__meta">
                             {messages.watchNoMatches || 'No matching live games.'}
@@ -215,94 +314,18 @@ export function WatchDirectory({
                             </button>
                         )}
                     </div>
-                ) : (
-                    filteredGames.map((game) => {
-                        const inferredVariant = game.variant || inferVariantFromBoardLength(game.total_cells);
-                        const spec = getVariantSpec(inferredVariant);
-                        const totalCells = spec.totalCells;
-                        const filledCount = Math.max(
-                            0,
-                            Math.min(totalCells, parseInt(game.filled_count ?? game.moves_count ?? 0, 10) || 0),
-                        );
-                        const diffLabel = difficultyLabels[game.difficulty] || messages.diffMedium;
-                        const hasGuest = Boolean(game.has_guest);
-                        const joinPolicy = game.join_policy || 'auto';
-                        const joinsDisabled = joinPolicy === 'disabled';
-                        const isPendingJoin = pendingJoinGameId === game.game_id;
-                        const durationText = Number.isFinite(game.elapsed_seconds)
-                            ? formatGameDuration(game.elapsed_seconds)
-                            : null;
-                        const hostTag = game.host_name
-                            ? formatPlayerTag(game.host_name, game.host_tag || game.id || game.game_id)
-                            : null;
-
-                        let statusLabel = messages.watchOpen;
-                        if (hasGuest) {
-                            statusLabel = messages.watchCoop;
-                        } else if (joinPolicy === 'disabled') {
-                            statusLabel = messages.watchJoinsClosed || 'Watching only';
-                        } else if (joinPolicy === 'confirm') {
-                            statusLabel = messages.watchOpenConfirm || 'Approval needed';
-                        }
-
-                        let joinBtnLabel = messages.watchJoin;
-                        if (joinsDisabled) {
-                            joinBtnLabel = messages.watchJoinsDisabled || 'Closed';
-                        } else if (isPendingJoin) {
-                            joinBtnLabel = messages.watchJoinPending || 'Waiting...';
-                        }
-
-                        return (
-                            <div key={game.game_id} className="live-game-card">
-                                <div className="live-game-card__info">
-                                    <span className="live-game-card__title">
-                                        {hostTag ? (() => {
-                                            const hashIdx = hostTag.indexOf('#');
-                                            if (hashIdx === -1) return hostTag;
-                                            return (
-                                                <>
-                                                    {hostTag.slice(0, hashIdx)}
-                                                    <span className="player-tag__hash">{hostTag.slice(hashIdx)}</span>
-                                                </>
-                                            );
-                                        })() : `Room #${game.game_id.slice(0, 8)}`}
-                                    </span>
-                                    <span className="live-game-card__meta">
-                                        {[
-                                            spec.shortLabel,
-                                            diffLabel,
-                                            statusLabel,
-                                            `${filledCount}/${totalCells}`,
-                                            durationText,
-                                            game.tic_tac_toe ? (messages?.watchTicTacToeTag || 'Tic Tac Toe') : null,
-                                        ].filter(Boolean).join(' • ')}
-                                    </span>
-                                </div>
-                                <div className="live-game-card__actions">
-                                    {onJoinGame && (
-                                        <button
-                                            type="button"
-                                            className="live-game-card__join-btn"
-                                            data-join-id={game.game_id}
-                                            disabled={joinsDisabled || Boolean(game.tic_tac_toe) || Boolean(pendingJoinGameId)}
-                                            onClick={() => onJoinGame(game.game_id)}
-                                        >
-                                            {joinBtnLabel}
-                                        </button>
-                                    )}
-                                    <button
-                                        type="button"
-                                        className="live-game-card__action-btn"
-                                        data-watch-id={game.game_id}
-                                        onClick={() => onWatchGame(game.game_id)}
-                                    >
-                                        {messages.watchLiveBtn}
-                                    </button>
-                                </div>
-                            </div>
-                        );
-                    })
                 )}
+                {filteredGames.map((game) => (
+                    <WatchGameCard
+                        key={game.game_id}
+                        game={game}
+                        difficultyLabels={difficultyLabels}
+                        pendingJoinGameId={pendingJoinGameId}
+                        onJoinGame={onJoinGame}
+                        onWatchGame={onWatchGame}
+                        messages={messages}
+                    />
+                ))}
             </div>
         </section>
     );
