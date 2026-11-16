@@ -424,5 +424,13 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
         });
 
         expect(events.map((e) => e.data.eventId)).toEqual(['e-live-2']);
+
+        // Peer leaves (disconnects) and reconnects on a new serverClientId -> allowed cleanly
+        handlers.get('leave')?.({ info: { client: 'sc-peer' } });
+        handlers.get('publication')?.({
+            info: { client: 'sc-peer-reconnected', user: 'u-peer' },
+            data: { type: 'cell-update', data: { eventId: 'e-reconn-4', senderId: 'peer-1', seq: 4, sentAt: now, index: 4, value: 8 } },
+        });
+        expect(events.map((e) => e.data.eventId)).toEqual(['e-live-2', 'e-reconn-4']);
     });
 });

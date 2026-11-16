@@ -1,4 +1,5 @@
 import { ALLOWED_REACTIONS } from '../utils/watcher-helpers.js';
+import { isValidChallenge } from '../domain/tic-tac-toe.js';
 
 const VALID_JOIN_POLICIES = new Set(['auto', 'confirm', 'disabled']);
 const VALID_ROLES = new Set(['host', 'guest']);
@@ -21,9 +22,9 @@ const VALID_GAME_TYPES = new Set([
     'new-puzzle-cancel',
     'ping',
     'fist-bump',
-    'tic-tac-toe-start',
+    'tic-tac-toe-state',
+    'tic-tac-toe-shift',
     'tic-tac-toe-move',
-    'tic-tac-toe-end',
 ]);
 
 function isPlainObject(val) {
@@ -112,9 +113,13 @@ export function validateIncomingGameMessage(type, data, totalCells = 81, maxDigi
         return validateGameStatePayload(data);
     case 'fist-bump':
         return isValidCellIndex(data.index, totalCells);
+    case 'tic-tac-toe-state':
+        return isValidChallenge(data.challenge);
+    case 'tic-tac-toe-shift':
+        return typeof data.playerId === 'string' && data.playerId.length > 0;
     case 'tic-tac-toe-move':
-        return Number.isInteger(data.index) && data.index >= 0 && data.index < 9
-            && (data.symbol === 'X' || data.symbol === 'O');
+        return typeof data.playerId === 'string' && data.playerId.length > 0
+            && Number.isInteger(data.index) && data.index >= 0 && data.index < 9;
     default:
         return true;
     }
@@ -184,6 +189,15 @@ export function createSenderIdentityGuard() {
                 serverClientBySender.set(senderId, serverClientId);
             }
             return true;
+        },
+        releaseServerClient(serverClientId) {
+            if (!serverClientId) return;
+            const boundSender = senderByServerClient.get(serverClientId);
+            senderByServerClient.delete(serverClientId);
+            userByServerClient.delete(serverClientId);
+            if (boundSender && serverClientBySender.get(boundSender) === serverClientId) {
+                serverClientBySender.delete(boundSender);
+            }
         },
         clear() {
             senderByServerClient.clear();

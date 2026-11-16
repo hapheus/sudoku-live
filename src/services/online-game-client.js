@@ -301,6 +301,14 @@ export class OnlineGameClient {
                             if (!payload || !payload.type || payload.type === 'presence-announce') {
                                 continue;
                             }
+                            const histIdentityOk = this.senderIdentityGuard.verify({
+                                serverClientId: pub?.info?.client,
+                                serverUser: pub?.info?.user,
+                                senderId: payload.data?.senderId || payload.data?.id,
+                            });
+                            if (!histIdentityOk) {
+                                continue;
+                            }
                             const eventId = payload.data?.eventId;
                             if (eventId && this.rememberEvent(eventId)) {
                                 continue;
@@ -339,6 +347,7 @@ export class OnlineGameClient {
             if (!sc) return;
 
             this.activeServerClients.delete(sc);
+            this.senderIdentityGuard.releaseServerClient(sc);
             const leaving = this.gameMembersByServerClient.get(sc);
             this.gameMembersByServerClient.delete(sc);
 
@@ -745,6 +754,8 @@ export class OnlineGameClient {
             this.currentGameId = null;
             this.activeServerClients.clear();
             this.gameMembersByServerClient.clear();
+            this.messageOrderGuard.clear();
+            this.senderIdentityGuard.clear();
             this.gamePresenceReady = false;
         }
     }
