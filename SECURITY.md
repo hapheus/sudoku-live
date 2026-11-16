@@ -12,4 +12,4 @@ Do not post credentials, personal data, working attack payloads against the publ
 
 ## Supply-chain verification
 
-Container base images are pinned by manifest digest. The committed Gradle wrapper JAR is required bootstrap tooling, not an arbitrary release binary; its SHA-256 matches the official Gradle 8.14.3 wrapper checksum and is checked by wrapper-validation CI. Gradle also verifies the distribution archive checksum. See `docs/testing/issue-51.md` for the dated verification and remaining repository-level controls.
+Container base images are pinned by manifest digest. The committed Gradle wrapper JAR is required bootstrap tooling, not an arbitrary release binary; its SHA-256 matches the official Gradle 8.14.3 wrapper checksum and is checked by wrapper-validation CI. Gradle also verifies the distribution archive checksum. See `https://github.com/hapheus/sudoku-shift/issues/51` for the dated verification and remaining repository-level controls.

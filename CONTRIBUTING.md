@@ -12,7 +12,7 @@ English is mandatory throughout the entire project for all code, comments, commi
 
 ## Git Workflow & Branch Conventions
 
-- `main`: Protected integration and release branch (requires passing CI checks, quality >=90, and 2 Code Owner approvals). The live ruleset and integration order are documented in [Issue #51 verification](docs/testing/issue-51.md).
+- `main`: Protected integration and release branch (requires passing CI checks, quality >=90, and 2 Code Owner approvals). The live ruleset and integration order are documented in [GitHub issue #51](https://github.com/hapheus/sudoku-shift/issues/51).
 - `feat/<name>`: New features or enhancements (branched from `main`).
 - `fix/<name>`: Bug fixes (branched from `main`).
 - `docs/<name>`: Documentation updates (branched from `main`).
