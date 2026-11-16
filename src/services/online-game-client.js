@@ -29,6 +29,9 @@ import {
 
 export { generateEventId, generateGameId, isValidGameId, resolveRuntimeWsConfig };
 
+const PRESENCE_ANNOUNCE = 'presence-announce';
+const LOBBY_UPDATE = 'lobby-update';
+const RECOVERABLE_EVENTS = new Set(['init', 'sync', 'cell-update', 'new-puzzle-accept', 'new-puzzle-request', 'join-policy', 'tic-tac-toe-state', 'retro-mode']);
 const PRESENCE_SETTLE_TIMEOUT_MS = 350;
 
 function normalizeRole(role) {
@@ -37,6 +40,23 @@ function normalizeRole(role) {
 
 function normalizeGameMode(mode) {
     return mode === 'solo' || mode === 'online' ? mode : 'online';
+}
+
+function replayPublications(publications) {
+    const orderedPubs = [...publications].sort((a, b) => {
+        const ao = Number.isFinite(a?.offset) ? a.offset : 0;
+        const bo = Number.isFinite(b?.offset) ? b.offset : 0;
+        return ao - bo;
+    });
+    let startIdx = 0;
+    for (let i = orderedPubs.length - 1; i >= 0; i -= 1) {
+        const t = orderedPubs[i]?.data?.type;
+        if (t === 'new-puzzle-accept' || t === 'init' || t === 'sync') {
+            startIdx = i;
+            break;
+        }
+    }
+    return orderedPubs.slice(startIdx);
 }
 
 export class OnlineGameClient {
@@ -127,6 +147,93 @@ export class OnlineGameClient {
         return assignUniqueMemberNames(Array.from(this.gameMembersByServerClient.values()));
     }
 
+    publishHostedLobbyMeta() {
+        if (!this.lobbyChannel || !this.hostedLobbyMeta) return;
+        try {
+            Promise.resolve(this.lobbyChannel.publish({
+                type: LOBBY_UPDATE,
+                data: {
+                    ...this.hostedLobbyMeta,
+                    serverClientId: this.serverClientId || this.clientId,
+                    updated_at: Date.now(),
+                },
+            })).catch(() => {});
+        } catch {
+            // Publication remains best-effort during disconnects.
+        }
+    }
+
+    async replayGameHistory(sub, onEvent) {
+        const hist = await sub.history({ limit: 25 });
+        if (this.gameChannel !== sub || !Array.isArray(hist?.publications)) return;
+        if (this.gameRole === 'host' && this.gameMode === 'solo') return;
+        for (const pub of replayPublications(hist.publications)) {
+            const payload = pub?.data;
+            if (!payload || !payload.type || payload.type === PRESENCE_ANNOUNCE) {
+                continue;
+            }
+            const histIdentityOk = this.senderIdentityGuard.verify({
+                serverClientId: pub?.info?.client,
+                serverUser: pub?.info?.user,
+                senderId: payload.data?.senderId || payload.data?.id,
+            });
+            if (!histIdentityOk) {
+                continue;
+            }
+            const eventId = payload.data?.eventId;
+            if (eventId && this.rememberEvent(eventId)) {
+                continue;
+            }
+            if (RECOVERABLE_EVENTS.has(payload.type)) {
+                onEvent(payload.type, payload.data || {});
+            }
+        }    }
+
+    handlePresenceAnnouncement(ctx, payload, { onIncompatibleClient, onPresenceChange, onMemberJoin, finalizeInitialPresence }) {
+        const sc = ctx?.info?.client || payload.data?.serverClientId || payload.data?.id;
+        if (!sc || payload.data?.id === this.clientId) return;
+        if (!validatePresenceAnnounce(payload.data)) return;
+
+        const compat = checkProtocolCompatibility(payload.data || {});
+        if (!compat.compatible) {
+            onIncompatibleClient(compat, payload.data || {});
+        } else {
+            const nextNegotiated = compat.negotiatedFeatures.filter((f) => this.negotiatedFeatures.has(f));
+            this.negotiatedFeatures = new Set(nextNegotiated);
+        }
+
+        const existed = this.gameMembersByServerClient.has(sc);
+        const member = {
+            id: payload.data?.id || sc,
+            serverClientId: sc,
+            role: normalizeRole(payload.data?.role),
+            game_mode: normalizeGameMode(payload.data?.game_mode),
+            join_policy: normalizeJoinPolicy(payload.data?.join_policy),
+            name: sanitizePlayerName(payload.data?.name) || 'Player',
+            protocolVersion: compat.remoteVersion,
+            clientPlatform: payload.data?.clientPlatform || 'web',
+        };
+
+        this.activeServerClients.add(sc);
+        this.gameMembersByServerClient.set(sc, member);
+
+        if (!this.gamePresenceReady) {
+            const announcedAll = Array.from(this.activeServerClients).every(
+                (id) => id === this.serverClientId || this.gameMembersByServerClient.has(id),
+            );
+            if (announcedAll) {
+                finalizeInitialPresence();
+            }
+            return;
+        }
+
+        if (existed) {
+            onPresenceChange(this.getGameMembers());
+        } else {
+            onMemberJoin(member);
+        }
+    }
+
     updatePlayerName(name) {
         const nextName = sanitizePlayerName(name);
         if (!nextName || nextName === this.playerName) {
@@ -142,7 +249,7 @@ export class OnlineGameClient {
                     name: nextName,
                 });
             }
-            this.sendWhisperEvent('presence-announce', {
+            this.sendWhisperEvent(PRESENCE_ANNOUNCE, {
                 id: this.clientId,
                 serverClientId: selfKey,
                 role: this.gameRole,
@@ -156,20 +263,7 @@ export class OnlineGameClient {
                 ...this.hostedLobbyMeta,
                 host_name: nextName,
             };
-            if (this.lobbyChannel) {
-                try {
-                    Promise.resolve(this.lobbyChannel.publish({
-                        type: 'lobby-update',
-                        data: {
-                            ...this.hostedLobbyMeta,
-                            serverClientId: this.serverClientId || this.clientId,
-                            updated_at: Date.now(),
-                        },
-                    })).catch(() => {});
-                } catch {
-                    // Ignore publish error
-                }
-            }
+            this.publishHostedLobbyMeta();
         }
         return this.playerName;
     }
@@ -235,7 +329,7 @@ export class OnlineGameClient {
                 name: this.playerName,
             });
             Promise.resolve(sub.publish({
-                type: 'presence-announce',
+                type: PRESENCE_ANNOUNCE,
                 data: {
                     id: this.clientId,
                     serverClientId: selfKey,
@@ -279,59 +373,11 @@ export class OnlineGameClient {
                 onSubscribed();
             }
 
-            // Replay recent room history so late joiners / reconnects catch up cleanly
+            // History replay remains best-effort on reconnect.
             try {
-                const hist = await sub.history({ limit: 25 });
-                if (this.gameChannel === sub && Array.isArray(hist?.publications)) {
-                    const isAuthoritativeSoloHost = this.gameRole === 'host' && this.gameMode === 'solo';
-                    if (!isAuthoritativeSoloHost) {
-                        const orderedPubs = [...hist.publications].sort((a, b) => {
-                            const ao = Number.isFinite(a?.offset) ? a.offset : 0;
-                            const bo = Number.isFinite(b?.offset) ? b.offset : 0;
-                            return ao - bo;
-                        });
-                        let startIdx = 0;
-                        for (let i = orderedPubs.length - 1; i >= 0; i -= 1) {
-                            const t = orderedPubs[i]?.data?.type;
-                            if (t === 'new-puzzle-accept' || t === 'init' || t === 'sync') {
-                                startIdx = i;
-                                break;
-                            }
-                        }
-                        for (const pub of orderedPubs.slice(startIdx)) {
-                            const payload = pub?.data;
-                            if (!payload || !payload.type || payload.type === 'presence-announce') {
-                                continue;
-                            }
-                            const histIdentityOk = this.senderIdentityGuard.verify({
-                                serverClientId: pub?.info?.client,
-                                serverUser: pub?.info?.user,
-                                senderId: payload.data?.senderId || payload.data?.id,
-                            });
-                            if (!histIdentityOk) {
-                                continue;
-                            }
-                            const eventId = payload.data?.eventId;
-                            if (eventId && this.rememberEvent(eventId)) {
-                                continue;
-                            }
-                            if (
-                                payload.type === 'init'
-                                || payload.type === 'sync'
-                                || payload.type === 'cell-update'
-                                || payload.type === 'new-puzzle-accept'
-                                || payload.type === 'new-puzzle-request'
-                                || payload.type === 'join-policy'
-                                || payload.type === 'tic-tac-toe-state'
-                                || payload.type === 'retro-mode'
-                            ) {
-                                onEvent(payload.type, payload.data || {});
-                            }
-                        }
-                    }
-                }
+                await this.replayGameHistory(sub, onEvent);
             } catch {
-                // History replay is best-effort
+                // A stale/disconnected subscription may reject history.
             }
 
             if (expectedRemoteCount === 0) {
@@ -382,49 +428,8 @@ export class OnlineGameClient {
             });
             if (!identityOk) return;
 
-            if (payload.type === 'presence-announce') {
-                const sc = ctx?.info?.client || payload.data?.serverClientId || payload.data?.id;
-                if (!sc || payload.data?.id === this.clientId) return;
-                if (!validatePresenceAnnounce(payload.data)) return;
-
-                const compat = checkProtocolCompatibility(payload.data || {});
-                if (!compat.compatible) {
-                    onIncompatibleClient(compat, payload.data || {});
-                } else {
-                    const nextNegotiated = compat.negotiatedFeatures.filter((f) => this.negotiatedFeatures.has(f));
-                    this.negotiatedFeatures = new Set(nextNegotiated);
-                }
-
-                const existed = this.gameMembersByServerClient.has(sc);
-                const member = {
-                    id: payload.data?.id || sc,
-                    serverClientId: sc,
-                    role: normalizeRole(payload.data?.role),
-                    game_mode: normalizeGameMode(payload.data?.game_mode),
-                    join_policy: normalizeJoinPolicy(payload.data?.join_policy),
-                    name: sanitizePlayerName(payload.data?.name) || 'Player',
-                    protocolVersion: compat.remoteVersion,
-                    clientPlatform: payload.data?.clientPlatform || 'web',
-                };
-
-                this.activeServerClients.add(sc);
-                this.gameMembersByServerClient.set(sc, member);
-
-                if (!this.gamePresenceReady) {
-                    const announcedAll = Array.from(this.activeServerClients).every(
-                        (id) => id === this.serverClientId || this.gameMembersByServerClient.has(id),
-                    );
-                    if (announcedAll) {
-                        finalizeInitialPresence();
-                    }
-                    return;
-                }
-
-                if (existed) {
-                    onPresenceChange(this.getGameMembers());
-                } else {
-                    onMemberJoin(member);
-                }
+            if (payload.type === PRESENCE_ANNOUNCE) {
+                this.handlePresenceAnnouncement(ctx, payload, { onIncompatibleClient, onPresenceChange, onMemberJoin, finalizeInitialPresence });
                 return;
             }
 
@@ -488,7 +493,7 @@ export class OnlineGameClient {
                 join_policy: normalized,
             });
         }
-        this.sendWhisperEvent('presence-announce', {
+        this.sendWhisperEvent(PRESENCE_ANNOUNCE, {
             id: this.clientId,
             serverClientId: selfKey,
             role: this.gameRole,
@@ -555,14 +560,7 @@ export class OnlineGameClient {
 
         const publishHostedMeta = () => {
             if (this.lobbyChannel !== sub || !this.hostedLobbyMeta) return;
-            Promise.resolve(sub.publish({
-                type: 'lobby-update',
-                data: {
-                    ...this.hostedLobbyMeta,
-                    serverClientId: this.serverClientId || this.clientId,
-                    updated_at: Date.now(),
-                },
-            })).catch(() => {});
+            this.publishHostedLobbyMeta();
         };
 
         sub.on('subscribed', async () => {
@@ -589,7 +587,7 @@ export class OnlineGameClient {
                     const payload = pub?.data;
                     const data = payload?.data;
                     const sc = pub?.info?.client || data?.serverClientId;
-                    if (payload?.type !== 'lobby-update' || !validateLobbyUpdateMessage(data)) {
+                    if (payload?.type !== LOBBY_UPDATE || !validateLobbyUpdateMessage(data)) {
                         continue;
                     }
                     if (sc && this.lobbyActiveServerClients.size > 0 && !this.lobbyActiveServerClients.has(sc)) {
@@ -646,7 +644,7 @@ export class OnlineGameClient {
 
             const payload = ctx?.data;
             const data = payload?.data;
-            if (payload?.type !== 'lobby-update' || !validateLobbyUpdateMessage(data)) {
+            if (payload?.type !== LOBBY_UPDATE || !validateLobbyUpdateMessage(data)) {
                 return;
             }
 
@@ -707,25 +705,6 @@ export class OnlineGameClient {
         const resolvedHostName = sanitizePlayerName(hostName) || this.playerName;
         const resolvedElapsed = Math.max(0, Math.floor(Number(elapsedSeconds) || 0));
 
-        const payload = {
-            id: this.clientId,
-            serverClientId: this.serverClientId || this.clientId,
-            game_id: gameId,
-            status,
-            game_mode: normalizeGameMode(gameMode),
-            difficulty,
-            variant: resolvedVariant,
-            total_cells: resolvedTotalCells,
-            has_guest: Boolean(hasGuest),
-            filled_count: filledCount,
-            join_policy: resolvedJoinPolicy,
-            tic_tac_toe: Boolean(ticTacToe),
-            host_name: resolvedHostName,
-            elapsed_seconds: resolvedElapsed,
-            ...this.protocolMeta,
-            updated_at: Date.now(),
-        };
-
         this.hostedLobbyMeta = {
             id: this.clientId,
             game_id: gameId,
@@ -743,16 +722,7 @@ export class OnlineGameClient {
             ...this.protocolMeta,
         };
 
-        if (this.lobbyChannel) {
-            try {
-                Promise.resolve(this.lobbyChannel.publish({
-                    type: 'lobby-update',
-                    data: payload,
-                })).catch(() => {});
-            } catch {
-                // Ignore publish error
-            }
-        }
+        this.publishHostedLobbyMeta();
     }
 
     leaveGameChannel() {

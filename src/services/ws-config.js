@@ -79,9 +79,10 @@ export function buildWsUrl(wsConfig = {}) {
         return enforceSecureWsUrl(wsConfig.wsUrl);
     }
 
-    const browserProtocol = typeof window !== 'undefined' && window.location ? window.location.protocol : 'http:';
-    const browserHostname = typeof window !== 'undefined' && window.location ? window.location.hostname : 'localhost';
-    const isNativeCapacitor = typeof window !== 'undefined' && Boolean(window.Capacitor?.isNativePlatform?.());
+    const browser = typeof window === 'undefined' ? null : window;
+    const browserProtocol = browser?.location?.protocol || 'http:';
+    const browserHostname = browser?.location?.hostname || 'localhost';
+    const isNativeCapacitor = Boolean(browser?.Capacitor?.isNativePlatform?.());
 
     if (isNativeCapacitor && !wsConfig.host && !wsConfig.scheme && !wsConfig.port) {
         return 'wss://sudoku-ws.fraha.dev/connection/websocket';
@@ -103,7 +104,8 @@ export function buildWsUrl(wsConfig = {}) {
     const isHttps = !isLocalTarget || wantsHttps || isNativeCapacitor;
     const wsScheme = isHttps ? 'wss' : 'ws';
 
-    const defaultPort = isLocalTarget ? 8081 : (isHttps ? 443 : 80);
+    let defaultPort = isHttps ? 443 : 80;
+    if (isLocalTarget) defaultPort = 8081;
     const port = parseInt(wsConfig.port || defaultPort, 10);
     const omitPort = Number.isNaN(port) || (isHttps && port === 443) || (!isHttps && port === 80);
     const portSuffix = omitPort ? '' : `:${port}`;

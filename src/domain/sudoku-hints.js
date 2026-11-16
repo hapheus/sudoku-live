@@ -64,6 +64,18 @@ function findFullHouseHints({ board, givens, units, spec, isBoardCellValid, matc
     return matches;
 }
 
+function findSoundBlockingPeers(unit, targetIdx, digit, board, spec, isBoardCellValid) {
+    const peers = [];
+    for (const otherIdx of unit.indices) {
+        if (otherIdx === targetIdx || board[otherIdx] !== 0) continue;
+        const blocker = getPeerIndices(otherIdx, spec.id).find(peer => board[peer] === digit);
+        if (blocker === undefined) continue;
+        if (!isBoardCellValid(blocker)) return null;
+        peers.push(blocker);
+    }
+    return peers;
+}
+
 function findHiddenSingleHints({
     board,
     givens,
@@ -88,20 +100,8 @@ function findHiddenSingleHints({
             const targetIdx = spots[0];
             if (!matchesSolution(targetIdx, d)) continue;
 
-            const blockingPeers = [];
-            let peersSound = true;
-            for (const otherIdx of unit.indices) {
-                if (otherIdx === targetIdx || board[otherIdx] !== 0) continue;
-                const blocker = getPeerIndices(otherIdx, spec.id).find((p) => board[p] === d);
-                if (blocker !== undefined) {
-                    if (!isBoardCellValid(blocker)) {
-                        peersSound = false;
-                        break;
-                    }
-                    blockingPeers.push(blocker);
-                }
-            }
-            if (!peersSound) continue;
+            const blockingPeers = findSoundBlockingPeers(unit, targetIdx, d, board, spec, isBoardCellValid);
+            if (!blockingPeers) continue;
 
             matches.push({
                 index: targetIdx,

@@ -10,6 +10,11 @@ function seeded(seed) {
 }
 
 describe('logic-based difficulty', () => {
+    it('can stop at singles for the legacy analysis boundary', () => {
+        const puzzle = '012080000803400000005000090000800670700304001001027000034000000000000509000060830'.split('').map(Number);
+        expect(rateSudokuDifficulty(puzzle, '3x3', { maxTechnique: 'nakedSingles' }).solved).toBe(false);
+        expect(rateSudokuDifficulty(puzzle, '3x3', { maxTechnique: 'hiddenSingles' }).solved).toBe(true);
+    });
     it('rates a worked singles puzzle as easy and leaves input intact', () => {
         const original = [...easy];
         expect(rateSudokuDifficulty(easy).difficulty).toBe('easy');

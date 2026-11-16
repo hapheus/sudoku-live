@@ -20,6 +20,8 @@ import {
     IconX,
 } from './AppIcons.jsx';
 
+const ACTIVE_OPTION_CLASS = 'segmented-label--active';
+
 export function SettingsPanel({
     theme,
     language,
@@ -168,7 +170,7 @@ export function SettingsPanel({
                             return (
                                 <label
                                     key={opt.value}
-                                    className={`segmented-label ${active ? 'segmented-label--active' : ''}`}
+                                    className={`segmented-label ${active ? ACTIVE_OPTION_CLASS : ''}`}
                                 >
                                     <input
                                         type="radio"
@@ -198,7 +200,7 @@ export function SettingsPanel({
                             return (
                                 <label
                                     key={opt.value}
-                                    className={`segmented-label ${active ? 'segmented-label--active' : ''}`}
+                                    className={`segmented-label ${active ? ACTIVE_OPTION_CLASS : ''}`}
                                 >
                                     <input
                                         type="radio"
@@ -230,7 +232,7 @@ export function SettingsPanel({
                             return (
                                 <label
                                     key={String(opt.value)}
-                                    className={`segmented-label ${active ? 'segmented-label--active' : ''}`}
+                                    className={`segmented-label ${active ? ACTIVE_OPTION_CLASS : ''}`}
                                 >
                                     <input
                                         type="radio"
@@ -264,7 +266,7 @@ export function SettingsPanel({
                             return (
                                 <label
                                     key={String(opt.value)}
-                                    className={`segmented-label ${active ? 'segmented-label--active' : ''}`}
+                                    className={`segmented-label ${active ? ACTIVE_OPTION_CLASS : ''}`}
                                 >
                                     <input
                                         type="radio"
@@ -298,7 +300,7 @@ export function SettingsPanel({
                             return (
                                 <label
                                     key={String(opt.value)}
-                                    className={`segmented-label ${active ? 'segmented-label--active' : ''}`}
+                                    className={`segmented-label ${active ? ACTIVE_OPTION_CLASS : ''}`}
                                 >
                                     <input
                                         type="radio"
@@ -350,7 +352,7 @@ export function SettingsPanel({
                             return (
                                 <label
                                     key={String(opt.value)}
-                                    className={`segmented-label ${active ? 'segmented-label--active' : ''}`}
+                                    className={`segmented-label ${active ? ACTIVE_OPTION_CLASS : ''}`}
                                 >
                                     <input
                                         type="radio"
