@@ -22,6 +22,7 @@ test('two joined players and a spectator share the Tic Tac Toe easter egg', asyn
         await host.goto('http://127.0.0.1:5178/');
         await host.getByRole('button', { name: 'Play', exact: true }).click();
         await expect(host.locator('[role="gridcell"]')).toHaveCount(81);
+        const sudokuBoardBox = await host.locator('.sudoku-board').boundingBox();
         const originalBoard = await host.locator('[role="gridcell"]').allTextContents();
         await guest.goto(`http://127.0.0.1:5178/games/${roomId}?watch=1`);
         await expect(guest.locator('#connection-status')).toHaveText('Live');
@@ -38,8 +39,12 @@ test('two joined players and a spectator share the Tic Tac Toe easter egg', asyn
         await shift(host, 0, '#shift-row-down-btn');
         await shift(guest, 9, '#shift-row-up-btn');
         await expect(host.getByText("You undo me. I undo you. Let's settle this.")).toBeVisible();
+        await expect(host.locator('[role="gridcell"]')).toHaveCount(81);
         await expect(spectator.getByRole('heading', { name: 'Tic Tac Toe' })).toBeVisible();
         await expect(host.getByText("You are X. It's your turn.")).toBeVisible();
+        const tttBoardBox = await host.locator('.tic-tac-toe__board').boundingBox();
+        expect(Math.abs((tttBoardBox?.width ?? 0) - (sudokuBoardBox?.width ?? 0))).toBeLessThanOrEqual(1);
+        expect(Math.abs((tttBoardBox?.height ?? 0) - (sudokuBoardBox?.height ?? 0))).toBeLessThanOrEqual(1);
         await expect(guest.getByText('You are O. Waiting for your opponent.')).toBeVisible();
         await lateViewer.goto('http://127.0.0.1:5178/');
         await lateViewer.locator('#nav-watch').click();

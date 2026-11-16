@@ -23,6 +23,8 @@ export function isValidChallenge(value) {
         && Array.isArray(game.board) && game.board.length === 9
         && game.board.every((cell) => cell === null || cell === 'X' || cell === 'O')
         && (game.turn === 'X' || game.turn === 'O')
+        && (game.winner === undefined || game.winner === null || game.winner === 'X' || game.winner === 'O')
+        && (game.draw === undefined || typeof game.draw === 'boolean')
         && ['transition', 'playing', 'return'].includes(game.phase));
 }
 
@@ -33,7 +35,7 @@ export function createShiftChallenge() {
 export function recordShift(state, shift, members) {
     if (state.triggered) return state;
     if (!shift || !['row', 'col'].includes(shift.axis) || !Number.isInteger(shift.from)
-        || !Number.isInteger(shift.to) || shift.from < 0 || shift.from > 8 || shift.to < 0 || shift.to > 8
+        || !Number.isInteger(shift.to) || shift.from < 0 || shift.to < 0
         || shift.from === shift.to || ![-1, 1].includes(shift.direction)) return { ...state, shifts: [] };
     const players = members.filter((member) => member.role === 'host' || member.role === 'guest');
     if (players.length !== 2 || players.some((player) => !player.id)

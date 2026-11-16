@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createShiftChallenge, recordShift, playMove } from '../src/domain/tic-tac-toe.js';
+import { createShiftChallenge, isValidChallenge, recordShift, playMove } from '../src/domain/tic-tac-toe.js';
 
 describe('shift challenge', () => {
     it('starts after two consecutive inverse pairs by two joined players, ignoring spectators', () => {
@@ -64,5 +64,21 @@ describe('shift challenge', () => {
             }
             expect(state.game).toBeNull();
         }
+    });
+
+    it('supports shift indices above 8 for larger Sudoku variants', () => {
+        const members = [{ id: 'a', role: 'host' }, { id: 'b', role: 'guest' }];
+        let state = createShiftChallenge();
+        for (const [playerId, from, to, direction] of [['a', 10, 11, 1], ['b', 11, 10, -1], ['a', 10, 11, 1], ['b', 11, 10, -1]]) {
+            state = recordShift(state, { playerId, axis: 'row', from, to, direction }, members);
+        }
+        expect(state.game).toMatchObject({ players: { X: 'a', O: 'b' }, turn: 'X' });
+    });
+
+    it('rejects invalid winner or draw values in isValidChallenge', () => {
+        const baseGame = { players: { X: 'a', O: 'b' }, turn: 'X', board: Array(9).fill(null), phase: 'playing' };
+        expect(isValidChallenge({ triggered: true, shifts: [], game: { ...baseGame, winner: 'Z' } })).toBe(false);
+        expect(isValidChallenge({ triggered: true, shifts: [], game: { ...baseGame, draw: 'yes' } })).toBe(false);
+        expect(isValidChallenge({ triggered: true, shifts: [], game: { ...baseGame, winner: 'X', draw: false } })).toBe(true);
     });
 });

@@ -33,4 +33,17 @@ describe('TicTacToeView', () => {
         rerender(<TicTacToeView game={{ ...game, phase: 'return' }} playerId="a" onMove={() => {}} />);
         expect(screen.getByText('Well, that settled nothing. Back to Sudoku!')).toBeInTheDocument();
     });
+
+    it('uses localized messages when provided and focuses the section on mount', () => {
+        const game = { players: { X: 'a', O: 'b' }, turn: 'X', board: Array(9).fill(null), phase: 'playing' };
+        const messages = {
+            ticTacToeTitle: 'Tic Tac Toe',
+            ticTacToeYourTurn: 'Du bist {symbol}. Du bist dran.',
+            ticTacToeCellLabel: 'Zeile {row}, Spalte {col}',
+        };
+        render(<TicTacToeView game={game} playerId="a" onMove={() => {}} messages={messages} />);
+        expect(screen.getByText('Du bist X. Du bist dran.')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Zeile 1, Spalte 1' })).toBeInTheDocument();
+        expect(screen.getByRole('region', { name: 'Tic Tac Toe' })).toHaveFocus();
+    });
 });

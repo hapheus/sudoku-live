@@ -137,7 +137,7 @@ export function WatchDirectory({
                                         {`Room #${game.game_id.slice(0, 8)}`}
                                     </span>
                                     <span className="live-game-card__meta">
-                                        {`${spec.shortLabel} • ${diffLabel} • ${statusLabel} • ${filledCount}/${totalCells}${game.tic_tac_toe ? ' • Tic Tac Toe' : ''}`}
+                                        {[spec.shortLabel, diffLabel, statusLabel, `${filledCount}/${totalCells}`, game.tic_tac_toe ? (messages?.watchTicTacToeTag || 'Tic Tac Toe') : null].filter(Boolean).join(' • ')}
                                     </span>
                                 </div>
                                 <div className="live-game-card__actions">
