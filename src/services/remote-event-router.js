@@ -59,6 +59,9 @@ export function createRemoteEventRouter(ctx) {
             });
             ctx.setHintsMap(nextHints);
         }
+        if (cur.isSpectating && typeof data.isRetroMode === 'boolean') {
+            ctx.setRemoteRetroMode?.(data.isRetroMode);
+        }
         applySyncedVisuals(ctx, data, hydrated.board.length, cur.isSpectating);
         ctx.persistSnapshotIfNeeded(hydrated, data.rematchRequestedBy, syncedBg?.id || null);
     };
@@ -315,6 +318,9 @@ export function createRemoteEventRouter(ctx) {
             }
         }
         if (cur.myRole !== 'host') {
+            if (cur.isSpectating && typeof data.isRetroMode === 'boolean') {
+                ctx.setRemoteRetroMode?.(data.isRetroMode);
+            }
             applySyncedVisuals(ctx, data, cur.gameState.board?.length || 81, cur.isSpectating);
         }
     };
@@ -349,8 +355,14 @@ export function createRemoteEventRouter(ctx) {
             if (data && Number.isInteger(data.index)) {
                 ctx.triggerFistBumpEffect?.({
                     index: data.index,
+                    value: Number.isInteger(data.value) ? data.value : null,
                     phraseKey: data.phraseKey === 'fistBumpAmazing' ? 'fistBumpAmazing' : 'fistBumpAwesome',
                 });
+            }
+        },
+        'retro-mode': (data, cur) => {
+            if (cur.isSpectating && typeof data?.enabled === 'boolean') {
+                ctx.setRemoteRetroMode?.(data.enabled);
             }
         },
         'new-puzzle-request': (data, cur) => {

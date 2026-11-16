@@ -38,6 +38,7 @@ describe('remote-event-router', () => {
         router('fist-bump', { index: 4, phraseKey: 'fistBumpAmazing', senderId: 'host-1' });
         expect(triggerFistBumpEffect).toHaveBeenCalledWith({
             index: 4,
+            value: null,
             phraseKey: 'fistBumpAmazing',
         });
     });
