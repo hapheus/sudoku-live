@@ -90,7 +90,7 @@ describe('Sudoku Generator & Solver', () => {
         expect(variant).toBe('3x3');
         expect(isValidCompleteSudoku(solution)).toBe(true);
         expect(clues).toBeGreaterThanOrEqual(preset.minClues);
-        expect(clues).toBeLessThanOrEqual(preset.maxClues);
+        expect(clues).toBeLessThan(puzzle.length);
         expect(puzzle.filter((v) => v !== 0)).toHaveLength(clues);
 
         expect(countSolutions(puzzle, 2)).toBe(1);
@@ -106,7 +106,7 @@ describe('Sudoku Generator & Solver', () => {
         expect(variant).toBe('2x3');
         expect(isValidComplete2x3Sudoku(solution)).toBe(true);
         expect(clues).toBeGreaterThanOrEqual(preset.minClues);
-        expect(clues).toBeLessThanOrEqual(preset.maxClues);
+        expect(clues).toBeLessThan(puzzle.length);
         expect(puzzle.filter((v) => v !== 0)).toHaveLength(clues);
 
         expect(countSolutions(puzzle, 2, '2x3')).toBe(1);

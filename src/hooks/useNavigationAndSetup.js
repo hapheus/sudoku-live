@@ -404,7 +404,7 @@ export function useNavigationAndSetup({
         const launchGame = () => {
             const curState = stateRef.current.gameState;
             const curVar = normalizeVariant(curState.variant || inferVariantFromBoardLength(curState.board?.length));
-            const matchesSelection = curVar === cur.variant && curState.difficulty === cur.difficulty;
+            const matchesSelection = curVar === cur.variant && (curState.requestedDifficulty || curState.difficulty) === cur.difficulty;
 
             if (!hasUnsavedProgress(curState) && !isCoop && matchesSelection && curState.status !== 'solved') {
                 setNavTab('play');

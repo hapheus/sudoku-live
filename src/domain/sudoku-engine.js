@@ -140,6 +140,7 @@ export function createSudokuGame({ difficulty = 'medium', variant = null, puzzle
         boxCols: spec.boxCols,
         maxDigit: spec.maxDigit,
         difficulty: generated.difficulty,
+        requestedDifficulty: generated.requestedDifficulty || difficulty,
         board,
         givens,
         solution: [...generated.solution],
@@ -381,6 +382,7 @@ export function serializeGameState(state) {
     return {
         variant: spec.id,
         difficulty: state.difficulty,
+        requestedDifficulty: state.requestedDifficulty || state.difficulty,
         board: state.board,
         givens: state.givens,
         solution: state.solution,
@@ -429,6 +431,7 @@ export function hydrateGameState(raw) {
         boxCols: spec.boxCols,
         maxDigit: spec.maxDigit,
         difficulty: raw.difficulty || 'medium',
+        requestedDifficulty: Object.hasOwn(spec.presets, raw.requestedDifficulty) ? raw.requestedDifficulty : (raw.difficulty || 'medium'),
         board,
         givens,
         solution,

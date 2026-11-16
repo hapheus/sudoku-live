@@ -1,6 +1,7 @@
 import js from '@eslint/js';
 import reactHooks from 'eslint-plugin-react-hooks';
 import sonarjs from 'eslint-plugin-sonarjs';
+import tsParser from '@typescript-eslint/parser';
 
 export default [
     {
@@ -18,7 +19,7 @@ export default [
     js.configs.recommended,
     sonarjs.configs.recommended,
     {
-        files: ['src/**/*.{js,jsx}'],
+        files: ['src/**/*.{js,jsx,ts}'],
         languageOptions: {
             ecmaVersion: 'latest',
             sourceType: 'module',
@@ -64,4 +65,5 @@ export default [
             'sonarjs/pseudo-random': 'off',
         },
     },
+    { files: ['src/**/*.ts'], languageOptions: { parser: tsParser } },
 ];

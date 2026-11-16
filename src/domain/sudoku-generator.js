@@ -1,3 +1,4 @@
+import { rateSudokuDifficulty } from './sudoku-rating.ts';
 /**
  * Sudoku Generator & Uniqueness-Guaranteed Solver
  *
@@ -505,7 +506,8 @@ function digPuzzleFromSolution(solution, targetClues, rng, variant = '3x3') {
  * @param {'easy'|'medium'|'hard'|'expert'} difficulty
  * @param {() => number} rng
  * @param {'3x3'|'2x3'} variant
- * @returns {{ puzzle: number[], solution: number[], difficulty: string, variant: '3x3'|'2x3', clues: number }}
+ * Bounded retries prefer the requested logic tier; fallback reports its actual tier, never a clue-count label.
+ * @returns {{ puzzle: number[], solution: number[], difficulty: string, requestedDifficulty: string, variant: '3x3'|'2x3', clues: number }}
  */
 export function generateSudoku(difficulty = 'medium', rng = Math.random, variant = '3x3') {
     const spec = getVariantSpec(variant);
@@ -514,9 +516,11 @@ export function generateSudoku(difficulty = 'medium', rng = Math.random, variant
     const targetClues = preset.minClues + Math.floor(rng() * (preset.maxClues - preset.minClues + 1));
 
     let bestCandidate = null;
+    let bestDistance = Infinity;
+    const tiers = ['easy', 'medium', 'hard', 'expert'];
     const maxAttempts = normalizedDifficulty === 'expert' ? 10 : 6;
 
-    for (let attempt = 0; attempt < maxAttempts + 4; attempt++) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
         const solution = generateSolvedBoard(rng, spec.id);
         const { puzzle, clues } = digPuzzleFromSolution(solution, targetClues, rng, spec.id);
 
@@ -527,39 +531,22 @@ export function generateSudoku(difficulty = 'medium', rng = Math.random, variant
         const candidate = {
             puzzle,
             solution,
-            difficulty: normalizedDifficulty,
+            difficulty: rateSudokuDifficulty(puzzle, spec.id).difficulty,
+            requestedDifficulty: normalizedDifficulty,
             variant: spec.id,
             clues,
         };
 
-        if (attempt < maxAttempts) {
-            const nakedOnly = analyzeLogicDifficulty(puzzle, { allowHiddenSingles: false, variant: spec.id });
-            const withHidden = analyzeLogicDifficulty(puzzle, { allowHiddenSingles: true, variant: spec.id });
-
-            if (normalizedDifficulty === 'easy' && nakedOnly.solved) {
-                return candidate;
-            }
-
-            if (normalizedDifficulty === 'medium' && clues <= preset.maxClues && withHidden.solved && !nakedOnly.solved) {
-                return candidate;
-            }
-
-            if (normalizedDifficulty === 'hard' && clues <= preset.maxClues && !nakedOnly.solved) {
-                return candidate;
-            }
-
-            if (normalizedDifficulty === 'expert' && clues <= preset.maxClues && !withHidden.solved) {
-                return candidate;
-            }
+        if (candidate.difficulty === normalizedDifficulty && clues <= preset.maxClues) {
+            return candidate;
         }
 
-        if (!bestCandidate || Math.abs(clues - targetClues) < Math.abs(bestCandidate.clues - targetClues)) {
+        const distance = Math.abs(tiers.indexOf(candidate.difficulty) - tiers.indexOf(normalizedDifficulty));
+        if (distance < bestDistance || (distance === bestDistance && (!bestCandidate || Math.abs(clues - targetClues) < Math.abs(bestCandidate.clues - targetClues)))) {
             bestCandidate = candidate;
+            bestDistance = distance;
         }
 
-        if (attempt >= maxAttempts - 1 && bestCandidate) {
-            return bestCandidate;
-        }
     }
 
     if (!bestCandidate || !verifyGeneratedPuzzle(bestCandidate.puzzle, bestCandidate.solution, spec.id)) {
