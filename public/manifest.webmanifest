@@ -4,7 +4,7 @@
   "description": "Real-time Co-op & Spectator Sudoku powered by Centrifugo",
   "start_url": "/",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
   "icons": [

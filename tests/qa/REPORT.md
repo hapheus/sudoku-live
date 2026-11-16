@@ -62,3 +62,24 @@ References were captured on macOS with the installed Playwright Chromium; other 
   - `npm run lint`: 0 errors.
   - `npm run build`: passed.
   - `npx playwright test tests/qa/multiplayer-lobby.spec.ts`: 13 passed (keyboard player name persistence & randomize, touch targets >= 44×44 px, zero horizontal overflow and zero axe WCAG 2.1 AA violations on Watch and Settings across 360×640, 390×844, 768×1024, 1280×800, 1440×900, and 844×390 in dark and light themes).
+
+## Update — 2026-11-16 (Device Support, Responsive Design & Play Landscape Critique)
+
+- **Changes**:
+  - Enabled landscape and all iPad orientations in `ios/App/App/Info.plist` (`UIRequiresFullScreen = false`), `ios/App/App/AppDelegate.swift` (`supportedInterfaceOrientationsFor`), and `public/manifest.webmanifest` (`"orientation": "any"`).
+  - Implemented `.gameplay-stage` CSS Grid layouts in `src/styles/app.css` and `src/components/GamePlayView.jsx` for phone landscape (`@media (orientation: landscape) and (max-height: 540px)`), iPad / Desktop / itch.io (`@media (min-width: 900px) and (min-height: 540px)`), and dual-screen / iPhone Duo (`@media (horizontal-viewport-segments: 2)`).
+  - Applied all 5 P0–P2 fixes from `/impeccable critique`:
+    - P0: Docked `SolveSummary` into `.gameplay-stage__side` when `status === 'solved'` instead of showing `PlayerControls` / `SpectatorHintsFeed`.
+    - P1: Hid `.tool-btn__kbd` on touch/small devices (`@media (min-width: 520px) and (hover: hover) and (pointer: fine)`).
+    - P1: Positioned `.gameplay-stage__side` (`position: relative`) so `SpectatorPeekOverlay` scopes to the side column in landscape.
+    - P2: Moved `messages.shiftHintNoCell` inline into `.shift-bar__hint` in `src/components/PlayerControls.jsx`.
+    - P2: Strengthened dark-mode `--color-reveal-scrim` to `rgba(15, 19, 26, 0.84)`.
+- **Checks**:
+  - `npm run test`: 42 files, 215 tests passed.
+  - `npm run quality`: passed (`lint` + `test`).
+  - `npm run build` & `npm run cap:sync`: passed.
+  - `impeccable detect --json`: 0 findings (`[]`) on `GamePlayView.jsx` and `PlayerControls.jsx`.
+  - `npx playwright test tests/qa/game.spec.ts --update-snapshots`: 17 passed; visually inspected `game-dark-844x390.png` and `game-light-844x390.png`.
+  - `npx playwright test`: 35 passed, 1 skipped (`tic-tac-toe-online.spec.ts` online lobby), 8 screenshot subpixel diffs (12–85 px, 0.01 ratio) in `tests/qa/game.spec.ts`.
+  - Native iOS Simulator build (`xcodebuild ... -destination id=5D7AE121-DE31-4F71-817A-CE7B2E554BF3`) & launch on `iPhone 18 Pro` (iOS 27.0): `BUILD SUCCEEDED`, app launched cleanly.
+  - **Blocked**: `iPhone Duo` simulator (`com.apple.CoreSimulator.SimDeviceType.iPhone-Duo`) requires `minRuntimeVersionString: 27.1.0`, while only iOS 18.1, 26.5, and 27.0 runtimes are installed (`xcrun simctl create` error 403 `Incompatible device`).

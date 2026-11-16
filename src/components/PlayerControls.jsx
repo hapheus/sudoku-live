@@ -235,9 +235,16 @@ export function PlayerControls({
                             : undefined
                     }
                 >
-                    <span className="shift-bar__label" aria-hidden="true">
-                        {shiftBarLabelText}
-                    </span>
+                    <div className="shift-bar__label-group">
+                        <span className="shift-bar__label" aria-hidden="true">
+                            {shiftBarLabelText}
+                        </span>
+                        {!isRetroMode && konamiPhase !== 'ab' && !canShift && !isSolved && (
+                            <span className="shift-bar__hint">
+                                {messages.shiftHintNoCell || 'Select a cell to shift its row or column within its box'}
+                            </span>
+                        )}
+                    </div>
                     <div className="shift-bar__actions">
                         {renderShiftActions()}
                     </div>
