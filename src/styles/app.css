@@ -3251,3 +3251,235 @@ body {
     }
 }
 
+
+.tic-tac-toe-transition-stage {
+    position: relative;
+}
+
+.tic-tac-toe-transition-stage--active {
+    perspective: 1100px;
+}
+
+.tic-tac-toe-transition-stage--active .board-wrapper {
+    pointer-events: none;
+    animation: sudokuMorphOut 2.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.tic-tac-toe-transition {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.25rem;
+    pointer-events: none;
+}
+
+.tic-tac-toe-transition__text {
+    margin: 0;
+    max-width: 20ch;
+    padding: 1.1rem 1.5rem;
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+    border: 2px solid var(--color-primary);
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+    color: var(--color-text);
+    font-size: clamp(1.35rem, 4.8vw, 2.25rem);
+    font-weight: 800;
+    line-height: 1.2;
+    letter-spacing: -0.015em;
+    text-align: center;
+    animation: ticTacToeCallout 2.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes sudokuMorphOut {
+    0% {
+        opacity: 1;
+        transform: scale(1) rotateY(0deg);
+        filter: blur(0);
+    }
+    15%, 72% {
+        opacity: 0.35;
+        transform: scale(0.98) rotateY(0deg);
+        filter: blur(1.5px);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(0.84) rotateY(90deg);
+        filter: blur(4px);
+    }
+}
+
+@keyframes ticTacToeCallout {
+    0% {
+        opacity: 0;
+        transform: scale(0.75);
+    }
+    14%, 76% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(1.08);
+    }
+}
+
+@keyframes ticTacToeMorphIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.84) rotateY(-90deg);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1) rotateY(0deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tic-tac-toe-transition-stage--active .board-wrapper {
+        animation: none;
+        opacity: 0.25;
+    }
+
+    .tic-tac-toe-transition__text,
+    .tic-tac-toe__board {
+        animation: none;
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.tic-tac-toe {
+    width: 100%;
+    text-align: center;
+    outline: none;
+}
+
+.tic-tac-toe__header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.7rem;
+}
+
+.tic-tac-toe__title {
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+}
+
+.tic-tac-toe__status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.35rem 0.9rem;
+    border-radius: var(--radius-full);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.tic-tac-toe__status--winner {
+    border-color: var(--color-success);
+    color: var(--color-success);
+}
+
+.tic-tac-toe .board-wrapper {
+    perspective: 1100px;
+}
+
+.tic-tac-toe__board {
+    width: calc(100% - 1.5rem);
+    aspect-ratio: 1 / 1;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+    gap: 0;
+    background: var(--color-surface);
+    border: 2.5px solid var(--color-grid-box);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+    transition: border-color 250ms ease;
+    animation: ticTacToeMorphIn 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.tic-tac-toe__board--won {
+    border-color: var(--color-success);
+}
+
+.tic-tac-toe__cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    font-family: var(--font-sans);
+    font-size: clamp(2.25rem, 10vw, 4.5rem);
+    font-weight: 800;
+    cursor: pointer;
+    color: var(--color-text);
+    background: transparent;
+    border: none;
+    border-right: 1px solid var(--color-grid-cell);
+    border-bottom: 1px solid var(--color-grid-cell);
+    transition: background-color 120ms ease, transform 120ms ease;
+}
+
+.tic-tac-toe__cell--x {
+    color: var(--color-user);
+}
+
+.tic-tac-toe__cell--o {
+    color: var(--color-partner);
+}
+
+.tic-tac-toe__cell--winner {
+    background: var(--color-selected-cell);
+}
+
+.tic-tac-toe__cell:not(:disabled):hover {
+    background: var(--color-surface-hover);
+}
+
+.tic-tac-toe__cell:nth-child(3n) {
+    border-right: none;
+}
+
+.tic-tac-toe__cell:nth-child(n + 7) {
+    border-bottom: none;
+}
+
+.tic-tac-toe__cell:disabled {
+    opacity: 1;
+    cursor: default;
+}
+
+.tic-tac-toe__cell:focus-visible {
+    outline: 3px solid var(--color-primary);
+    outline-offset: -3px;
+}
+
+[data-retro="true"] .tic-tac-toe__board,
+[data-retro="true"] .tic-tac-toe__status,
+[data-retro="true"] .tic-tac-toe-transition__text {
+    border-radius: 0 !important;
+    border: 3px solid var(--color-border) !important;
+    box-shadow: 4px 4px 0 var(--color-border) !important;
+}
+
+[data-retro="true"] .tic-tac-toe__cell {
+    border-radius: 0 !important;
+    text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.25);
+}

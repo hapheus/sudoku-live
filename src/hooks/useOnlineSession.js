@@ -126,6 +126,7 @@ export function useOnlineSession({
     triggerFloatingReaction,
     triggerFistBumpEffect = null,
     handleRemoteCellSolveForFistBump = null,
+    ticTacToe = null,
     announce,
     showFeedback,
 }) {
@@ -176,9 +177,10 @@ export function useOnlineSession({
                 totalCells: specInfo.totalCells,
                 hasGuest: guestOnline,
                 joinPolicy: curJoinPolicy,
+                ticTacToe: Boolean(ticTacToe?.challengeRef.current.game),
             },
         );
-    }, [onlineClientRef, stateRef]);
+    }, [onlineClientRef, stateRef, ticTacToe]);
 
     const joinActionsRef = useRef({
         approveJoin: () => {},
@@ -261,7 +263,7 @@ export function useOnlineSession({
         });
     }, [setHintsMap]);
 
-    const handleRemoteGameEvent = useMemo(() => createRemoteEventRouter({
+    const routeRemoteGameEvent = useMemo(() => createRemoteEventRouter({
         stateRef,
         onlineClientRef,
         pendingJoinTimerRef,
@@ -324,10 +326,23 @@ export function useOnlineSession({
         triggerUnitCelebration,
     ]);
 
+    const handleRemoteGameEvent = useCallback((type, data) => {
+        if (type.startsWith('tic-tac-toe-')) {
+            ticTacToe?.onEvent(type, data);
+            return;
+        }
+        if (type === 'new-puzzle-accept') ticTacToe?.reset();
+        if ((type === 'sync' || type === 'init') && data?.ticTacToe && stateRef.current.myRole !== 'host') {
+            ticTacToe?.update(data.ticTacToe);
+        }
+        routeRemoteGameEvent(type, data);
+    }, [routeRemoteGameEvent, stateRef, ticTacToe]);
+
     const buildSyncPayload = useCallback(() => {
         const cur = stateRef.current;
         return {
             gameState: serializeGameState(cur.gameState),
+            ticTacToe: ticTacToe?.challengeRef.current,
             boardBackgroundId: cur.boardBackground?.id || null,
             rematchRequestedBy: cur.rematchRequestedBy,
             hints: Array.from(cur.hintsMap.entries()),
@@ -335,12 +350,13 @@ export function useOnlineSession({
             hostActiveDigit: cur.myRole === 'host' ? cur.activeDigit : undefined,
             hintPreview: cur.myRole === 'host' ? buildHintPreviewPayload(cur.pendingHint) : null,
         };
-    }, [stateRef]);
+    }, [stateRef, ticTacToe]);
 
     const handleGamePresenceChange = useCallback((members) => {
         const resolved = onlineClientRef.current?.getGameMembers() || members || [];
         setCurrentMembers(resolved);
         stateRef.current.currentMembers = resolved;
+        ticTacToe?.onMembersChange(resolved);
 
         const cur = stateRef.current;
         if (cur.isSpectating) {
@@ -353,7 +369,7 @@ export function useOnlineSession({
             onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'sync', buildSyncPayload());
             syncLobbyProgress();
         }
-    }, [buildSyncPayload, onlineClientRef, setCurrentMembers, setHostJoinPolicy, stateRef, syncLobbyProgress]);
+    }, [buildSyncPayload, onlineClientRef, setCurrentMembers, setHostJoinPolicy, stateRef, syncLobbyProgress, ticTacToe]);
 
     const handleGameMemberJoin = useCallback((member) => {
         const prevMembers = stateRef.current.currentMembers;
@@ -361,6 +377,7 @@ export function useOnlineSession({
         const nextMembers = authoritative || (prevMembers.some((m) => m.id === member.id) ? prevMembers : [...prevMembers, member]);
         setCurrentMembers(nextMembers);
         stateRef.current.currentMembers = nextMembers;
+        ticTacToe?.onMembersChange(nextMembers);
 
         const cur = stateRef.current;
         if (cur.isSpectating && member?.role === 'host' && member.join_policy) {
@@ -387,6 +404,7 @@ export function useOnlineSession({
         showFeedback,
         stateRef,
         syncLobbyProgress,
+        ticTacToe,
     ]);
 
     const handleGameMemberLeave = useCallback((member) => {
@@ -394,11 +412,16 @@ export function useOnlineSession({
         if (authoritative) {
             setCurrentMembers(authoritative);
             stateRef.current.currentMembers = authoritative;
+            ticTacToe?.onMembersChange(authoritative);
         } else {
-            setCurrentMembers((prev) => prev.filter((m) => m.id !== member.id));
+            const remaining = stateRef.current.currentMembers.filter((m) => m.id !== member.id);
+            stateRef.current.currentMembers = remaining;
+            setCurrentMembers(remaining);
+            ticTacToe?.onMembersChange(remaining);
         }
 
         if (member?.role === 'host') {
+            ticTacToe?.onHostLeave();
             setHostCursorIndex(null);
             setRemoteActiveDigit(null);
         } else if (member?.role === 'guest') {
@@ -440,6 +463,7 @@ export function useOnlineSession({
         setRemoteActiveDigit,
         stateRef,
         syncLobbyProgress,
+        ticTacToe,
     ]);
 
     const enterSpectatorView = useCallback((gameId, announcementText = null) => {
@@ -809,6 +833,7 @@ export function useOnlineSession({
         { restoreSaved = false, startSession = true } = {},
     ) => {
         clearUnitCelebration();
+        if (!restoreSaved) ticTacToe?.reset();
         const saved = restoreSaved ? loadSoloGameSnapshot() : null;
         const isRestoringSaved = Boolean(saved && saved.gameState.status !== 'solved');
         const diff = isRestoringSaved
@@ -919,6 +944,7 @@ export function useOnlineSession({
         setSelectedIndex,
         setVariant,
         stateRef,
+        ticTacToe,
     ]);
 
     const resumeOnlineGame = useCallback((gameId) => {

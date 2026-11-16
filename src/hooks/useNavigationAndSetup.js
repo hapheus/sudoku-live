@@ -61,6 +61,7 @@ export function useNavigationAndSetup({
     startNewSoloGame,
     broadcastCursor,
     broadcastActiveDigit,
+    resetTicTacToe = () => {},
     announce,
     showFeedback,
 }) {
@@ -262,6 +263,7 @@ export function useNavigationAndSetup({
             const targetVariant = normalizeVariant(
                 cur.gameState.variant || inferVariantFromBoardLength(cur.gameState.board?.length),
             );
+            resetTicTacToe();
             const nextState = createSudokuGame({ difficulty: cur.difficulty, variant: targetVariant });
             const nextBg = selectBoardBackground({ previousId: cur.boardBackground?.id });
             setGameState(nextState);
@@ -305,6 +307,7 @@ export function useNavigationAndSetup({
         setSelectedIndex,
         showFeedback,
         startNewSoloGame,
+        resetTicTacToe,
         stateRef,
         syncLobbyProgress,
     ]);

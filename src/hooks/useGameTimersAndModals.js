@@ -37,7 +37,7 @@ export function useGameTimersAndModals({
             if (navTab !== 'play' || !isPlayingGame || (typeof document !== 'undefined' && document.hidden)) {
                 return;
             }
-            if (stateRef.current.isHelpOpen || stateRef.current.pendingConfirm) {
+            if (stateRef.current.isHelpOpen || stateRef.current.pendingConfirm || stateRef.current.ticTacToeActive) {
                 return;
             }
             setGameState((prev) => {

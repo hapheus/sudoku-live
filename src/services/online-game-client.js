@@ -549,7 +549,7 @@ export class OnlineGameClient {
         filledCount,
         difficulty = 'medium',
         gameMode = 'solo',
-        { variant = '3x3', totalCells = null, hasGuest = false, joinPolicy = 'confirm' } = {},
+        { variant = '3x3', totalCells = null, hasGuest = false, joinPolicy = 'confirm', ticTacToe = false } = {},
     ) {
         if (!isValidGameId(gameId)) return;
 
@@ -569,6 +569,7 @@ export class OnlineGameClient {
             has_guest: Boolean(hasGuest),
             filled_count: filledCount,
             join_policy: resolvedJoinPolicy,
+            tic_tac_toe: Boolean(ticTacToe),
             updated_at: Date.now(),
         };
 
@@ -583,6 +584,7 @@ export class OnlineGameClient {
             has_guest: Boolean(hasGuest),
             filled_count: filledCount,
             join_policy: resolvedJoinPolicy,
+            tic_tac_toe: Boolean(ticTacToe),
         };
 
         if (this.lobbyChannel) {

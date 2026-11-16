@@ -23,6 +23,7 @@ import { useGameTimersAndModals } from './hooks/useGameTimersAndModals.js';
 import { useKeyboardNavigation } from './hooks/useKeyboardNavigation.js';
 import { useNavigationAndSetup } from './hooks/useNavigationAndSetup.js';
 import { useOnlineSession } from './hooks/useOnlineSession.js';
+import { useTicTacToe } from './hooks/useTicTacToe.js';
 import { AlertBannerDialog } from './components/AlertBannerDialog.jsx';
 import { GamePlayView } from './components/GamePlayView.jsx';
 import { SetupView } from './components/SetupView.jsx';
@@ -195,6 +196,14 @@ export function App() {
         messages,
     };
 
+    const ticTacToe = useTicTacToe({ stateRef, onlineClientRef });
+    stateRef.current.ticTacToeActive = Boolean(ticTacToe.challenge.game);
+    const setTicTacToeRoom = ticTacToe.setRoom;
+
+    useEffect(() => {
+        setTicTacToeRoom(onlineGameId);
+    }, [onlineGameId, setTicTacToeRoom]);
+
     useEffect(() => () => {
         if (pendingJoinTimerRef.current) {
             clearTimeout(pendingJoinTimerRef.current);
@@ -358,9 +367,14 @@ export function App() {
         triggerFloatingReaction,
         triggerFistBumpEffect,
         handleRemoteCellSolveForFistBump,
+        ticTacToe,
         announce,
         showFeedback,
     });
+
+    useEffect(() => {
+        syncLobbyProgress();
+    }, [ticTacToe.challenge.game, syncLobbyProgress]);
 
     useGameTimersAndModals({
         navTab,
@@ -411,6 +425,7 @@ export function App() {
         announce,
         showFeedback,
         onLocalCellSolveForFistBump: handleLocalCellSolveForFistBump,
+        onTicTacToeShift: ticTacToe.onShift,
         isRetroMode,
     });
 
@@ -498,6 +513,7 @@ export function App() {
         startNewSoloGame,
         broadcastCursor,
         broadcastActiveDigit,
+        resetTicTacToe: ticTacToe.reset,
         announce,
         showFeedback,
     });
@@ -506,7 +522,7 @@ export function App() {
         isHelpOpen,
         pendingConfirm,
         navTab,
-        isPlayingGame,
+        isPlayingGame: isPlayingGame && !ticTacToe.challenge.game,
         isSpectating,
         selectedIndex,
         stateRef,
@@ -539,7 +555,7 @@ export function App() {
     );
     const isCoopSession = !isSpectating && (mode === 'online' || partnerOnline || myRole === 'guest');
     const hostOnline = currentMembers.some((m) => m.role === 'host');
-    const canJoinSpectated = isSpectating && hostOnline && hostJoinPolicy !== 'disabled' && gameState.status !== 'solved' && Boolean(onlineGameId);
+    const canJoinSpectated = isSpectating && hostOnline && hostJoinPolicy !== 'disabled' && gameState.status !== 'solved' && !ticTacToe.challenge.game && Boolean(onlineGameId);
     const canResumeGame = !isSpectating && mode !== 'watch' && (hasUnsavedProgress(gameState) || isCoopSession);
 
     const watchPartnerCursorIndices = useMemo(
@@ -739,6 +755,8 @@ export function App() {
                         currentMembers={currentMembers}
                         spectatedGameMode={spectatedGameMode}
                         gameState={gameState}
+                        ticTacToeGame={ticTacToe.challenge.game}
+                        onTicTacToeMove={ticTacToe.onMove}
                         onReconnect={handleReconnect}
                         onContinueSolo={handleContinueSolo}
                         selectedIndex={selectedIndex}
@@ -864,6 +882,8 @@ export function App() {
                         currentMembers={currentMembers}
                         spectatedGameMode={spectatedGameMode}
                         gameState={gameState}
+                        ticTacToeGame={ticTacToe.challenge.game}
+                        onTicTacToeMove={ticTacToe.onMove}
                         onReconnect={handleReconnect}
                         onContinueSolo={handleContinueSolo}
                         selectedIndex={selectedIndex}

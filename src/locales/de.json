@@ -152,5 +152,16 @@
   "konamiAbPrompt": "Code",
   "fistBumpAwesome": "Awesome!",
   "fistBumpAmazing": "Amazing!",
-  "fistBumpAnnouncement": "Fist Bump! Beide haben {cell} gleichzeitig gelöst — {phrase}"
+  "fistBumpAnnouncement": "Fist Bump! Beide haben {cell} gleichzeitig gelöst — {phrase}",
+  "ticTacToeTitle": "Tic Tac Toe",
+  "ticTacToeTransition": "Du machst mich rückgängig. Ich dich auch. Klären wir das.",
+  "ticTacToeReturn": "Das hat nichts geklärt. Zurück zum Sudoku!",
+  "ticTacToeWinner": "Spieler {winner} gewinnt!",
+  "ticTacToeDraw": "Unentschieden!",
+  "ticTacToeWatching": "Tic Tac Toe (Zuschauer). Spieler {turn} ist dran.",
+  "ticTacToeYourTurn": "Du bist {symbol}. Du bist dran.",
+  "ticTacToeWaitTurn": "Du bist {symbol}. Warte auf deinen Mitspieler.",
+  "ticTacToeBoardLabel": "Tic-Tac-Toe-Spielfeld",
+  "ticTacToeCellLabel": "Zeile {row}, Spalte {col}",
+  "watchTicTacToeTag": "Tic Tac Toe"
 }

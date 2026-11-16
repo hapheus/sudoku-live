@@ -3,6 +3,7 @@ import { SolveSummary } from './SolveSummary.jsx';
 import { SpectatorHintsFeed } from './SpectatorHintsFeed.jsx';
 import { StatusBanner } from './StatusBanner.jsx';
 import { SudokuBoard } from './SudokuBoard.jsx';
+import { TicTacToeView } from './TicTacToeView.jsx';
 
 export function GamePlayView({
     mainClassName,
@@ -16,6 +17,8 @@ export function GamePlayView({
     currentMembers,
     spectatedGameMode,
     gameState,
+    ticTacToeGame = null,
+    onTicTacToeMove = () => {},
     onReconnect,
     onContinueSolo = null,
     selectedIndex,
@@ -60,6 +63,16 @@ export function GamePlayView({
                 messages={messages}
             />
 
+            {ticTacToeGame && ticTacToeGame.phase !== 'transition' ? (
+                <TicTacToeView
+                    game={ticTacToeGame}
+                    playerId={myClientId}
+                    isSpectating={isSpectating}
+                    onMove={onTicTacToeMove}
+                    messages={messages}
+                />
+            ) : <>
+            <div className={ticTacToeGame?.phase === 'transition' ? 'tic-tac-toe-transition-stage tic-tac-toe-transition-stage--active' : 'tic-tac-toe-transition-stage'}>
             <SudokuBoard
                 gameState={gameState}
                 selectedIndex={selectedIndex}
@@ -77,6 +90,14 @@ export function GamePlayView({
                 boardBackground={boardBackground}
                 messages={messages}
             />
+            {ticTacToeGame?.phase === 'transition' && (
+                <div className="tic-tac-toe-transition" role="status" aria-live="polite">
+                    <p className="tic-tac-toe-transition__text">
+                        {messages?.ticTacToeTransition || "You undo me. I undo you. Let's settle this."}
+                    </p>
+                </div>
+            )}
+            </div>
 
             {actionFeedback && (
                 <div id="action-feedback" className="action-feedback" role="status">
@@ -108,6 +129,7 @@ export function GamePlayView({
             />
 
             {bottomControls}
+            </>}
         </main>
     );
 }
