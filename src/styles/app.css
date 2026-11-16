@@ -1379,6 +1379,7 @@ body {
 
 .shift-bar {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
@@ -1390,6 +1391,10 @@ body {
     flex-direction: column;
     gap: 0.1rem;
     min-width: 0;
+}
+
+.shift-bar__label-group:has(.shift-bar__hint) {
+    flex-basis: 100%;
 }
 
 .shift-bar__label {
@@ -1412,7 +1417,7 @@ body {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.45rem;
-    flex: 1;
+    flex: 1 0 calc(4 * var(--touch-min) + 3 * 0.45rem);
 }
 
 .shift-btn {
@@ -3681,6 +3686,10 @@ body {
 }
 
 @media (orientation: landscape) and (max-height: 540px) {
+    .app-container--with-nav:has(.settings-panel) {
+        max-width: min(100%, 920px);
+    }
+
     .app-container--gameplay {
         max-width: min(100%, 920px);
     }

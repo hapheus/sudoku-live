@@ -100,7 +100,7 @@ export function SettingsPanel({
                             className="settings-player-name__input"
                             value={draftPlayerName}
                             maxLength={MAX_PLAYER_NAME_LENGTH}
-                            pattern="[A-Za-z0-9_-]+"
+                            pattern="[A-Za-z0-9_\-]+"
                             placeholder={messages.playerNamePlaceholder || 'Enter your name'}
                             aria-invalid={isPlayerNameInvalid ? 'true' : undefined}
                             aria-describedby={isPlayerNameInvalid ? 'player-name-error player-name-hint' : 'player-name-hint'}
