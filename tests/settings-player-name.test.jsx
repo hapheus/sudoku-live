@@ -27,8 +27,14 @@ describe('SettingsPanel player name controls', () => {
         const input = screen.getByLabelText('Player Name');
         expect(input).toHaveValue('SwiftFox');
 
-        fireEvent.change(input, { target: { value: '  Alice  ' } });
-        expect(onChangePlayerName).toHaveBeenCalledWith('Alice');
+        fireEvent.change(input, { target: { value: 'Alice_01-x' } });
+        expect(onChangePlayerName).toHaveBeenCalledWith('Alice_01-x');
+        expect(input).not.toHaveAttribute('aria-invalid', 'true');
+
+        onChangePlayerName.mockClear();
+        fireEvent.change(input, { target: { value: 'Alice Bob!' } });
+        expect(onChangePlayerName).not.toHaveBeenCalled();
+        expect(input).toHaveAttribute('aria-invalid', 'true');
 
         const randomizeBtn = screen.getByRole('button', { name: 'Randomize player name' });
         fireEvent.click(randomizeBtn);

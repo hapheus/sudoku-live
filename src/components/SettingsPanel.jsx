@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import enMessages from '../locales/en.json';
-import { MAX_PLAYER_NAME_LENGTH, sanitizePlayerName } from '../services/player-name.js';
+import { isValidPlayerName, MAX_PLAYER_NAME_LENGTH } from '../services/player-name.js';
 import { PlayerTag } from './PlayerTag.jsx';
 import {
     IconAudioLines,
@@ -49,6 +49,8 @@ export function SettingsPanel({
     useEffect(() => {
         setDraftPlayerName(playerName || '');
     }, [playerName]);
+
+    const isPlayerNameInvalid = draftPlayerName.length > 0 && !isValidPlayerName(draftPlayerName);
     const themeOptions = [
         { value: 'dark', label: messages.themeDark, Icon: IconMoon },
         { value: 'light', label: messages.themeLight, Icon: IconSun },
@@ -98,22 +100,20 @@ export function SettingsPanel({
                             className="settings-player-name__input"
                             value={draftPlayerName}
                             maxLength={MAX_PLAYER_NAME_LENGTH}
+                            pattern="[A-Za-z0-9_-]+"
                             placeholder={messages.playerNamePlaceholder || 'Enter your name'}
-                            aria-describedby="player-name-hint"
+                            aria-invalid={isPlayerNameInvalid ? 'true' : undefined}
+                            aria-describedby={isPlayerNameInvalid ? 'player-name-error player-name-hint' : 'player-name-hint'}
                             onChange={(e) => {
                                 const raw = e.target.value;
                                 setDraftPlayerName(raw);
-                                const sanitized = sanitizePlayerName(raw);
-                                if (sanitized) {
-                                    onChangePlayerName(sanitized);
+                                if (isValidPlayerName(raw)) {
+                                    onChangePlayerName(raw);
                                 }
                             }}
                             onBlur={() => {
-                                const sanitized = sanitizePlayerName(draftPlayerName);
-                                if (!sanitized) {
+                                if (!isValidPlayerName(draftPlayerName)) {
                                     setDraftPlayerName(playerName || '');
-                                } else {
-                                    setDraftPlayerName(sanitized);
                                 }
                             }}
                         />
@@ -132,6 +132,11 @@ export function SettingsPanel({
                             </svg>
                         </button>
                     </div>
+                    {isPlayerNameInvalid && (
+                        <p id="player-name-error" className="settings-player-name__error" role="alert">
+                            {messages.playerNameInvalid || 'Only letters, numbers, - and _ are allowed.'}
+                        </p>
+                    )}
                     <p id="player-name-hint" className="settings-player-name__hint">
                         {messages.playerNameHint || 'Shown to co-op partners and spectators. Duplicate names get a number suffix automatically.'}
                     </p>

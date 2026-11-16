@@ -3,6 +3,7 @@ import {
     PLAYER_NAME_STORAGE_KEY,
     MAX_PLAYER_NAME_LENGTH,
     generateRandomPlayerName,
+    isValidPlayerName,
     sanitizePlayerName,
     loadOrCreatePlayerName,
     savePlayerName,
@@ -30,9 +31,17 @@ describe('player-name service', () => {
         expect(names.size).toBeGreaterThan(1);
     });
 
-    it('sanitizes custom player names by trimming, collapsing spaces, stripping control chars, and truncating', () => {
-        expect(sanitizePlayerName('   Alice   Bob  ')).toBe('Alice Bob');
-        expect(sanitizePlayerName('Bob\u0000\u001f')).toBe('Bob');
+    it('validates and sanitizes player names to [A-Za-z0-9_-] only', () => {
+        expect(isValidPlayerName('Alice_01-x')).toBe(true);
+        expect(isValidPlayerName('Alice Bob')).toBe(false);
+        expect(isValidPlayerName('Alice!')).toBe(false);
+        expect(isValidPlayerName('<script>')).toBe(false);
+        expect(isValidPlayerName('')).toBe(false);
+        expect(isValidPlayerName(null)).toBe(false);
+
+        expect(sanitizePlayerName('   Alice   Bob  ')).toBe('AliceBob');
+        expect(sanitizePlayerName('Bob!@#$_1-2')).toBe('Bob_1-2');
+        expect(sanitizePlayerName({ evil: true })).toBe('');
         expect(sanitizePlayerName('   ')).toBe('');
         expect(sanitizePlayerName(null)).toBe('');
         const longName = 'A'.repeat(40);
@@ -56,13 +65,14 @@ describe('player-name service', () => {
         expect(localStorage.getItem(PLAYER_NAME_STORAGE_KEY)).toBe(name);
     });
 
-    it('saves custom player names locally and rejects empty names', () => {
-        expect(savePlayerName('  Clara  ', localStorage)).toBe('Clara');
-        expect(localStorage.getItem(PLAYER_NAME_STORAGE_KEY)).toBe('Clara');
-        expect(loadOrCreatePlayerName(localStorage)).toBe('Clara');
+    it('saves custom player names locally and rejects invalid or empty names', () => {
+        expect(savePlayerName('Clara_1', localStorage)).toBe('Clara_1');
+        expect(localStorage.getItem(PLAYER_NAME_STORAGE_KEY)).toBe('Clara_1');
+        expect(loadOrCreatePlayerName(localStorage)).toBe('Clara_1');
 
+        expect(savePlayerName('  Clara  ', localStorage)).toBeNull();
         expect(savePlayerName('   ', localStorage)).toBeNull();
-        expect(localStorage.getItem(PLAYER_NAME_STORAGE_KEY)).toBe('Clara');
+        expect(localStorage.getItem(PLAYER_NAME_STORAGE_KEY)).toBe('Clara_1');
     });
 
     it('adds automatic duplicate suffixes case-insensitively', () => {

@@ -168,6 +168,7 @@
   "playerTagLabel": "Your Tag",
   "playerNamePlaceholder": "Enter your name",
   "playerNameRandomize": "Randomize player name",
+  "playerNameInvalid": "Only letters, numbers, - and _ are allowed.",
   "playerNameHint": "Shown to co-op partners and spectators. Duplicate names get a number suffix automatically.",
   "joinRequestMessageNamed": "{name} would like to join this puzzle in Co-op mode.",
   "watchSearchLabel": "Search live games",

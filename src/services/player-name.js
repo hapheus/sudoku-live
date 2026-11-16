@@ -2,6 +2,7 @@ import { getDefaultStorage, getStorageItem, setStorageItem } from '../utils/stor
 
 export const PLAYER_NAME_STORAGE_KEY = 'sudoku_player_name';
 export const MAX_PLAYER_NAME_LENGTH = 24;
+export const VALID_PLAYER_NAME_RE = /^[A-Za-z0-9_-]+$/;
 
 const ADJECTIVES = [
     'Swift', 'Calm', 'Bright', 'Clever', 'Solar', 'Lucky', 'Bold', 'Quiet',
@@ -23,18 +24,21 @@ function randomIndex(length) {
 }
 
 /**
- * Strips control characters, collapses whitespace, and caps length for safe display.
+ * Returns true if raw is a non-empty player name containing only [A-Za-z0-9_-] up to MAX_PLAYER_NAME_LENGTH.
+ */
+export function isValidPlayerName(raw) {
+    return typeof raw === 'string'
+        && raw.length >= 1
+        && raw.length <= MAX_PLAYER_NAME_LENGTH
+        && VALID_PLAYER_NAME_RE.test(raw);
+}
+
+/**
+ * Strips any characters outside [A-Za-z0-9_-] and caps length for safe display.
  */
 export function sanitizePlayerName(raw) {
     if (typeof raw !== 'string') return '';
-    let cleaned = '';
-    for (let i = 0; i < raw.length; i += 1) {
-        const code = raw.charCodeAt(i);
-        if (code >= 32 && code !== 127) {
-            cleaned += raw[i];
-        }
-    }
-    return cleaned.trim().replace(/\s+/g, ' ').slice(0, MAX_PLAYER_NAME_LENGTH);
+    return raw.replace(/[^A-Za-z0-9_-]/g, '').slice(0, MAX_PLAYER_NAME_LENGTH);
 }
 
 /**
@@ -60,15 +64,14 @@ export function loadOrCreatePlayerName(storage = getDefaultStorage('local')) {
 }
 
 /**
- * Sanitizes and persists a custom player name; returns null if empty.
+ * Validates and persists a custom player name; returns null if invalid.
  */
 export function savePlayerName(name, storage = getDefaultStorage('local')) {
-    const sanitized = sanitizePlayerName(name);
-    if (!sanitized) {
+    if (!isValidPlayerName(name)) {
         return null;
     }
-    setStorageItem(PLAYER_NAME_STORAGE_KEY, sanitized, storage);
-    return sanitized;
+    setStorageItem(PLAYER_NAME_STORAGE_KEY, name, storage);
+    return name;
 }
 
 /**
@@ -78,7 +81,8 @@ export function resolveUniquePlayerName(desiredName, existingNames = []) {
     const base = sanitizePlayerName(desiredName) || 'Player';
     const taken = new Set(
         (existingNames || [])
-            .map((name) => sanitizePlayerName(name).toLowerCase())
+            .filter((name) => typeof name === 'string')
+            .map((name) => name.trim().toLowerCase())
             .filter(Boolean),
     );
 
