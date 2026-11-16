@@ -55,4 +55,7 @@ Notes:
 - **`itch-package`** (`ubuntu-latest`): `npm run build:itch`, `npm run verify:itch`, and uploads `sudoku-live-itch.zip` as an artifact.
 - **`docker-smoke`** (`ubuntu-latest`): `npm run docker:config`, builds and starts `docker compose`, and verifies `/up`, `/env-config.js`, and Centrifugo `/health`.
 - **`e2e-playwright`** (`ubuntu-latest`): `npm run e2e -- --ignore-snapshots` (functional & `axe-core` checks on Linux without macOS font-diff false positives) and uploads traces/reports on failure.
+
+[`.github/workflows/ios-simulator.yml`](../../.github/workflows/ios-simulator.yml) is optional and triggered manually via `workflow_dispatch`:
+
 - **`ios-simulator`** (`macos-latest`): `ruby -c ios/fastlane/Fastfile`, `npm run ios:preflight`, and `fastlane simulator` (`CODE_SIGNING_ALLOWED=NO`).
