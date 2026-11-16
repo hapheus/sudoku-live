@@ -1,8 +1,14 @@
 import { ALLOWED_REACTIONS } from '../utils/watcher-helpers.js';
 import { isValidChallenge } from '../domain/tic-tac-toe.js';
+import { isValidGameId } from './ws-config.js';
 
 const VALID_JOIN_POLICIES = new Set(['auto', 'confirm', 'disabled']);
 const VALID_ROLES = new Set(['host', 'guest']);
+const VALID_MEMBER_ROLES = new Set(['host', 'guest', 'spectator']);
+const VALID_LOBBY_MODES = new Set(['solo', 'online']);
+const VALID_LOBBY_STATUSES = new Set(['waiting', 'in_progress', 'solved', 'finished']);
+const VALID_DIFFICULTIES = new Set(['easy', 'medium', 'hard', 'expert']);
+const VALID_VARIANTS = new Set(['3x3', '2x3', '9x9', '6x6']);
 const VALID_GAME_TYPES = new Set([
     'init',
     'sync',
@@ -69,9 +75,50 @@ function validateHint(data, totalCells, maxDigit) {
 }
 
 function validateGameStatePayload(data) {
-    return isPlainObject(data.gameState)
-        && Array.isArray(data.gameState.board)
-        && Array.isArray(data.gameState.givens);
+    if (!isPlainObject(data.gameState)) return false;
+    const { board, givens, elapsedSeconds } = data.gameState;
+    if (!Array.isArray(board) || !Array.isArray(givens)) return false;
+    if ((board.length !== 81 && board.length !== 36) || givens.length !== board.length) return false;
+    if (elapsedSeconds !== undefined && (!Number.isFinite(elapsedSeconds) || elapsedSeconds < 0)) return false;
+    return true;
+}
+
+/**
+ * Validates complete presence-announce payloads so manipulated member fields cannot crash clients.
+ */
+export function validatePresenceAnnounce(data) {
+    if (!isPlainObject(data)) return false;
+    if (typeof data.id !== 'string' || data.id.length < 4 || data.id.length > 64) return false;
+    if (data.role !== undefined && !VALID_MEMBER_ROLES.has(data.role)) return false;
+    if (data.game_mode !== undefined && !VALID_LOBBY_MODES.has(data.game_mode)) return false;
+    if (data.join_policy !== undefined && !VALID_JOIN_POLICIES.has(data.join_policy)) return false;
+    if (data.name !== undefined && data.name !== null && typeof data.name !== 'string') return false;
+    if (data.clientPlatform !== undefined && typeof data.clientPlatform !== 'string') return false;
+    if (data.features !== undefined && (!Array.isArray(data.features) || !data.features.every((f) => typeof f === 'string'))) {
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Validates complete lobby-update payloads so manipulated room objects cannot crash WatchDirectory.
+ */
+export function validateLobbyUpdateMessage(data) {
+    if (!isPlainObject(data) || !isValidGameId(data.game_id)) return false;
+    if (data.status !== undefined && !VALID_LOBBY_STATUSES.has(data.status)) return false;
+    if (data.game_mode !== undefined && !VALID_LOBBY_MODES.has(data.game_mode)) return false;
+    if (data.difficulty !== undefined && !VALID_DIFFICULTIES.has(data.difficulty)) return false;
+    if (data.variant !== undefined && !VALID_VARIANTS.has(data.variant)) return false;
+    if (data.join_policy !== undefined && !VALID_JOIN_POLICIES.has(data.join_policy)) return false;
+    if (data.host_name !== undefined && data.host_name !== null && typeof data.host_name !== 'string') return false;
+    if (data.filled_count !== undefined && (!Number.isInteger(data.filled_count) || data.filled_count < 0 || data.filled_count > 81)) {
+        return false;
+    }
+    if (data.total_cells !== undefined && data.total_cells !== 36 && data.total_cells !== 81) return false;
+    if (data.elapsed_seconds !== undefined && (!Number.isFinite(data.elapsed_seconds) || data.elapsed_seconds < 0)) {
+        return false;
+    }
+    return true;
 }
 
 /**
@@ -97,6 +144,9 @@ export function validateIncomingGameMessage(type, data, totalCells = 81, maxDigi
     case 'reaction':
         return typeof data.emoji === 'string' && ALLOWED_REACTIONS.has(data.emoji);
     case 'join-request':
+        return typeof data.requestId === 'string' && data.requestId.length > 0
+            && typeof data.requesterId === 'string' && data.requesterId.length > 0
+            && (data.requesterName === undefined || data.requesterName === null || typeof data.requesterName === 'string');
     case 'join-cancel':
         return typeof data.requestId === 'string' && data.requestId.length > 0
             && typeof data.requesterId === 'string' && data.requesterId.length > 0;

@@ -2290,6 +2290,14 @@ body {
     line-height: 1.35;
 }
 
+.settings-player-name__error {
+    margin-top: 0.35rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-danger, #f87171);
+    line-height: 1.35;
+}
+
 .settings-player-name__tag-row {
     display: flex;
     align-items: center;

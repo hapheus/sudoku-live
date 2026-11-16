@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { createShiftChallenge } from '../src/domain/tic-tac-toe.js';
 import {
     validateIncomingGameMessage,
+    validatePresenceAnnounce,
+    validateLobbyUpdateMessage,
     createMessageOrderGuard,
     createSenderIdentityGuard,
 } from '../src/services/message-security.js';
@@ -90,5 +92,35 @@ describe('message-security', () => {
         // After sc-1 leaves, client_a can reconnect on sc-3
         identity.releaseServerClient('sc-1');
         expect(identity.verify({ serverClientId: 'sc-3', serverUser: 'user-a', senderId: 'client_a' })).toBe(true);
+    });
+
+    it('validates complete presence-announce and lobby-update objects and rejects manipulated payloads', () => {
+        expect(validatePresenceAnnounce({
+            id: 'client_1234',
+            role: 'host',
+            game_mode: 'online',
+            join_policy: 'confirm',
+            name: 'Franz_01-a',
+        })).toBe(true);
+        expect(validatePresenceAnnounce(null)).toBe(false);
+        expect(validatePresenceAnnounce({ id: 'ab' })).toBe(false);
+        expect(validatePresenceAnnounce({ id: 'client_1234', name: { bad: 1 } })).toBe(false);
+        expect(validatePresenceAnnounce({ id: 'client_1234', role: 'admin' })).toBe(false);
+
+        expect(validateLobbyUpdateMessage({
+            game_id: 'room-123456',
+            status: 'in_progress',
+            game_mode: 'online',
+            difficulty: 'medium',
+            variant: '3x3',
+            total_cells: 81,
+            filled_count: 20,
+            elapsed_seconds: 95,
+            host_name: 'Franz_01',
+        })).toBe(true);
+        expect(validateLobbyUpdateMessage(null)).toBe(false);
+        expect(validateLobbyUpdateMessage({ game_id: 'bad' })).toBe(false);
+        expect(validateLobbyUpdateMessage({ game_id: 'room-123456', host_name: ['evil'] })).toBe(false);
+        expect(validateLobbyUpdateMessage({ game_id: 'room-123456', filled_count: -5 })).toBe(false);
     });
 });

@@ -4,6 +4,8 @@ import { normalizeJoinPolicy } from './join-settings.js';
 import {
     createMessageOrderGuard,
     createSenderIdentityGuard,
+    validateLobbyUpdateMessage,
+    validatePresenceAnnounce,
 } from './message-security.js';
 import {
     buildProtocolMetadata,
@@ -374,6 +376,7 @@ export class OnlineGameClient {
             if (payload.type === 'presence-announce') {
                 const sc = ctx?.info?.client || payload.data?.serverClientId || payload.data?.id;
                 if (!sc || payload.data?.id === this.clientId) return;
+                if (!validatePresenceAnnounce(payload.data)) return;
 
                 const compat = checkProtocolCompatibility(payload.data || {});
                 if (!compat.compatible) {
@@ -577,7 +580,7 @@ export class OnlineGameClient {
                     const payload = pub?.data;
                     const data = payload?.data;
                     const sc = pub?.info?.client || data?.serverClientId;
-                    if (payload?.type !== 'lobby-update' || !data || !isValidGameId(data.game_id)) {
+                    if (payload?.type !== 'lobby-update' || !validateLobbyUpdateMessage(data)) {
                         continue;
                     }
                     if (sc && this.lobbyActiveServerClients.size > 0 && !this.lobbyActiveServerClients.has(sc)) {
@@ -588,6 +591,7 @@ export class OnlineGameClient {
                     } else {
                         this.lobbyRoomsByGameId.set(data.game_id, {
                             ...data,
+                            host_name: sanitizePlayerName(data.host_name) || null,
                             serverClientId: sc || data.id,
                         });
                     }
@@ -633,7 +637,7 @@ export class OnlineGameClient {
 
             const payload = ctx?.data;
             const data = payload?.data;
-            if (payload?.type !== 'lobby-update' || !data || !isValidGameId(data.game_id)) {
+            if (payload?.type !== 'lobby-update' || !validateLobbyUpdateMessage(data)) {
                 return;
             }
 
@@ -644,6 +648,7 @@ export class OnlineGameClient {
 
             const room = {
                 ...data,
+                host_name: sanitizePlayerName(data.host_name) || null,
                 serverClientId: sc,
             };
 

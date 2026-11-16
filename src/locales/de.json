@@ -168,6 +168,7 @@
   "playerTagLabel": "Dein Tag",
   "playerNamePlaceholder": "Namen eingeben",
   "playerNameRandomize": "Zufälligen Spielernamen wählen",
+  "playerNameInvalid": "Nur Buchstaben, Zahlen, - und _ sind erlaubt.",
   "playerNameHint": "Wird Mitspielern und Zuschauern angezeigt. Doppelte Namen erhalten automatisch eine Nummer.",
   "joinRequestMessageNamed": "{name} möchte diesem Rätsel im Koop-Modus beitreten.",
   "watchSearchLabel": "Live-Spiele suchen",
