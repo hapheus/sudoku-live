@@ -180,7 +180,7 @@ describe('UI/UX components & Solo persistence', () => {
         expect(screen.getByText('80%')).toBeInTheDocument();
         expect(screen.getByText('30%')).toBeInTheDocument();
 
-        expect(document.querySelectorAll('#settings-panel svg.settings-icon--legend')).toHaveLength(6);
+        expect(document.querySelectorAll('#settings-panel svg.settings-icon--legend')).toHaveLength(7);
         expect(document.querySelectorAll('#settings-panel svg.settings-icon--volume')).toHaveLength(2);
         expect(document.querySelectorAll('#settings-panel svg.settings-icon--title')).toHaveLength(1);
         expect(document.querySelectorAll('#settings-panel svg.settings-icon--btn')).toHaveLength(1);

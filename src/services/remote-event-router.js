@@ -1,6 +1,7 @@
 import { applyRemoteCellPatch, hydrateGameState } from '../domain/sudoku-engine.js';
 import { getBoardBackgroundById, selectBoardBackground } from './board-backgrounds.js';
 import { normalizeJoinPolicy } from './join-settings.js';
+import { sanitizePlayerName } from './player-name.js';
 
 function applySyncedVisuals(ctx, payload, boardLen, isSpectating) {
     if (payload.hostCursorIndex !== undefined) {
@@ -107,6 +108,7 @@ export function createRemoteEventRouter(ctx) {
         const nextReq = {
             requestId: data.requestId,
             requesterId: data.requesterId,
+            requesterName: sanitizePlayerName(data.requesterName) || null,
             gameId: cur.onlineGameId,
         };
         const alreadyQueued = cur.incomingJoinRequests.some(
@@ -285,12 +287,18 @@ export function createRemoteEventRouter(ctx) {
             && remoteFilled > localFilled
             && !variantDiffers
             && !givensDiffer;
+        const remoteElapsed = Number.isFinite(data.gameState.elapsedSeconds)
+            ? Math.max(0, Math.floor(data.gameState.elapsedSeconds))
+            : null;
+        const localElapsed = Number(cur.gameState.elapsedSeconds) || 0;
+        const elapsedDiffers = remoteElapsed !== null && remoteElapsed > localElapsed;
         const shouldAdoptRemote = cur.myRole !== 'host' && (
             boardsDiffer
             || remoteFilled !== localFilled
             || remoteInitial !== localInitial
             || data.gameState.status !== cur.gameState.status
             || data.rematchRequestedBy !== cur.rematchRequestedBy
+            || elapsedDiffers
         );
 
         if (shouldRecoverHost || shouldAdoptRemote) {

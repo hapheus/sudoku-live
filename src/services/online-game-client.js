@@ -2,6 +2,11 @@ import { Centrifuge } from 'centrifuge';
 import { createEventDeduper } from './event-deduper.js';
 import { normalizeJoinPolicy } from './join-settings.js';
 import {
+    assignUniqueMemberNames,
+    loadOrCreatePlayerName,
+    sanitizePlayerName,
+} from './player-name.js';
+import {
     buildWsUrl,
     generateEventId,
     generateGameId,
@@ -23,7 +28,7 @@ function normalizeGameMode(mode) {
 }
 
 export class OnlineGameClient {
-    constructor({ wsConfig, onConnectionChange } = {}) {
+    constructor({ wsConfig, onConnectionChange, playerName = null } = {}) {
         this.wsConfig = resolveRuntimeWsConfig(wsConfig || {});
         this.onConnectionChange = onConnectionChange || (() => {});
         this.client = null;
@@ -43,6 +48,7 @@ export class OnlineGameClient {
         this.hostedLobbyMeta = null;
         this.eventDeduper = createEventDeduper();
         this.clientId = getOrCreateClientId();
+        this.playerName = sanitizePlayerName(playerName) || loadOrCreatePlayerName();
     }
 
     rememberEvent(eventId) {
@@ -90,7 +96,54 @@ export class OnlineGameClient {
         if (!this.gameChannel || !this.gamePresenceReady) {
             return null;
         }
-        return Array.from(this.gameMembersByServerClient.values());
+        return assignUniqueMemberNames(Array.from(this.gameMembersByServerClient.values()));
+    }
+
+    updatePlayerName(name) {
+        const nextName = sanitizePlayerName(name);
+        if (!nextName || nextName === this.playerName) {
+            return this.playerName;
+        }
+        this.playerName = nextName;
+        if (this.gameChannel) {
+            const selfKey = this.serverClientId || this.clientId;
+            const currentSelf = this.gameMembersByServerClient.get(selfKey);
+            if (currentSelf) {
+                this.gameMembersByServerClient.set(selfKey, {
+                    ...currentSelf,
+                    name: nextName,
+                });
+            }
+            this.sendWhisperEvent('presence-announce', {
+                id: this.clientId,
+                serverClientId: selfKey,
+                role: this.gameRole,
+                game_mode: this.gameMode,
+                join_policy: this.gameJoinPolicy,
+                name: nextName,
+            });
+        }
+        if (this.hostedLobbyMeta) {
+            this.hostedLobbyMeta = {
+                ...this.hostedLobbyMeta,
+                host_name: nextName,
+            };
+            if (this.lobbyChannel) {
+                try {
+                    Promise.resolve(this.lobbyChannel.publish({
+                        type: 'lobby-update',
+                        data: {
+                            ...this.hostedLobbyMeta,
+                            serverClientId: this.serverClientId || this.clientId,
+                            updated_at: Date.now(),
+                        },
+                    })).catch(() => {});
+                } catch {
+                    // Ignore publish error
+                }
+            }
+        }
+        return this.playerName;
     }
 
     isSelfClientPublication(ctx) {
@@ -147,6 +200,7 @@ export class OnlineGameClient {
                 role: this.gameRole,
                 game_mode: this.gameMode,
                 join_policy: this.gameJoinPolicy,
+                name: this.playerName,
             });
             Promise.resolve(sub.publish({
                 type: 'presence-announce',
@@ -156,6 +210,7 @@ export class OnlineGameClient {
                     role: this.gameRole,
                     game_mode: this.gameMode,
                     join_policy: this.gameJoinPolicy,
+                    name: this.playerName,
                 },
             })).catch(() => {});
         };
@@ -169,6 +224,10 @@ export class OnlineGameClient {
 
         sub.on('subscribed', async () => {
             if (this.gameChannel !== sub) return;
+
+            this.clearPresenceSettleTimer();
+            this.gameMembersByServerClient.clear();
+            this.gamePresenceReady = false;
 
             let expectedRemoteCount = 0;
             try {
@@ -275,6 +334,7 @@ export class OnlineGameClient {
                     role: normalizeRole(payload.data?.role),
                     game_mode: normalizeGameMode(payload.data?.game_mode),
                     join_policy: normalizeJoinPolicy(payload.data?.join_policy),
+                    name: sanitizePlayerName(payload.data?.name) || 'Player',
                 };
 
                 this.activeServerClients.add(sc);
@@ -364,6 +424,7 @@ export class OnlineGameClient {
             role: this.gameRole,
             game_mode: this.gameMode,
             join_policy: normalized,
+            name: this.playerName,
         });
         this.sendWhisperEvent('join-policy', {
             joinPolicy: normalized,
@@ -380,6 +441,8 @@ export class OnlineGameClient {
         hasGuest = false,
         filledCount = 0,
         joinPolicy = 'confirm',
+        hostName = null,
+        elapsedSeconds = 0,
         onLobbyPresenceChange = () => {},
         onLobbyMemberJoin = () => {},
         onLobbyMemberLeave = () => {},
@@ -394,6 +457,8 @@ export class OnlineGameClient {
         const resolvedVariant = variant === '2x3' || variant === '6x6' ? '2x3' : '3x3';
         const resolvedTotalCells = totalCells || (resolvedVariant === '2x3' ? 36 : 81);
         const resolvedJoinPolicy = normalizeJoinPolicy(joinPolicy);
+        const resolvedHostName = sanitizePlayerName(hostName) || this.playerName;
+        const resolvedElapsed = Math.max(0, Math.floor(Number(elapsedSeconds) || 0));
 
         this.hostedLobbyMeta = safeGameId
             ? {
@@ -407,6 +472,8 @@ export class OnlineGameClient {
                 has_guest: Boolean(hasGuest),
                 filled_count: filledCount,
                 join_policy: resolvedJoinPolicy,
+                host_name: resolvedHostName,
+                elapsed_seconds: resolvedElapsed,
             }
             : null;
 
@@ -549,13 +616,23 @@ export class OnlineGameClient {
         filledCount,
         difficulty = 'medium',
         gameMode = 'solo',
-        { variant = '3x3', totalCells = null, hasGuest = false, joinPolicy = 'confirm', ticTacToe = false } = {},
+        {
+            variant = '3x3',
+            totalCells = null,
+            hasGuest = false,
+            joinPolicy = 'confirm',
+            ticTacToe = false,
+            hostName = null,
+            elapsedSeconds = 0,
+        } = {},
     ) {
         if (!isValidGameId(gameId)) return;
 
         const resolvedVariant = variant === '2x3' || variant === '6x6' ? '2x3' : '3x3';
         const resolvedTotalCells = totalCells || (resolvedVariant === '2x3' ? 36 : 81);
         const resolvedJoinPolicy = normalizeJoinPolicy(joinPolicy);
+        const resolvedHostName = sanitizePlayerName(hostName) || this.playerName;
+        const resolvedElapsed = Math.max(0, Math.floor(Number(elapsedSeconds) || 0));
 
         const payload = {
             id: this.clientId,
@@ -570,6 +647,8 @@ export class OnlineGameClient {
             filled_count: filledCount,
             join_policy: resolvedJoinPolicy,
             tic_tac_toe: Boolean(ticTacToe),
+            host_name: resolvedHostName,
+            elapsed_seconds: resolvedElapsed,
             updated_at: Date.now(),
         };
 
@@ -585,6 +664,8 @@ export class OnlineGameClient {
             filled_count: filledCount,
             join_policy: resolvedJoinPolicy,
             tic_tac_toe: Boolean(ticTacToe),
+            host_name: resolvedHostName,
+            elapsed_seconds: resolvedElapsed,
         };
 
         if (this.lobbyChannel) {

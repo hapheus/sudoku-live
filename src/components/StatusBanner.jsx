@@ -1,12 +1,7 @@
 import React from 'react';
 import { getVariantSpec, inferVariantFromBoardLength } from '../domain/sudoku-generator.js';
+import { formatGameDuration } from '../utils/format-duration.js';
 import enMessages from '../locales/en.json';
-
-function formatTime(seconds) {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-}
 
 export function StatusBanner({
     connectionStatus,
@@ -31,11 +26,13 @@ export function StatusBanner({
     };
     const diffLabel = diffLabels[gameState.difficulty] || messages.diffMedium;
 
-    const partnerCount = currentMembers.filter((m) => (
+    const partnerMembers = currentMembers.filter((m) => (
         (m.role === 'host' || m.role === 'guest')
         && (myClientId ? m.id !== myClientId : m.role !== myRole)
-    )).length;
+    ));
+    const partnerCount = partnerMembers.length;
     const partnerOnline = partnerCount > 0;
+    const myMember = currentMembers.find((m) => (myClientId ? m.id === myClientId : m.role === myRole));
     const isCoopActive = !isSpectating && (mode === 'online' || partnerOnline || myRole === 'guest');
 
     let statusText = `${spec.shortLabel} ${diffLabel} • ${messages.soloLabel}`;
@@ -90,9 +87,12 @@ export function StatusBanner({
 
     if (!isSpectating) {
         if (isCoopActive && (myRole === 'host' || myRole === 'guest')) {
+            const singlePartnerName = partnerCount === 1 ? partnerMembers[0]?.displayName : null;
             const partnerStatusLabel = partnerCount > 1
                 ? (messages.partnersOnline || '{count} Partners online').replace('{count}', String(partnerCount))
-                : (partnerOnline ? messages.partnerOnline : messages.partnerDisconnected);
+                : (partnerOnline
+                    ? (singlePartnerName ? `${singlePartnerName} (${messages.partnerOnline})` : messages.partnerOnline)
+                    : messages.partnerDisconnected);
             opponentBadge = (
                 <span
                     id="opponent-status"
@@ -120,11 +120,11 @@ export function StatusBanner({
                 <span className="coop-legend" aria-label="Cell ownership colors">
                     <span className="coop-legend__item coop-legend__item--self">
                         <span className="coop-legend__swatch" aria-hidden="true" />
-                        {messages.youLabel}
+                        {myMember?.displayName ? `${messages.youLabel} (${myMember.displayName})` : messages.youLabel}
                     </span>
                     <span className="coop-legend__item coop-legend__item--partner">
                         <span className="coop-legend__swatch" aria-hidden="true" />
-                        {messages.partnerLabel}
+                        {partnerCount === 1 && partnerMembers[0]?.displayName ? partnerMembers[0].displayName : messages.partnerLabel}
                     </span>
                 </span>
             );
@@ -194,7 +194,7 @@ export function StatusBanner({
                         {`${gameState.filledCount}/${spec.totalCells}`}
                     </span>
                     <span id="sudoku-timer" className="telemetry-pill" aria-label="Elapsed time">
-                        {formatTime(gameState.elapsedSeconds || 0)}
+                        {formatGameDuration(gameState.elapsedSeconds || 0)}
                     </span>
                 </div>
             </div>

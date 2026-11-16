@@ -163,5 +163,20 @@
   "ticTacToeWaitTurn": "Du bist {symbol}. Warte auf deinen Mitspieler.",
   "ticTacToeBoardLabel": "Tic-Tac-Toe-Spielfeld",
   "ticTacToeCellLabel": "Zeile {row}, Spalte {col}",
-  "watchTicTacToeTag": "Tic Tac Toe"
+  "watchTicTacToeTag": "Tic Tac Toe",
+  "settingsPlayerName": "Spielername",
+  "playerTagLabel": "Dein Tag",
+  "playerNamePlaceholder": "Namen eingeben",
+  "playerNameRandomize": "Zufälligen Spielernamen wählen",
+  "playerNameHint": "Wird Mitspielern und Zuschauern angezeigt. Doppelte Namen erhalten automatisch eine Nummer.",
+  "joinRequestMessageNamed": "{name} möchte diesem Rätsel im Koop-Modus beitreten.",
+  "watchSearchLabel": "Live-Spiele suchen",
+  "watchSearchPlaceholder": "Nach Spieler, Raum oder Stufe suchen...",
+  "watchFilterAll": "Alle",
+  "watchFilterOpen": "Offen",
+  "watchFilterCoop": "Koop",
+  "watchFilterVariantAll": "Alle Größen",
+  "watchNoMatches": "Keine passenden Live-Spiele gefunden.",
+  "watchClearFilters": "Filter zurücksetzen",
+  "watchDurationLabel": "Dauer"
 }

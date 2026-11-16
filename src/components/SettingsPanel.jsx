@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import enMessages from '../locales/en.json';
+import { MAX_PLAYER_NAME_LENGTH, sanitizePlayerName } from '../services/player-name.js';
 import {
     IconAudioLines,
     IconBookOpen,
@@ -21,6 +22,8 @@ import {
 export function SettingsPanel({
     theme,
     language,
+    playerName = '',
+    playerTag = '',
     joinsAllowed = true,
     joinsAutoAccept = false,
     musicEnabled = false,
@@ -29,6 +32,8 @@ export function SettingsPanel({
     soundVolume = 0.65,
     onChangeTheme,
     onChangeLanguage,
+    onChangePlayerName = () => {},
+    onRandomizePlayerName = () => {},
     onChangeJoinsAllowed = () => {},
     onChangeJoinsAutoAccept = () => {},
     onChangeMusicEnabled = () => {},
@@ -38,6 +43,11 @@ export function SettingsPanel({
     onOpenGuide,
     messages = enMessages,
 }) {
+    const [draftPlayerName, setDraftPlayerName] = useState(playerName || '');
+
+    useEffect(() => {
+        setDraftPlayerName(playerName || '');
+    }, [playerName]);
     const themeOptions = [
         { value: 'dark', label: messages.themeDark, Icon: IconMoon },
         { value: 'light', label: messages.themeLight, Icon: IconSun },
@@ -71,6 +81,80 @@ export function SettingsPanel({
             <header className="settings-panel__header">
                 <h2 className="settings-panel__title">{messages.settingsTitle}</h2>
             </header>
+
+            <div className="settings-group">
+                <div className="settings-fieldset settings-player-name">
+                    <label htmlFor="player-name-input" className="settings-fieldset__legend">
+                        <span className="settings-fieldset__legend-inner">
+                            <IconUserCheck className="settings-icon settings-icon--legend" />
+                            <span>{messages.settingsPlayerName || 'Player Name'}</span>
+                        </span>
+                    </label>
+                    <div className="settings-player-name__row">
+                        <input
+                            id="player-name-input"
+                            type="text"
+                            className="settings-player-name__input"
+                            value={draftPlayerName}
+                            maxLength={MAX_PLAYER_NAME_LENGTH}
+                            placeholder={messages.playerNamePlaceholder || 'Enter your name'}
+                            aria-describedby="player-name-hint"
+                            onChange={(e) => {
+                                const raw = e.target.value;
+                                setDraftPlayerName(raw);
+                                const sanitized = sanitizePlayerName(raw);
+                                if (sanitized) {
+                                    onChangePlayerName(sanitized);
+                                }
+                            }}
+                            onBlur={() => {
+                                const sanitized = sanitizePlayerName(draftPlayerName);
+                                if (!sanitized) {
+                                    setDraftPlayerName(playerName || '');
+                                } else {
+                                    setDraftPlayerName(sanitized);
+                                }
+                            }}
+                        />
+                        <button
+                            type="button"
+                            id="randomize-player-name-btn"
+                            className="settings-player-name__randomize-btn"
+                            aria-label={messages.playerNameRandomize || 'Randomize player name'}
+                            onClick={() => onRandomizePlayerName()}
+                        >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                <path d="M3 3v5h5" />
+                                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                                <path d="M16 16h5v5" />
+                            </svg>
+                        </button>
+                    </div>
+                    <p id="player-name-hint" className="settings-player-name__hint">
+                        {messages.playerNameHint || 'Shown to co-op partners and spectators. Duplicate names get a number suffix automatically.'}
+                    </p>
+                    {playerTag && (
+                        <div className="settings-player-name__tag-row">
+                            <span className="settings-player-name__tag-label">
+                                {messages.playerTagLabel || 'Your Tag'}:
+                            </span>
+                            <code id="player-tag-display" className="settings-player-name__tag">
+                                {(() => {
+                                    const hashIdx = playerTag.indexOf('#');
+                                    if (hashIdx === -1) return playerTag;
+                                    return (
+                                        <>
+                                            {playerTag.slice(0, hashIdx)}
+                                            <span className="player-tag__hash">{playerTag.slice(hashIdx)}</span>
+                                        </>
+                                    );
+                                })()}
+                            </code>
+                        </div>
+                    )}
+                </div>
+            </div>
 
             <div className="settings-group settings-group--2col">
                 <fieldset className="settings-fieldset">
