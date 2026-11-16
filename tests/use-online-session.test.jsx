@@ -1,4 +1,5 @@
-import React from 'react';
+import { useNavigationAndSetup } from '../src/hooks/useNavigationAndSetup.js';
+import { createSudokuGame } from '../src/domain/sudoku-engine.js';
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -195,5 +196,39 @@ describe('useOnlineSession', () => {
             accepted: true,
             reason: undefined,
         });
+
+        // Exercise the real continuation -> hosting -> lobby path after host departure.
+        const gameState = createSudokuGame({ difficulty: 'easy' });
+        Object.assign(stateRef.current, {
+            gameState, mode: 'online', myRole: 'guest', onlineGameId: 'room-abc',
+            currentMembers: [{ id: 'watcher', role: 'spectator' }],
+        });
+        const setters = Object.fromEntries([
+            'setMode', 'setMyRole', 'setOnlineGameId', 'setCurrentMembers',
+            'setHostCursorIndex', 'setGuestCursors', 'setRemoteActiveDigit',
+            'setRematchRequestedBy', 'setHintsMap',
+        ].map(name => [name, vi.fn()]));
+        const navigation = renderHook(() => useNavigationAndSetup({
+            ...setters, stateRef, onlineClientRef,
+            ensureHostOnlineSession: result.current.ensureHostOnlineSession,
+            showFeedback: vi.fn(), announce: vi.fn(),
+        }));
+        act(() => navigation.result.current.handleContinueSolo());
+        expect(onlineClientRef.current.joinGameChannel).toHaveBeenLastCalledWith('room-abc', expect.objectContaining({
+            role: 'host', gameMode: 'solo',
+        }));
+        expect(onlineClientRef.current.joinLobby).toHaveBeenLastCalledWith(expect.objectContaining({
+            gameId: 'room-abc', gameMode: 'solo', hasGuest: false,
+            filledCount: gameState.filledCount, totalCells: 81,
+        }));
+        const members = [{ id: 'client-1', role: 'host' }, { id: 'watcher', role: 'spectator' }];
+        onlineClientRef.current.getGameMembers.mockReturnValue(members);
+        const callbacks = onlineClientRef.current.joinGameChannel.mock.calls.at(-1)[1];
+        act(() => callbacks.onPresenceChange(members));
+        expect(stateRef.current.currentMembers).toEqual(members);
+        expect(onlineClientRef.current.broadcastLobbyUpdate).toHaveBeenLastCalledWith(
+            'room-abc', 'in_progress', gameState.filledCount, 'easy', 'solo',
+            expect.objectContaining({ hasGuest: false, totalCells: 81 }),
+        );
     });
 });
