@@ -29,6 +29,8 @@ Boot the device first if it is shut down (`simctl boot <UDID>`). Device IDs and 
 
 ## Still unverified
 
-The available computer-use interface rejects Simulator by both name and full application path (`Invalid app`), so native touch interactions, orientation changes, fold/unfold transitions, gameplay, accessibility/VoiceOver and lifecycle checks could not be exercised through that interface. No alternate UI automation was used to bypass this limitation. Existing browser responsive tests are not a substitute for these native scenarios. Keep #45 open for the remaining interactive device QA; do not interpret build/launch success as complete Duo support certification.
+The available computer-use interface rejects Simulator by both name and full application path (`Invalid app`), and a follow-up attempt to access Device Hub (`com.apple.dt.Devices`) returned `cgWindowNotFound`. Native touch interactions, orientation changes, fold/unfold transitions, gameplay, accessibility/VoiceOver and lifecycle checks could not be exercised through that interface. No alternate UI automation was used to bypass this limitation. Existing browser responsive tests are not a substitute for these native scenarios. Keep #45 open for the remaining interactive device QA; do not interpret build/launch success as complete Duo support certification.
 
 No application code or CI changed in this follow-up. Markdown references, existing plist/manifest structure, and diff whitespace were checked; application tests are not claimed for this documentation-only branch.
+
+The simulator started by this smoke test was shut down afterward. An accessible Duo window is needed to continue interactive QA; opening a window is not itself a passing interaction test.
