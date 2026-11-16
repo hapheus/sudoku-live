@@ -87,4 +87,4 @@ https://sudoku.fraha.dev capacitor://localhost https://localhost http://localhos
 
 ## Duo simulator verification
 
-The iOS 27.2 Duo simulator build/launch smoke test and remaining interactive QA limitations are recorded in [Issue #45 verification](../testing/issue-45.md). Multi-display screenshot capture requires an explicit display selector; a successful launch does not certify fold/unfold or rotation behavior.
+The iOS 27.2 Duo simulator build/launch smoke test and remaining interactive QA limitations are recorded in [GitHub issue #45](https://github.com/hapheus/sudoku-shift/issues/45). Multi-display screenshot capture requires an explicit display selector; a successful launch does not certify fold/unfold or rotation behavior.
