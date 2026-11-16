@@ -87,6 +87,7 @@ export function clearPendingJoinState({
  */
 export function useOnlineSession({
     initialRoute,
+    playerName = null,
     joinPolicy,
     hostJoinPolicy,
     stateRef,
@@ -178,6 +179,8 @@ export function useOnlineSession({
                 hasGuest: guestOnline,
                 joinPolicy: curJoinPolicy,
                 ticTacToe: Boolean(ticTacToe?.challengeRef.current.game),
+                hostName: stateRef.current.playerName,
+                elapsedSeconds: targetState.elapsedSeconds || 0,
             },
         );
     }, [onlineClientRef, stateRef, ticTacToe]);
@@ -590,6 +593,8 @@ export function useOnlineSession({
                 hasGuest: false,
                 filledCount: targetState.filledCount,
                 joinPolicy: stateRef.current.joinPolicy,
+                hostName: stateRef.current.playerName,
+                elapsedSeconds: targetState.elapsedSeconds || 0,
             });
         }
     }, [
@@ -746,6 +751,7 @@ export function useOnlineSession({
             onlineClientRef.current?.broadcastGameEvent(gameId, 'join-request', {
                 requestId,
                 requesterId: onlineClientRef.current?.clientId,
+                requesterName: stateRef.current.playerName,
             });
         };
 
@@ -813,6 +819,8 @@ export function useOnlineSession({
                 hasGuest: guestOnline,
                 filledCount: targetState.filledCount,
                 joinPolicy: stateRef.current.joinPolicy,
+                hostName: stateRef.current.playerName,
+                elapsedSeconds: targetState.elapsedSeconds || 0,
             });
         } else {
             syncLobbyProgress(targetState, resolvedMode);
@@ -1015,7 +1023,14 @@ export function useOnlineSession({
     }, [onlineClientRef, showFeedback]);
 
     useEffect(() => {
+        if (playerName) {
+            onlineClientRef.current?.updatePlayerName?.(playerName);
+        }
+    }, [onlineClientRef, playerName]);
+
+    useEffect(() => {
         const client = new OnlineGameClient({
+            playerName,
             onConnectionChange: (status) => setConnectionStatus(status),
         });
         onlineClientRef.current = client;

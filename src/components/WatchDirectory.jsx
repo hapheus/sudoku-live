@@ -1,7 +1,107 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { getVariantSpec, inferVariantFromBoardLength } from '../domain/sudoku-generator.js';
 import { isValidGameId } from '../services/online-game-client.js';
+import { formatPlayerTag } from '../services/player-name.js';
+import { formatGameDuration } from '../utils/format-duration.js';
 import enMessages from '../locales/en.json';
+import { PlayerTag } from './PlayerTag.jsx';
+
+function resolveRoomLabels(game, difficultyLabels, pendingJoinGameId, messages) {
+    const inferredVariant = game.variant || inferVariantFromBoardLength(game.total_cells);
+    const spec = getVariantSpec(inferredVariant);
+    const totalCells = spec.totalCells;
+    const filledCount = Math.max(
+        0,
+        Math.min(totalCells, parseInt(game.filled_count ?? game.moves_count ?? 0, 10) || 0),
+    );
+    const diffLabel = difficultyLabels[game.difficulty] || messages.diffMedium;
+    const hasGuest = Boolean(game.has_guest);
+    const joinPolicy = game.join_policy || 'auto';
+    const joinsDisabled = joinPolicy === 'disabled';
+    const isPendingJoin = pendingJoinGameId === game.game_id;
+    const durationText = Number.isFinite(game.elapsed_seconds)
+        ? formatGameDuration(game.elapsed_seconds)
+        : null;
+    const hostTag = game.host_name
+        ? formatPlayerTag(game.host_name, game.host_tag || game.id || game.game_id)
+        : null;
+
+    let statusLabel = messages.watchOpen;
+    if (hasGuest) {
+        statusLabel = messages.watchCoop;
+    } else if (joinPolicy === 'disabled') {
+        statusLabel = messages.watchJoinsClosed || 'Watching only';
+    } else if (joinPolicy === 'confirm') {
+        statusLabel = messages.watchOpenConfirm || 'Approval needed';
+    }
+
+    let joinBtnLabel = messages.watchJoin;
+    if (joinsDisabled) {
+        joinBtnLabel = messages.watchJoinsDisabled || 'Closed';
+    } else if (isPendingJoin) {
+        joinBtnLabel = messages.watchJoinPending || 'Waiting...';
+    }
+
+    const metaText = [
+        spec.shortLabel,
+        diffLabel,
+        statusLabel,
+        `${filledCount}/${totalCells}`,
+        durationText,
+        game.tic_tac_toe ? (messages?.watchTicTacToeTag || 'Tic Tac Toe') : null,
+    ].filter(Boolean).join(' • ');
+
+    return { hostTag, metaText, joinsDisabled, joinBtnLabel };
+}
+
+function WatchGameCard({
+    game,
+    difficultyLabels,
+    pendingJoinGameId,
+    onJoinGame,
+    onWatchGame,
+    messages,
+}) {
+    const { hostTag, metaText, joinsDisabled, joinBtnLabel } = resolveRoomLabels(
+        game,
+        difficultyLabels,
+        pendingJoinGameId,
+        messages,
+    );
+    return (
+        <div className="live-game-card">
+            <div className="live-game-card__info">
+                <span className="live-game-card__title">
+                    {hostTag ? <PlayerTag tag={hostTag} /> : `Room #${game.game_id.slice(0, 8)}`}
+                </span>
+                <span className="live-game-card__meta">
+                    {metaText}
+                </span>
+            </div>
+            <div className="live-game-card__actions">
+                {onJoinGame && (
+                    <button
+                        type="button"
+                        className="live-game-card__join-btn"
+                        data-join-id={game.game_id}
+                        disabled={joinsDisabled || Boolean(game.tic_tac_toe) || Boolean(pendingJoinGameId)}
+                        onClick={() => onJoinGame(game.game_id)}
+                    >
+                        {joinBtnLabel}
+                    </button>
+                )}
+                <button
+                    type="button"
+                    className="live-game-card__action-btn"
+                    data-watch-id={game.game_id}
+                    onClick={() => onWatchGame(game.game_id)}
+                >
+                    {messages.watchLiveBtn}
+                </button>
+            </div>
+        </div>
+    );
+}
 
 export function WatchDirectory({
     rooms,
@@ -14,26 +114,76 @@ export function WatchDirectory({
     onCancelJoinRequest = null,
     messages = enMessages,
 }) {
-    const difficultyLabels = {
+    const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'open' | 'coop'
+    const [variantFilter, setVariantFilter] = useState('all'); // 'all' | '3x3' | '2x3'
+
+    const difficultyLabels = useMemo(() => ({
         easy: messages.diffEasy,
         medium: messages.diffMedium,
         hard: messages.diffHard,
         expert: messages.diffExpert,
+    }), [messages.diffEasy, messages.diffExpert, messages.diffHard, messages.diffMedium]);
+
+    const liveGames = useMemo(() => {
+        const seenGameIds = new Set();
+        const result = [];
+        for (const room of rooms || []) {
+            if (!room || !isValidGameId(room.game_id) || room.status === 'solved' || room.status === 'finished') {
+                continue;
+            }
+            if (seenGameIds.has(room.game_id)) {
+                continue;
+            }
+            seenGameIds.add(room.game_id);
+            result.push(room);
+        }
+        return result;
+    }, [rooms]);
+
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    const filteredGames = useMemo(() => liveGames.filter((game) => {
+        const inferredVariant = game.variant || inferVariantFromBoardLength(game.total_cells);
+        const spec = getVariantSpec(inferredVariant);
+        const hasGuest = Boolean(game.has_guest);
+        const joinPolicy = game.join_policy || 'auto';
+
+        if (statusFilter === 'open' && (hasGuest || joinPolicy === 'disabled')) {
+            return false;
+        }
+        if (statusFilter === 'coop' && !hasGuest) {
+            return false;
+        }
+        if (variantFilter !== 'all' && spec.id !== variantFilter) {
+            return false;
+        }
+        if (normalizedQuery) {
+            const diffLabel = difficultyLabels[game.difficulty] || messages.diffMedium || '';
+            const hostTag = game.host_name
+                ? formatPlayerTag(game.host_name, game.host_tag || game.id || game.game_id)
+                : null;
+            const haystack = [
+                hostTag,
+                game.host_name,
+                game.game_id,
+                diffLabel,
+                game.difficulty,
+                spec.shortLabel,
+                spec.id,
+            ].filter(Boolean).join(' ').toLowerCase();
+            if (!haystack.includes(normalizedQuery)) {
+                return false;
+            }
+        }
+        return true;
+    }), [difficultyLabels, liveGames, messages.diffMedium, normalizedQuery, statusFilter, variantFilter]);
+
+    const hasActiveFilters = Boolean(normalizedQuery || statusFilter !== 'all' || variantFilter !== 'all');
+    const clearFilters = () => {
+        setSearchQuery('');
+        setStatusFilter('all');
+        setVariantFilter('all');
     };
-
-    const seenGameIds = new Set();
-    const liveGames = [];
-
-    for (const room of rooms || []) {
-        if (!room || !isValidGameId(room.game_id) || room.status === 'solved' || room.status === 'finished') {
-            continue;
-        }
-        if (seenGameIds.has(room.game_id)) {
-            continue;
-        }
-        seenGameIds.add(room.game_id);
-        liveGames.push(room);
-    }
 
     const canReconnect = connectionStatus === 'failed' || connectionStatus === 'disconnected' || connectionStatus === 'unavailable';
     const connectionLabels = {
@@ -87,8 +237,57 @@ export function WatchDirectory({
                     )}
                 </div>
             )}
-            <div id="live-games-list" className="live-games-list" role="feed">
-                {liveGames.length === 0 ? (
+            <div className="watch-filters">
+                <div className="watch-filters__search-wrap">
+                    <label htmlFor="watch-search-input" className="sr-only">
+                        {messages.watchSearchLabel || 'Search live games'}
+                    </label>
+                    <input
+                        id="watch-search-input"
+                        type="search"
+                        className="watch-filters__search"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder={messages.watchSearchPlaceholder || 'Search by player, room, or difficulty...'}
+                    />
+                </div>
+                <div className="watch-filters__chips" role="group" aria-label={messages.watchSearchLabel || 'Filter live games'}>
+                    {[
+                        { id: 'all', label: messages.watchFilterAll || 'All' },
+                        { id: 'open', label: messages.watchFilterOpen || 'Open' },
+                        { id: 'coop', label: messages.watchFilterCoop || 'Co-op' },
+                    ].map((opt) => (
+                        <button
+                            key={opt.id}
+                            type="button"
+                            className={`watch-filter-chip ${statusFilter === opt.id ? 'watch-filter-chip--active' : ''}`}
+                            aria-pressed={statusFilter === opt.id}
+                            onClick={() => setStatusFilter(opt.id)}
+                        >
+                            {opt.label}
+                        </button>
+                    ))}
+                    <span className="watch-filters__sep" aria-hidden="true" />
+                    {[
+                        { id: 'all', label: messages.watchFilterVariantAll || 'All sizes' },
+                        { id: '3x3', label: '3×3' },
+                        { id: '2x3', label: '2×3' },
+                    ].map((opt) => (
+                        <button
+                            key={opt.id}
+                            type="button"
+                            className={`watch-filter-chip ${variantFilter === opt.id ? 'watch-filter-chip--active' : ''}`}
+                            aria-pressed={variantFilter === opt.id}
+                            onClick={() => setVariantFilter(opt.id)}
+                        >
+                            {opt.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <div id="live-games-list" className="live-games-list" role={filteredGames.length > 0 ? 'feed' : undefined}>
+                {liveGames.length === 0 && (
                     <div className="watch-empty">
                         <p className="live-game-card__meta">
                             {canReconnect
@@ -99,72 +298,34 @@ export function WatchDirectory({
                             {messages.watchEmptySub}
                         </p>
                     </div>
-                ) : (
-                    liveGames.map((game) => {
-                        const inferredVariant = game.variant || inferVariantFromBoardLength(game.total_cells);
-                        const spec = getVariantSpec(inferredVariant);
-                        const totalCells = spec.totalCells;
-                        const filledCount = Math.max(
-                            0,
-                            Math.min(totalCells, parseInt(game.filled_count ?? game.moves_count ?? 0, 10) || 0),
-                        );
-                        const diffLabel = difficultyLabels[game.difficulty] || messages.diffMedium;
-                        const hasGuest = Boolean(game.has_guest);
-                        const joinPolicy = game.join_policy || 'auto';
-                        const joinsDisabled = joinPolicy === 'disabled';
-                        const isPendingJoin = pendingJoinGameId === game.game_id;
-
-                        let statusLabel = messages.watchOpen;
-                        if (hasGuest) {
-                            statusLabel = messages.watchCoop;
-                        } else if (joinPolicy === 'disabled') {
-                            statusLabel = messages.watchJoinsClosed || 'Watching only';
-                        } else if (joinPolicy === 'confirm') {
-                            statusLabel = messages.watchOpenConfirm || 'Approval needed';
-                        }
-
-                        let joinBtnLabel = messages.watchJoin;
-                        if (joinsDisabled) {
-                            joinBtnLabel = messages.watchJoinsDisabled || 'Closed';
-                        } else if (isPendingJoin) {
-                            joinBtnLabel = messages.watchJoinPending || 'Waiting...';
-                        }
-
-                        return (
-                            <div key={game.game_id} className="live-game-card">
-                                <div className="live-game-card__info">
-                                    <span className="live-game-card__title">
-                                        {`Room #${game.game_id.slice(0, 8)}`}
-                                    </span>
-                                    <span className="live-game-card__meta">
-                                        {[spec.shortLabel, diffLabel, statusLabel, `${filledCount}/${totalCells}`, game.tic_tac_toe ? (messages?.watchTicTacToeTag || 'Tic Tac Toe') : null].filter(Boolean).join(' • ')}
-                                    </span>
-                                </div>
-                                <div className="live-game-card__actions">
-                                    {onJoinGame && (
-                                        <button
-                                            type="button"
-                                            className="live-game-card__join-btn"
-                                            data-join-id={game.game_id}
-                                            disabled={joinsDisabled || Boolean(game.tic_tac_toe) || Boolean(pendingJoinGameId)}
-                                            onClick={() => onJoinGame(game.game_id)}
-                                        >
-                                            {joinBtnLabel}
-                                        </button>
-                                    )}
-                                    <button
-                                        type="button"
-                                        className="live-game-card__action-btn"
-                                        data-watch-id={game.game_id}
-                                        onClick={() => onWatchGame(game.game_id)}
-                                    >
-                                        {messages.watchLiveBtn}
-                                    </button>
-                                </div>
-                            </div>
-                        );
-                    })
                 )}
+                {liveGames.length > 0 && filteredGames.length === 0 && (
+                    <div className="watch-empty">
+                        <p className="live-game-card__meta">
+                            {messages.watchNoMatches || 'No matching live games.'}
+                        </p>
+                        {hasActiveFilters && (
+                            <button
+                                type="button"
+                                className="watch-box__refresh-btn"
+                                onClick={clearFilters}
+                            >
+                                {messages.watchClearFilters || 'Clear filters'}
+                            </button>
+                        )}
+                    </div>
+                )}
+                {filteredGames.map((game) => (
+                    <WatchGameCard
+                        key={game.game_id}
+                        game={game}
+                        difficultyLabels={difficultyLabels}
+                        pendingJoinGameId={pendingJoinGameId}
+                        onJoinGame={onJoinGame}
+                        onWatchGame={onWatchGame}
+                        messages={messages}
+                    />
+                ))}
             </div>
         </section>
     );

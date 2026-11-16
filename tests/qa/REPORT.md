@@ -53,3 +53,12 @@ References were captured on macOS with the installed Playwright Chromium; other 
   - `npm run build`: passed.
   - `npm run e2e -- --update-snapshots`: 17 passed (all 12 responsive viewports + axe WCAG 2.1 AA + `scrollHeight <= innerHeight + 1` on `height >= 640`).
   - `impeccable detect --json`: 0 findings on modified UI files.
+
+## Update — 2026-11-16 (Multiplayer & Lobby)
+
+- **Changes**: Added persistent random/custom player names with `Name#abcd` 4-hex-digit tags (`.player-tag__hash` muted tone) and automatic duplicate suffixes (`Name (2)`), Watch directory search + status/size filters + game duration display (`MM:SS` / `H:MM:SS`), and reconnect/sync test coverage.
+- **Checks**:
+  - `npm run test`: 39 files, 200 tests passed.
+  - `npm run lint`: 0 errors.
+  - `npm run build`: passed.
+  - `npx playwright test tests/qa/multiplayer-lobby.spec.ts`: 13 passed (keyboard player name persistence & randomize, touch targets >= 44×44 px, zero horizontal overflow and zero axe WCAG 2.1 AA violations on Watch and Settings across 360×640, 390×844, 768×1024, 1280×800, 1440×900, and 844×390 in dark and light themes).

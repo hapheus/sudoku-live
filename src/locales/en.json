@@ -163,5 +163,20 @@
   "ticTacToeWaitTurn": "You are {symbol}. Waiting for your opponent.",
   "ticTacToeBoardLabel": "Tic Tac Toe board",
   "ticTacToeCellLabel": "Row {row}, column {col}",
-  "watchTicTacToeTag": "Tic Tac Toe"
+  "watchTicTacToeTag": "Tic Tac Toe",
+  "settingsPlayerName": "Player Name",
+  "playerTagLabel": "Your Tag",
+  "playerNamePlaceholder": "Enter your name",
+  "playerNameRandomize": "Randomize player name",
+  "playerNameHint": "Shown to co-op partners and spectators. Duplicate names get a number suffix automatically.",
+  "joinRequestMessageNamed": "{name} would like to join this puzzle in Co-op mode.",
+  "watchSearchLabel": "Search live games",
+  "watchSearchPlaceholder": "Search by player, room, or difficulty...",
+  "watchFilterAll": "All",
+  "watchFilterOpen": "Open",
+  "watchFilterCoop": "Co-op",
+  "watchFilterVariantAll": "All sizes",
+  "watchNoMatches": "No matching live games.",
+  "watchClearFilters": "Clear filters",
+  "watchDurationLabel": "Duration"
 }

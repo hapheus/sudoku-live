@@ -8,6 +8,8 @@ import {
 } from './domain/sudoku-variants.js';
 import { createSudokuGame } from './domain/sudoku-engine.js';
 import { selectBoardBackground } from './services/board-backgrounds.js';
+import { formatPlayerTag } from './services/player-name.js';
+import { getOrCreateClientId } from './services/ws-config.js';
 import { ALLOWED_REACTIONS, aggregateHintsByCell } from './utils/watcher-helpers.js';
 import {
     hasUnsavedProgress,
@@ -53,6 +55,9 @@ export function App() {
         setTheme,
         language,
         setLanguage,
+        playerName,
+        setPlayerName,
+        randomizePlayerName,
         joinsAllowed,
         setJoinsAllowed,
         joinsAutoAccept,
@@ -154,6 +159,7 @@ export function App() {
         isSpectating,
         onlineGameId,
         myRole,
+        playerName,
         joinPolicy,
         gameState,
         boardBackground,
@@ -179,6 +185,7 @@ export function App() {
         isSpectating,
         onlineGameId,
         myRole,
+        playerName,
         joinPolicy,
         gameState,
         boardBackground,
@@ -328,6 +335,7 @@ export function App() {
         handleReconnect,
     } = useOnlineSession({
         initialRoute,
+        playerName,
         joinPolicy,
         hostJoinPolicy,
         stateRef,
@@ -647,7 +655,10 @@ export function App() {
                         id="join-request-banner"
                         titleId="join-request-title"
                         title={messages.joinRequestTitle || 'Player wants to join'}
-                        message={messages.joinRequestMessage || 'Another player would like to join this puzzle in Co-op mode.'}
+                        message={incomingJoinRequest.requesterName
+                            ? (messages.joinRequestMessageNamed || '{name} would like to join this puzzle in Co-op mode.')
+                                .replace('{name}', incomingJoinRequest.requesterName)
+                            : (messages.joinRequestMessage || 'Another player would like to join this puzzle in Co-op mode.')}
                         cancelId="decline-join-btn"
                         confirmId="accept-join-btn"
                         cancelLabel={messages.joinRequestDecline || 'Decline'}
@@ -936,6 +947,8 @@ export function App() {
                     <SettingsPanel
                         theme={theme}
                         language={language}
+                        playerName={playerName}
+                        playerTag={formatPlayerTag(playerName, onlineClientRef.current?.clientId || getOrCreateClientId())}
                         joinsAllowed={joinsAllowed}
                         joinsAutoAccept={joinsAutoAccept}
                         musicEnabled={musicEnabled}
@@ -944,6 +957,8 @@ export function App() {
                         soundVolume={soundVolume}
                         onChangeTheme={setTheme}
                         onChangeLanguage={setLanguage}
+                        onChangePlayerName={setPlayerName}
+                        onRandomizePlayerName={randomizePlayerName}
                         onChangeJoinsAllowed={setJoinsAllowed}
                         onChangeJoinsAutoAccept={setJoinsAutoAccept}
                         onChangeMusicEnabled={handleMusicEnabledChange}

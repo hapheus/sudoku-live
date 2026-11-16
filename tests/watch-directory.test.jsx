@@ -116,4 +116,76 @@ describe('WatchDirectory React component', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
         expect(onCancel).toHaveBeenCalledTimes(1);
     });
+
+    it('displays host name and formatted game duration, and supports search and filters', () => {
+        render(
+            <WatchDirectory
+                rooms={[
+                    {
+                        id: 'client_abcd1234',
+                        game_id: 'alpha-room-1',
+                        host_name: 'SwiftFox',
+                        game_mode: 'solo',
+                        status: 'in_progress',
+                        difficulty: 'medium',
+                        variant: '3x3',
+                        filled_count: 30,
+                        has_guest: false,
+                        join_policy: 'auto',
+                        elapsed_seconds: 135,
+                    },
+                    {
+                        id: 'client_ef012345',
+                        game_id: 'beta-room-2',
+                        host_name: 'CalmOwl',
+                        game_mode: 'online',
+                        status: 'in_progress',
+                        difficulty: 'hard',
+                        variant: '2x3',
+                        total_cells: 36,
+                        filled_count: 18,
+                        has_guest: true,
+                        join_policy: 'confirm',
+                        elapsed_seconds: 65,
+                    },
+                ]}
+                onRefresh={vi.fn()}
+                onWatchGame={vi.fn()}
+                onJoinGame={vi.fn()}
+            />,
+        );
+
+        const hasTitle = (expected) => Array.from(document.querySelectorAll('.live-game-card__title'))
+            .some((el) => el.textContent === expected);
+
+        expect(hasTitle('SwiftFox#abcd')).toBe(true);
+        expect(screen.getByText('3×3 • Medium • Open to join • 30/81 • 02:15')).toBeInTheDocument();
+        expect(screen.getByText('2×3 • Hard • Co-op live • 18/36 • 01:05')).toBeInTheDocument();
+
+        // Filter by Co-op
+        fireEvent.click(screen.getByRole('button', { name: 'Co-op' }));
+        expect(hasTitle('SwiftFox#abcd')).toBe(false);
+        expect(hasTitle('CalmOwl#ef01')).toBe(true);
+
+        // Filter back to All, then filter by 3×3
+        fireEvent.click(screen.getByRole('button', { name: 'All' }));
+        fireEvent.click(screen.getByRole('button', { name: '3×3' }));
+        expect(hasTitle('SwiftFox#abcd')).toBe(true);
+        expect(hasTitle('CalmOwl#ef01')).toBe(false);
+
+        // Search by name+hex tag
+        const searchInput = screen.getByRole('searchbox', { name: 'Search live games' });
+        fireEvent.click(screen.getByRole('button', { name: 'All sizes' }));
+        fireEvent.change(searchInput, { target: { value: 'CalmOwl#ef01' } });
+        expect(hasTitle('CalmOwl#ef01')).toBe(true);
+        expect(hasTitle('SwiftFox#abcd')).toBe(false);
+
+        // Search by name with no match, then clear filters
+        fireEvent.change(searchInput, { target: { value: 'NoSuchPlayer' } });
+        expect(screen.getByText('No matching live games.')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+        expect(hasTitle('SwiftFox#abcd')).toBe(true);
+        expect(hasTitle('CalmOwl#ef01')).toBe(true);
+    });
 });
