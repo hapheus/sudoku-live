@@ -1370,7 +1370,7 @@ body {
     line-height: 1.1;
 }
 
-@media (min-width: 520px) {
+@media (min-width: 520px) and (hover: hover) and (pointer: fine) {
     .tool-btn__kbd {
         display: inline-flex;
         align-items: center;
@@ -1385,12 +1385,26 @@ body {
     padding: 0;
 }
 
+.shift-bar__label-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+}
+
 .shift-bar__label {
     font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--color-text-muted);
+    padding-left: 0.15rem;
+}
+
+.shift-bar__hint {
+    font-size: 0.6875rem;
+    color: var(--color-text-muted);
+    line-height: 1.25;
     padding-left: 0.15rem;
 }
 
@@ -1878,7 +1892,7 @@ input:focus-visible {
     --color-nav-active-bg: rgba(124, 179, 255, 0.15);
     --color-backdrop: rgba(10, 12, 16, 0.78);
     --color-board-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
-    --color-reveal-scrim: rgba(15, 19, 26, 0.76);
+    --color-reveal-scrim: rgba(15, 19, 26, 0.84);
     --color-reveal-unit-scrim: rgba(15, 19, 26, 0.70);
     --color-reveal-peer-tint: rgba(56, 189, 248, 0.14);
     --color-reveal-same-digit-tint: rgba(56, 189, 248, 0.28);
@@ -3641,3 +3655,137 @@ body {
     border-radius: 0 !important;
     text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.25);
 }
+
+/* ==========================================================================
+   Responsive Device Support: Landscape, iPhone/iPad, itch.io/Desktop, iPhone Duo
+   ========================================================================== */
+
+.gameplay-stage {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.gameplay-stage__board,
+.gameplay-stage__side {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+    min-width: 0;
+}
+
+.gameplay-stage__side {
+    position: relative;
+}
+
+@media (orientation: landscape) and (max-height: 540px) {
+    .app-container--gameplay {
+        max-width: min(100%, 920px);
+    }
+
+    .gameplay-stage {
+        display: grid;
+        grid-template-columns: auto minmax(240px, 440px);
+        grid-template-rows: auto 1fr;
+        grid-template-areas:
+            "board status"
+            "board side";
+        align-items: start;
+        gap: 0.45rem 0.85rem;
+    }
+
+    .gameplay-stage > .status-banner {
+        grid-area: status;
+    }
+
+    .gameplay-stage__board {
+        grid-area: board;
+    }
+
+    .gameplay-stage__side {
+        grid-area: side;
+        max-width: 440px;
+    }
+
+    .gameplay-stage__board .board-wrapper,
+    .gameplay-stage__board .tic-tac-toe {
+        width: min(calc(100dvh - 3.75rem), 46vw);
+        max-width: 360px;
+    }
+
+    .gameplay-stage__side .player-controls {
+        gap: 0.35rem;
+    }
+
+    .gameplay-stage__side .tool-btn,
+    .gameplay-stage__side .numpad-btn,
+    .gameplay-stage__side .shift-btn,
+    .gameplay-stage__side .notes-quick-btn {
+        min-height: var(--touch-min);
+        padding-block: 0.25rem;
+    }
+
+    .gameplay-stage__side .numpad {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 900px) and (min-height: 540px) {
+    .app-container--with-nav {
+        max-width: 680px;
+    }
+
+    .app-container--gameplay {
+        max-width: 960px;
+    }
+
+    .gameplay-stage {
+        display: grid;
+        grid-template-columns: minmax(360px, 480px) minmax(280px, 1fr);
+        grid-template-rows: auto 1fr;
+        grid-template-areas:
+            "board status"
+            "board side";
+        align-items: start;
+        gap: 0.75rem 1.25rem;
+    }
+
+    .gameplay-stage > .status-banner {
+        grid-area: status;
+    }
+
+    .gameplay-stage__board {
+        grid-area: board;
+    }
+
+    .gameplay-stage__side {
+        grid-area: side;
+    }
+
+    .gameplay-stage__side .numpad {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (horizontal-viewport-segments: 2) {
+    .app-container--gameplay {
+        max-width: none;
+        padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
+    }
+
+    .gameplay-stage {
+        display: grid;
+        grid-template-columns:
+            minmax(280px, calc(env(viewport-segment-width 0 0) - 1.5rem))
+            1fr;
+        column-gap: max(1rem, calc(env(viewport-segment-left 1 0) - env(viewport-segment-right 0 0) + 1rem));
+        align-items: start;
+    }
+
+    .gameplay-stage__board .board-wrapper {
+        max-width: min(var(--board-max-size), calc(100dvh - 140px));
+    }
+}
+

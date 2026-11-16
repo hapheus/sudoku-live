@@ -496,20 +496,27 @@ describe('UI/UX components & Solo persistence', () => {
         expect(onClearNotes).toHaveBeenCalledTimes(1);
     });
 
-    it('locks iOS and PWA app configuration strictly to portrait orientation', () => {
+    it('supports portrait and landscape orientations in iOS and PWA app configuration', () => {
         const root = process.cwd();
         const infoPlist = fs.readFileSync(path.join(root, 'ios/App/App/Info.plist'), 'utf8');
         const appDelegate = fs.readFileSync(path.join(root, 'ios/App/App/AppDelegate.swift'), 'utf8');
         const manifest = JSON.parse(fs.readFileSync(path.join(root, 'public/manifest.webmanifest'), 'utf8'));
 
         expect(infoPlist).toContain('UIInterfaceOrientationPortrait');
-        expect(infoPlist).not.toContain('UIInterfaceOrientationLandscapeLeft');
-        expect(infoPlist).not.toContain('UIInterfaceOrientationLandscapeRight');
-        expect(infoPlist).not.toContain('UIInterfaceOrientationPortraitUpsideDown');
-        expect(infoPlist).toContain('<key>UIRequiresFullScreen</key>');
+        expect(infoPlist).toContain('UIInterfaceOrientationLandscapeLeft');
+        expect(infoPlist).toContain('UIInterfaceOrientationLandscapeRight');
+        expect(infoPlist).toMatch(/<key>UIRequiresFullScreen<\/key>\s*<false\/>/);
 
-        expect(appDelegate).toMatch(/supportedInterfaceOrientationsFor[\s\S]*return \.portrait/);
-        expect(manifest.orientation).toBe('portrait');
+        expect(appDelegate).toMatch(/supportedInterfaceOrientationsFor[\s\S]*return .*\.(allButUpsideDown|all)/);
+        expect(manifest.orientation).toBe('any');
+    });
+
+    it('includes responsive landscape, desktop/iPad, and iPhone Duo layout rules in CSS', () => {
+        const css = fs.readFileSync(path.join(process.cwd(), 'src/styles/app.css'), 'utf8');
+        expect(css).toContain('.gameplay-stage');
+        expect(css).toMatch(/@media\s*\(orientation:\s*landscape\)/);
+        expect(css).toMatch(/@media\s*\(min-width:\s*900px\)/);
+        expect(css).toMatch(/@media\s*\(horizontal-viewport-segments:\s*2\)/);
     });
 
     it('keeps reveal scrim on artwork cells during hint previews in CSS', () => {

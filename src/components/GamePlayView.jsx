@@ -49,87 +49,95 @@ export function GamePlayView({
         <main className={mainClassName} aria-label={mainAriaLabel}>
             {topBar}
 
-            <StatusBanner
-                connectionStatus={connectionStatus}
-                mode={mode}
-                isSpectating={isSpectating}
-                myRole={myRole}
-                myClientId={myClientId}
-                currentMembers={currentMembers}
-                spectatedGameMode={spectatedGameMode}
-                gameState={gameState}
-                onReconnect={onReconnect}
-                onContinueSolo={onContinueSolo}
-                messages={messages}
-            />
-
-            {ticTacToeGame && ticTacToeGame.phase !== 'transition' ? (
-                <TicTacToeView
-                    game={ticTacToeGame}
-                    playerId={myClientId}
+            <div className="gameplay-stage">
+                <StatusBanner
+                    connectionStatus={connectionStatus}
+                    mode={mode}
                     isSpectating={isSpectating}
-                    onMove={onTicTacToeMove}
+                    myRole={myRole}
+                    myClientId={myClientId}
+                    currentMembers={currentMembers}
+                    spectatedGameMode={spectatedGameMode}
+                    gameState={gameState}
+                    onReconnect={onReconnect}
+                    onContinueSolo={onContinueSolo}
                     messages={messages}
                 />
-            ) : <>
-            <div className={ticTacToeGame?.phase === 'transition' ? 'tic-tac-toe-transition-stage tic-tac-toe-transition-stage--active' : 'tic-tac-toe-transition-stage'}>
-            <SudokuBoard
-                gameState={gameState}
-                selectedIndex={selectedIndex}
-                activeDigit={activeDigit}
-                hintsByCell={hintsByCell}
-                floatingReactions={floatingReactions}
-                cellRefs={cellRefs}
-                onCellSelect={onCellSelect}
-                myRole={myRole}
-                playerCursorIndex={playerCursorIndex}
-                partnerCursorIndices={partnerCursorIndices}
-                unitCelebration={unitCelebration}
-                hintHighlight={hintHighlight}
-                fistBump={fistBump}
-                boardBackground={boardBackground}
-                messages={messages}
-            />
-            {ticTacToeGame?.phase === 'transition' && (
-                <div className="tic-tac-toe-transition" role="status" aria-live="polite">
-                    <p className="tic-tac-toe-transition__text">
-                        {messages?.ticTacToeTransition || "You undo me. I undo you. Let's settle this."}
-                    </p>
+
+                <div className="gameplay-stage__board">
+                    {ticTacToeGame && ticTacToeGame.phase !== 'transition' ? (
+                        <TicTacToeView
+                            game={ticTacToeGame}
+                            playerId={myClientId}
+                            isSpectating={isSpectating}
+                            onMove={onTicTacToeMove}
+                            messages={messages}
+                        />
+                    ) : (
+                        <div className={ticTacToeGame?.phase === 'transition' ? 'tic-tac-toe-transition-stage tic-tac-toe-transition-stage--active' : 'tic-tac-toe-transition-stage'}>
+                            <SudokuBoard
+                                gameState={gameState}
+                                selectedIndex={selectedIndex}
+                                activeDigit={activeDigit}
+                                hintsByCell={hintsByCell}
+                                floatingReactions={floatingReactions}
+                                cellRefs={cellRefs}
+                                onCellSelect={onCellSelect}
+                                myRole={myRole}
+                                playerCursorIndex={playerCursorIndex}
+                                partnerCursorIndices={partnerCursorIndices}
+                                unitCelebration={unitCelebration}
+                                hintHighlight={hintHighlight}
+                                fistBump={fistBump}
+                                boardBackground={boardBackground}
+                                messages={messages}
+                            />
+                            {ticTacToeGame?.phase === 'transition' && (
+                                <div className="tic-tac-toe-transition" role="status" aria-live="polite">
+                                    <p className="tic-tac-toe-transition__text">
+                                        {messages?.ticTacToeTransition || "You undo me. I undo you. Let's settle this."}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
-            )}
+
+                <div className="gameplay-stage__side">
+                    {actionFeedback && (
+                        <div id="action-feedback" className="action-feedback" role="status">
+                            {actionFeedback}
+                        </div>
+                    )}
+
+                    {gameState.status === 'solved' ? (
+                        <SolveSummary
+                            difficulty={gameState.difficulty}
+                            elapsedSeconds={gameState.elapsedSeconds}
+                            mode={isCoopSession ? 'online' : 'solo'}
+                            isSpectating={isSpectating}
+                            restartLabel={restartLabel}
+                            restartDisabled={restartDisabled}
+                            onPlayAgain={onPlayAgain}
+                            onBackToSetup={onBackToSetup}
+                            messages={messages}
+                        />
+                    ) : (
+                        <>
+                            <SpectatorHintsFeed
+                                hintsByCell={hintsByCell}
+                                variant={activeBoardVariant}
+                                canApply={!isSpectating}
+                                onSelectHint={onSelectHint}
+                                onApplyHint={onApplyHint}
+                                messages={messages}
+                            />
+
+                            {bottomControls}
+                        </>
+                    )}
+                </div>
             </div>
-
-            {actionFeedback && (
-                <div id="action-feedback" className="action-feedback" role="status">
-                    {actionFeedback}
-                </div>
-            )}
-
-            {gameState.status === 'solved' && (
-                <SolveSummary
-                    difficulty={gameState.difficulty}
-                    elapsedSeconds={gameState.elapsedSeconds}
-                    mode={isCoopSession ? 'online' : 'solo'}
-                    isSpectating={isSpectating}
-                    restartLabel={restartLabel}
-                    restartDisabled={restartDisabled}
-                    onPlayAgain={onPlayAgain}
-                    onBackToSetup={onBackToSetup}
-                    messages={messages}
-                />
-            )}
-
-            <SpectatorHintsFeed
-                hintsByCell={hintsByCell}
-                variant={activeBoardVariant}
-                canApply={!isSpectating && gameState.status !== 'solved'}
-                onSelectHint={onSelectHint}
-                onApplyHint={onApplyHint}
-                messages={messages}
-            />
-
-            {bottomControls}
-            </>}
         </main>
     );
 }
