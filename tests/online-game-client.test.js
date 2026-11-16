@@ -99,6 +99,7 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
             variant: '2x3',
             totalCells: 36,
             hasGuest: true,
+            ticTacToe: true,
         });
 
         expect(publishSpy).toHaveBeenCalledTimes(1);
@@ -126,6 +127,7 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
             has_guest: true,
             filled_count: 16,
             join_policy: 'confirm',
+            tic_tac_toe: true,
         });
 
         const gamePublishSpy = vi.fn().mockResolvedValue({});

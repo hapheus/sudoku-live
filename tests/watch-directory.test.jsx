@@ -4,6 +4,11 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { WatchDirectory } from '../src/components/WatchDirectory.jsx';
 
 describe('WatchDirectory React component', () => {
+    it('identifies rooms playing Tic Tac Toe', () => {
+        render(<WatchDirectory rooms={[{ game_id: 'coop-room-1', status: 'in_progress', tic_tac_toe: true }]} onRefresh={vi.fn()} onWatchGame={vi.fn()} />);
+        expect(screen.getByText(/Tic Tac Toe/)).toBeInTheDocument();
+    });
+
     it('renders empty state when no live Sudoku matches exist', () => {
         render(<WatchDirectory rooms={[]} onRefresh={vi.fn()} onWatchGame={vi.fn()} />);
 

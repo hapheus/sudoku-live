@@ -3,6 +3,7 @@ import { SolveSummary } from './SolveSummary.jsx';
 import { SpectatorHintsFeed } from './SpectatorHintsFeed.jsx';
 import { StatusBanner } from './StatusBanner.jsx';
 import { SudokuBoard } from './SudokuBoard.jsx';
+import { TicTacToeView } from './TicTacToeView.jsx';
 
 export function GamePlayView({
     mainClassName,
@@ -16,6 +17,8 @@ export function GamePlayView({
     currentMembers,
     spectatedGameMode,
     gameState,
+    ticTacToeGame = null,
+    onTicTacToeMove = () => {},
     onReconnect,
     onContinueSolo = null,
     selectedIndex,
@@ -60,6 +63,9 @@ export function GamePlayView({
                 messages={messages}
             />
 
+            {ticTacToeGame ? (
+                <TicTacToeView game={ticTacToeGame} playerId={myClientId} isSpectating={isSpectating} onMove={onTicTacToeMove} />
+            ) : <>
             <SudokuBoard
                 gameState={gameState}
                 selectedIndex={selectedIndex}
@@ -108,6 +114,7 @@ export function GamePlayView({
             />
 
             {bottomControls}
+            </>}
         </main>
     );
 }

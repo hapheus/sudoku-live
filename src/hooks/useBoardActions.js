@@ -70,6 +70,7 @@ export function useBoardActions({
     announce,
     showFeedback,
     onLocalCellSolveForFistBump = null,
+    onTicTacToeShift = null,
     isRetroMode = false,
 }) {
     const isOnlineBroadcaster = (cur) => (
@@ -391,7 +392,7 @@ export function useBoardActions({
 
     const handleShift = useCallback((axis, direction) => {
         const cur = stateRef.current;
-        if (isRetroMode || cur.isSpectating || cur.mode === 'watch' || cur.gameState.status === 'solved') return;
+        if (isRetroMode || cur.ticTacToeActive || cur.isSpectating || cur.mode === 'watch' || cur.gameState.status === 'solved') return;
         const activeIdx = cur.selectedIndex;
         if (activeIdx === null || activeIdx === undefined) return;
 
@@ -429,9 +430,13 @@ export function useBoardActions({
             syncLobbyProgress(nextState);
         }
 
+        const from = axis === 'row' ? row : col;
+        const to = axis === 'row' ? Math.floor(nextSelectedIndex / specInfo.gridSize) : nextSelectedIndex % specInfo.gridSize;
+        onTicTacToeShift?.({ axis, from, to, direction: dir });
         persistSnapshotIfNeeded(nextState);
     }, [
         buildSyncPayload,
+        onTicTacToeShift,
         clearPendingHint,
         focusCell,
         isRetroMode,

@@ -137,7 +137,7 @@ export function WatchDirectory({
                                         {`Room #${game.game_id.slice(0, 8)}`}
                                     </span>
                                     <span className="live-game-card__meta">
-                                        {`${spec.shortLabel} • ${diffLabel} • ${statusLabel} • ${filledCount}/${totalCells}`}
+                                        {`${spec.shortLabel} • ${diffLabel} • ${statusLabel} • ${filledCount}/${totalCells}${game.tic_tac_toe ? ' • Tic Tac Toe' : ''}`}
                                     </span>
                                 </div>
                                 <div className="live-game-card__actions">
@@ -146,7 +146,7 @@ export function WatchDirectory({
                                             type="button"
                                             className="live-game-card__join-btn"
                                             data-join-id={game.game_id}
-                                            disabled={joinsDisabled || Boolean(pendingJoinGameId)}
+                                            disabled={joinsDisabled || Boolean(game.tic_tac_toe) || Boolean(pendingJoinGameId)}
                                             onClick={() => onJoinGame(game.game_id)}
                                         >
                                             {joinBtnLabel}
