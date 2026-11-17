@@ -51,3 +51,6 @@ Row/column swaps stay within a box band/stack; whole-band/stack swaps are Sudoku
 The [multiplayer trust and input contract](multiplayer-trust.md) records the action
 matrix, anonymous ownership limits, complete network validation, history rules,
 and compatibility behavior.
+
+The [session transition ownership map](session-transitions.md) records current
+orchestration responsibilities and the incremental join-request command boundary.
