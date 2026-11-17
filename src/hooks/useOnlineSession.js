@@ -87,6 +87,11 @@ export function clearPendingJoinState({
 /**
  * Manages WebSocket session lifecycle, persistence, lobby sync, presence, spectating, and co-op joins.
  */
+function resolveSoloRoomId(saved, isRestoringSaved, keepActiveRoom, currentRoomId) {
+    if (isRestoringSaved) return saved.roomId || generateGameId();
+    return keepActiveRoom ? currentRoomId : generateGameId();
+}
+
 export function useOnlineSession({
     initialRoute,
     playerName = null,
@@ -886,7 +891,7 @@ export function useOnlineSession({
         const saved = restoreSaved ? loadSoloGameSnapshot() : null;
         const isRestoringSaved = Boolean(saved && saved.gameState.status !== 'solved');
         const diff = isRestoringSaved
-            ? saved.gameState.difficulty
+            ? (saved.gameState.requestedDifficulty || saved.gameState.difficulty)
             : (overrideDifficulty || stateRef.current.difficulty);
         const varId = isRestoringSaved
             ? normalizeVariant(saved.gameState.variant || inferVariantFromBoardLength(saved.gameState.board?.length))
@@ -901,9 +906,7 @@ export function useOnlineSession({
             && stateRef.current.currentMembers.some((m) => m.id && m.id !== client.clientId),
         );
         const keepActiveRoom = !isRestoringSaved && startSession && hasRemoteMembers;
-        const roomId = isRestoringSaved
-            ? (saved.roomId || generateGameId())
-            : (keepActiveRoom ? stateRef.current.onlineGameId : generateGameId());
+        const roomId = resolveSoloRoomId(saved, isRestoringSaved, keepActiveRoom, stateRef.current.onlineGameId);
 
         const nextState = isRestoringSaved
             ? saved.gameState
@@ -913,8 +916,8 @@ export function useOnlineSession({
             : selectBoardBackground({ previousId: stateRef.current.boardBackground?.id });
 
         if (isRestoringSaved) {
-            setDifficulty(nextState.difficulty);
-            setStorageItem('sudoku_difficulty', nextState.difficulty);
+            setDifficulty(diff);
+            setStorageItem('sudoku_difficulty', diff);
             const restoredVar = normalizeVariant(nextState.variant || inferVariantFromBoardLength(nextState.board?.length));
             setVariant(restoredVar);
             setStorageItem('sudoku_variant', restoredVar);

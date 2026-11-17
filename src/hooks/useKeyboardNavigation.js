@@ -23,6 +23,16 @@ function resolveNavigationTarget(key, row, col, specInfo) {
     return null;
 }
 
+function keyboardBlocked(e, { isHelpOpen, pendingConfirm, navTab, isPlayingGame, isSpectating }) {
+            if (isHelpOpen || pendingConfirm) return true;
+            if (navTab === 'settings') return true;
+            if (navTab === 'play' && !isPlayingGame) return true;
+            if (navTab === 'watch' && !isSpectating) return true;
+            if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return true;
+
+    return false;
+}
+
 export function useKeyboardNavigation({
     isHelpOpen,
     pendingConfirm,
@@ -45,27 +55,48 @@ export function useKeyboardNavigation({
     focusCell,
 }) {
     useEffect(() => {
+        const navigateBoard = (e, specInfo) => {
+            if (selectedIndex === null || selectedIndex >= specInfo.totalCells) return;
+
+            if (e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && !isSpectating) {
+                const shiftAction = SHIFT_KEY_MAP[e.key];
+                if (shiftAction) {
+                    e.preventDefault();
+                    handleShift(shiftAction[0], shiftAction[1]);
+                    return;
+                }
+            }
+
+            const { row, col } = getCellCoords(selectedIndex, specInfo.id);
+            const nextIndex = resolveNavigationTarget(e.key, row, col, specInfo);
+            if (nextIndex !== null) {
+                e.preventDefault();
+                focusCell(nextIndex);
+                cellRefs.current[nextIndex]?.focus();
+            }
+        };
+
+        const clearSelection = e => {
+            if (selectedIndex !== null || stateRef.current.activeDigit !== null) {
+                e.preventDefault();
+                setSelectedIndex(null);
+                setActiveDigit(null);
+                if (!isSpectating) {
+                    broadcastCursor(null);
+                    broadcastActiveDigit(null);
+                }
+            }
+        };
+
         const handleKeyDown = (e) => {
-            if (isHelpOpen || pendingConfirm) return;
-            if (navTab === 'settings') return;
-            if (navTab === 'play' && !isPlayingGame) return;
-            if (navTab === 'watch' && !isSpectating) return;
-            if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+            if (keyboardBlocked(e, { isHelpOpen, pendingConfirm, navTab, isPlayingGame, isSpectating })) return;
 
             const curState = stateRef.current.gameState;
             const activeVariant = curState.variant || inferVariantFromBoardLength(curState.board?.length);
             const specInfo = getVariantSpec(activeVariant);
 
             if (e.key === 'Escape') {
-                if (selectedIndex !== null || stateRef.current.activeDigit !== null) {
-                    e.preventDefault();
-                    setSelectedIndex(null);
-                    setActiveDigit(null);
-                    if (!isSpectating) {
-                        broadcastCursor(null);
-                        broadcastActiveDigit(null);
-                    }
-                }
+                clearSelection(e);
                 return;
             }
 
@@ -105,24 +136,7 @@ export function useKeyboardNavigation({
                 return;
             }
 
-            if (selectedIndex === null || selectedIndex >= specInfo.totalCells) return;
-
-            if (e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && !isSpectating) {
-                const shiftAction = SHIFT_KEY_MAP[e.key];
-                if (shiftAction) {
-                    e.preventDefault();
-                    handleShift(shiftAction[0], shiftAction[1]);
-                    return;
-                }
-            }
-
-            const { row, col } = getCellCoords(selectedIndex, specInfo.id);
-            const nextIndex = resolveNavigationTarget(e.key, row, col, specInfo);
-            if (nextIndex !== null) {
-                e.preventDefault();
-                focusCell(nextIndex);
-                cellRefs.current[nextIndex]?.focus();
-            }
+            navigateBoard(e, specInfo);
         };
 
         document.addEventListener('keydown', handleKeyDown);
