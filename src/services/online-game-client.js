@@ -1,9 +1,11 @@
 import { Centrifuge } from 'centrifuge';
+import { createRoomAuthority } from './room-authority.js';
 import { createEventDeduper } from './event-deduper.js';
 import { normalizeJoinPolicy } from './join-settings.js';
 import {
     createMessageOrderGuard,
     createSenderIdentityGuard,
+    validateIncomingGameMessage,
     validateLobbyUpdateMessage,
     validatePresenceAnnounce,
 } from './message-security.js';
@@ -68,6 +70,9 @@ export class OnlineGameClient {
         this.gameChannel = null;
         this.lobbyChannel = null;
         this.currentGameId = null;
+        this.authorityRoomId = null;
+        this.roomAuthority = createRoomAuthority();
+        this.boardCells = 81;
         this.activeServerClients = new Set();
         this.gameMembersByServerClient = new Map();
         this.gamePresenceReady = false;
@@ -144,7 +149,9 @@ export class OnlineGameClient {
         if (!this.gameChannel || !this.gamePresenceReady) {
             return null;
         }
-        return assignUniqueMemberNames(Array.from(this.gameMembersByServerClient.values()));
+        return assignUniqueMemberNames(Array.from(this.gameMembersByServerClient.values(), (member) => ({
+            ...member, role: this.roomAuthority.role(member.serverClientId) || 'spectator',
+        })));
     }
 
     publishHostedLobbyMeta() {
@@ -163,44 +170,54 @@ export class OnlineGameClient {
         }
     }
 
+    acceptPublication(ctx, authority = this.roomAuthority, identity = this.senderIdentityGuard, cells = this.boardCells) {
+        const connection = ctx?.info?.client;
+        const payload = ctx?.data;
+        if (!connection || !payload) return false;
+        if (payload.type === PRESENCE_ANNOUNCE) {
+            if (!validatePresenceAnnounce(payload.data)) return false;
+        } else {
+            if (!validateIncomingGameMessage(payload.type, payload.data, cells, cells === 36 ? 6 : 9)) return false;
+            if (!authority.allows(connection, payload.type, payload.data)) return false;
+        }
+        return identity.verify({
+            serverClientId: connection,
+            serverUser: ctx.info.user,
+            senderId: payload.data?.senderId || payload.data?.id,
+        });
+    }
+
     async replayGameHistory(sub, onEvent) {
         const hist = await sub.history({ limit: 25 });
         if (this.gameChannel !== sub || !Array.isArray(hist?.publications)) return;
         if (this.gameRole === 'host' && this.gameMode === 'solo') return;
-        const historicalClients = new Set();
-        for (const pub of replayPublications(hist.publications)) {
-            if (pub?.info?.client) historicalClients.add(pub.info.client);
-            const payload = pub?.data;
-            if (!payload || !payload.type || payload.type === PRESENCE_ANNOUNCE) {
+        const authority = this.roomAuthority.fork();
+        const identity = createSenderIdentityGuard();
+        const accepted = [];
+        const publications = [...hist.publications].sort((a, b) => (a.offset || 0) - (b.offset || 0));
+        let cells = this.boardCells;
+        for (const pub of publications) {
+            if (!this.acceptPublication(pub, authority, identity, cells)) continue;
+            const payload = pub.data;
+            const connection = pub.info.client;
+            if (payload.type === PRESENCE_ANNOUNCE) {
+                authority.announce(connection, payload.data);
                 continue;
             }
-            const histIdentityOk = this.senderIdentityGuard.verify({
-                serverClientId: pub?.info?.client,
-                serverUser: pub?.info?.user,
-                senderId: payload.data?.senderId || payload.data?.id,
-            });
-            if (!histIdentityOk) {
-                continue;
-            }
-            const eventId = payload.data?.eventId;
-            if (eventId && this.rememberEvent(eventId)) {
-                continue;
-            }
-            if (RECOVERABLE_EVENTS.has(payload.type)) {
-                onEvent(payload.type, payload.data || {});
-            }
+            authority.observe(payload.type, payload.data);
+            if (payload.data.gameState) cells = payload.data.gameState.board.length;
+            if (RECOVERABLE_EVENTS.has(payload.type)) accepted.push({ ...pub, data: { type: payload.type, data: authority.project(connection, payload.data) } });
         }
-        // History may contain a previous transport for a still-running player.
-        // Keep live bindings; retired transports must not block that player's reconnect.
-        for (const serverClientId of historicalClients) {
-            if (!this.activeServerClients.has(serverClientId)) {
-                this.senderIdentityGuard.releaseServerClient(serverClientId);
-            }
+        for (const pub of replayPublications(accepted)) {
+            const { type, data } = pub.data;
+            if (data.eventId && this.rememberEvent(data.eventId)) continue;
+            if (data.gameState) this.boardCells = data.gameState.board.length;
+            onEvent(type, data);
         }
     }
 
     handlePresenceAnnouncement(ctx, payload, { onIncompatibleClient, onPresenceChange, onMemberJoin, finalizeInitialPresence }) {
-        const sc = ctx?.info?.client || payload.data?.serverClientId || payload.data?.id;
+        const sc = ctx?.info?.client;
         if (!sc || payload.data?.id === this.clientId) return;
         if (!validatePresenceAnnounce(payload.data)) return;
 
@@ -212,11 +229,12 @@ export class OnlineGameClient {
             this.negotiatedFeatures = new Set(nextNegotiated);
         }
 
+        const acceptedRole = this.roomAuthority.announce(sc, payload.data);
         const existed = this.gameMembersByServerClient.has(sc);
         const member = {
             id: payload.data?.id || sc,
             serverClientId: sc,
-            role: normalizeRole(payload.data?.role),
+            role: acceptedRole,
             game_mode: normalizeGameMode(payload.data?.game_mode),
             join_policy: normalizeJoinPolicy(payload.data?.join_policy),
             name: sanitizePlayerName(payload.data?.name) || 'Player',
@@ -310,6 +328,11 @@ export class OnlineGameClient {
         this.senderIdentityGuard.clear();
         this.negotiatedFeatures = new Set(SUPPORTED_MULTIPLAYER_FEATURES);
 
+        if (this.authorityRoomId !== gameId) {
+            this.roomAuthority = createRoomAuthority();
+            this.authorityRoomId = gameId;
+            this.boardCells = 81;
+        }
         this.currentGameId = gameId;
         this.activeServerClients.clear();
         this.gameMembersByServerClient.clear();
@@ -330,6 +353,7 @@ export class OnlineGameClient {
         const announceSelf = () => {
             if (this.gameChannel !== sub) return;
             const selfKey = this.serverClientId || this.clientId;
+            this.roomAuthority.announce(selfKey, { id: this.clientId, role: this.gameRole, join_policy: this.gameJoinPolicy });
             this.gameMembersByServerClient.set(selfKey, {
                 id: this.clientId,
                 serverClientId: selfKey,
@@ -348,6 +372,7 @@ export class OnlineGameClient {
                     join_policy: this.gameJoinPolicy,
                     name: this.playerName,
                     ...this.protocolMeta,
+                    approvedGuestIds: this.gameRole === 'host' ? this.roomAuthority.approvedGuestIds() : undefined,
                 },
             })).catch(() => {});
         };
@@ -374,6 +399,7 @@ export class OnlineGameClient {
 
                 const clientIds = Object.keys(res?.clients || {});
                 this.activeServerClients = new Set(clientIds);
+                this.roomAuthority.retainConnections(this.activeServerClients);
                 expectedRemoteCount = clientIds.filter((sc) => sc !== this.serverClientId).length;
             } catch {
                 if (this.gameChannel !== sub) return;
@@ -415,6 +441,7 @@ export class OnlineGameClient {
             if (!sc) return;
 
             this.activeServerClients.delete(sc);
+            this.roomAuthority.leave(sc);
             this.senderIdentityGuard.releaseServerClient(sc);
             const leaving = this.gameMembersByServerClient.get(sc);
             this.gameMembersByServerClient.delete(sc);
@@ -431,28 +458,24 @@ export class OnlineGameClient {
             const payload = ctx?.data;
             if (!payload || typeof payload.type !== 'string') return;
 
-            const claimedSenderId = payload.data?.senderId || payload.data?.id;
-            const identityOk = this.senderIdentityGuard.verify({
-                serverClientId: ctx?.info?.client,
-                serverUser: ctx?.info?.user,
-                senderId: claimedSenderId,
-            });
-            if (!identityOk) return;
-
+            if (!this.acceptPublication(ctx)) return;
             if (payload.type === PRESENCE_ANNOUNCE) {
                 this.handlePresenceAnnouncement(ctx, payload, { onIncompatibleClient, onPresenceChange, onMemberJoin, finalizeInitialPresence });
                 return;
             }
 
             const eventId = payload.data?.eventId;
-            if (eventId && this.rememberEvent(eventId)) {
+            if (eventId && this.eventDeduper.has(eventId)) {
                 return;
             }
             if (!this.messageOrderGuard.accept(payload.data || {})) {
                 return;
             }
 
-            onEvent(payload.type, payload.data || {});
+            if (eventId) this.rememberEvent(eventId);
+            this.roomAuthority.observe(payload.type, payload.data);
+            if (payload.data.gameState) this.boardCells = payload.data.gameState.board.length;
+            onEvent(payload.type, this.roomAuthority.project(ctx.info.client, payload.data));
         });
 
         sub.subscribe();
@@ -462,8 +485,13 @@ export class OnlineGameClient {
 
     sendWhisperEvent(type, data = {}) {
         if (this.gameChannel) {
-            const payloadData = this.buildOutgoingEnvelope(data);
+            const payloadData = this.buildOutgoingEnvelope({
+                ...data,
+                ...(type === PRESENCE_ANNOUNCE && this.gameRole === 'host'
+                    ? { approvedGuestIds: this.roomAuthority.approvedGuestIds(), ...this.protocolMeta } : {}),
+            });
             this.rememberEvent(payloadData.eventId);
+            if (payloadData.gameState) this.boardCells = payloadData.gameState.board.length;
             try {
                 Promise.resolve(this.gameChannel.publish({ type, data: payloadData })).catch(() => {});
             } catch {
@@ -481,6 +509,13 @@ export class OnlineGameClient {
 
         const payloadData = this.buildOutgoingEnvelope(data);
         this.rememberEvent(payloadData.eventId);
+        if (payloadData.gameState) this.boardCells = payloadData.gameState.board.length;
+        if (this.gameRole === 'host' && type === 'join-response') {
+            this.roomAuthority.observe(type, payloadData);
+            this.sendWhisperEvent(PRESENCE_ANNOUNCE, {
+                id: this.clientId, role: 'host', game_mode: this.gameMode, join_policy: this.gameJoinPolicy, name: this.playerName,
+            });
+        }
 
         if (this.gameChannel) {
             try {

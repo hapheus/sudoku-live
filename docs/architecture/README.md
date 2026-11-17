@@ -47,3 +47,7 @@ Clue-count presets are search targets, not difficulty definitions or hard upper 
 Generation verifies every candidate's unique solution, prefers an exact requested logic tier, and limits retries to avoid blocking the client indefinitely. If none matches, it selects the closest measured tier, using clue distance only as a tie-breaker, and reports the **actual** difficulty. This matters especially for 6×6, where advanced tiers may not be found within the retry budget. Requested and actual difficulty are retained separately so Setup/resume does not discard an honestly downgraded puzzle; old snapshots fall back compatibly. Gameplay and lobby show actual difficulty.
 
 Row/column swaps stay within a box band/stack; whole-band/stack swaps are Sudoku automorphisms. Applying the same bijection to clues, board and solution preserves the number of clue solutions. Tests cover all four shift operations in both variants, plus seeded generation across every requested tier.
+
+The [multiplayer trust and input contract](multiplayer-trust.md) records the action
+matrix, anonymous ownership limits, complete network validation, history rules,
+and compatibility behavior.

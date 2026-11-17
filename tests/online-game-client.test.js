@@ -190,12 +190,15 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
         const guestClient = new OnlineGameClient({
             wsConfig: { host: 'localhost', port: 8081, scheme: 'http' },
         });
+        const historyInfo = { client: 'sc-history-host' };
         const guestSub = makeMockSubscription([
-            // Out-of-order / descending offsets with stale move before new-puzzle-accept
-            { offset: 4, data: { type: 'cell-update', data: { eventId: 'e4', index: 5, value: 3 } } },
-            { offset: 3, data: { type: 'new-puzzle-accept', data: { eventId: 'e3', gameState: { board: [] } } } },
-            { offset: 2, data: { type: 'cell-update', data: { eventId: 'e2', index: 1, value: 8 } } },
-            { offset: 1, data: { type: 'cell-update', data: { eventId: 'e1', index: 0, value: 7 } } },
+            { offset: 0, info: historyInfo, data: { type: 'presence-announce', data: { id: 'history-host', role: 'host' } } },
+            ...[
+                { offset: 4, type: 'cell-update', data: { eventId: 'e4', index: 5, value: 3 } },
+                { offset: 3, type: 'new-puzzle-accept', data: { eventId: 'e3', gameState: { board: Array(81).fill(0), givens: Array(81).fill(false) } } },
+                { offset: 2, type: 'cell-update', data: { eventId: 'e2', index: 1, value: 8 } },
+                { offset: 1, type: 'cell-update', data: { eventId: 'e1', index: 0, value: 7 } },
+            ].map(({ offset, type, data }) => ({ offset, info: historyInfo, data: { type, data: { ...data, senderId: 'history-host' } } })),
         ]);
         guestClient.client = {
             state: 'connected',
@@ -245,6 +248,7 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
         client.joinGameChannel('room-names-1', {
             role: 'host',
             gameMode: 'online',
+            joinPolicy: 'auto',
             onPresenceChange: (members) => { latestMembers = members; },
             onMemberJoin: () => { latestMembers = client.getGameMembers(); },
         });
@@ -279,6 +283,7 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
             .mockResolvedValueOnce({ publications: [] })
             .mockResolvedValueOnce({
                 publications: [
+                    { offset: 0, info: { client: 'sc-old' }, data: { type: 'presence-announce', data: { id: 'old-host', role: 'host' } } },
                     { offset: 1, info: { client: 'sc-old' }, data: { type: 'cell-update', data: { senderId: 'old-host', eventId: 'evt-miss-1', index: 2, value: 5 } } },
                 ],
             });
@@ -341,6 +346,10 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
         expect(publishSpy).toHaveBeenCalledTimes(2);
         handlers.get('publication')?.({
             info: { client: 'sc-reconnected' },
+            data: { type: 'presence-announce', data: { id: 'old-host', role: 'host' } },
+        });
+        handlers.get('publication')?.({
+            info: { client: 'sc-reconnected' },
             data: { type: 'cell-update', data: { senderId: 'old-host', eventId: 'evt-after-reconnect', index: 3, value: 2 } },
         });
         expect(events.at(-1).data.eventId).toBe('evt-after-reconnect');
@@ -401,6 +410,7 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
         client.joinGameChannel('room-sec-1', {
             role: 'host',
             gameMode: 'online',
+            joinPolicy: 'auto',
             onEvent: (type, data) => events.push({ type, data }),
             onIncompatibleClient: (compat) => incompatible.push(compat),
         });
@@ -456,6 +466,10 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
 
         // Peer leaves (disconnects) and reconnects on a new serverClientId -> allowed cleanly
         handlers.get('leave')?.({ info: { client: 'sc-peer' } });
+        handlers.get('publication')?.({
+            info: { client: 'sc-peer-reconnected', user: 'u-peer' },
+            data: { type: 'presence-announce', data: { id: 'peer-1', role: 'guest' } },
+        });
         handlers.get('publication')?.({
             info: { client: 'sc-peer-reconnected', user: 'u-peer' },
             data: { type: 'cell-update', data: { eventId: 'e-reconn-4', senderId: 'peer-1', seq: 4, sentAt: now, index: 4, value: 8 } },

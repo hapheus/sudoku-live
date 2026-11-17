@@ -68,7 +68,7 @@ export function useGameTimersAndModals({
             onlineClientRef.current?.sendGamePing({
                 role: cur.myRole,
                 gameState: serializeGameState(cur.gameState),
-                ticTacToe: cur.ticTacToeChallenge || null,
+                ticTacToe: cur.myRole === 'host' ? cur.ticTacToeChallenge || null : undefined,
                 isRetroMode: Boolean(cur.isRetroMode),
                 boardBackgroundId: cur.boardBackground?.id || null,
                 rematchRequestedBy: cur.rematchRequestedBy,

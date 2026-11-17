@@ -340,10 +340,10 @@ export function useOnlineSession({
     ]);
 
     const handleRemoteGameEvent = useCallback((type, data) => {
+        const totalCells = stateRef.current.gameState?.board?.length || 81;
+        const maxDigit = totalCells === 36 ? 6 : 9;
+        if (!validateIncomingGameMessage(type, data, totalCells, maxDigit)) return;
         if (type.startsWith('tic-tac-toe-')) {
-            const totalCells = stateRef.current.gameState?.board?.length || 81;
-            const maxDigit = totalCells === 36 ? 6 : 9;
-            if (!validateIncomingGameMessage(type, data, totalCells, maxDigit)) return;
             ticTacToe?.onEvent(type, data);
             return;
         }
@@ -358,7 +358,7 @@ export function useOnlineSession({
         const cur = stateRef.current;
         return {
             gameState: serializeGameState(cur.gameState),
-            ticTacToe: ticTacToe?.challengeRef.current,
+            ticTacToe: cur.myRole === 'host' ? ticTacToe?.challengeRef.current : undefined,
             isRetroMode: Boolean(cur.isRetroMode),
             boardBackgroundId: cur.boardBackground?.id || null,
             rematchRequestedBy: cur.rematchRequestedBy,
