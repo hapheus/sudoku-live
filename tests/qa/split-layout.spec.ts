@@ -127,12 +127,14 @@ for (const variant of ['3x3', '2x3']) {
 }
 
 for (const language of ['en', 'de']) {
-    for (const width of [320, 360, 390, 466]) {
-        test(`compact join legends stay on one line and align (${language}, ${width}px)`, async ({ page }, testInfo) => {
+    const cases: Array<[number, string]> = [[320, 'system-ui'], [320, 'Arial'], [320, 'Verdana'], [360, 'system-ui'], [390, 'system-ui'], [466, 'system-ui']];
+    for (const [width, font] of cases) {
+        test(`compact join legends stay on one line and align (${language}, ${width}px, ${font})`, async ({ page }, testInfo) => {
             await page.setViewportSize({ width, height: 678 });
             await page.addInitScript(language => localStorage.setItem('sudoku_lang', language), language);
             await page.routeWebSocket(/.*/, socket => socket.close());
             await page.goto('/');
+            await page.addStyleTag({ content: `html { font-family: ${font}, sans-serif; }` });
             await page.locator('#nav-settings').click();
             const fields = page.locator('.settings-fieldset').filter({ has: page.locator('input[name^="sudoku-joins-"]') });
             await expect(fields).toHaveCount(2);

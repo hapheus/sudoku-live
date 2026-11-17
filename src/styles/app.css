@@ -2252,6 +2252,13 @@ body {
     letter-spacing: normal;
 }
 
+@media (max-width: 359px) {
+    /* Sentence case leaves room for wider system fonts without shrinking text. */
+    .settings-group--2col .settings-fieldset__legend {
+        text-transform: none;
+    }
+}
+
 .settings-group--2col .segmented-label {
     font-size: 0.8125rem;
     padding: 0.35rem 0.25rem;
