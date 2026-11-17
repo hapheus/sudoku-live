@@ -9,6 +9,7 @@ COPY package*.json ./
 RUN npm ci
 
 COPY index.html vite.config.js ./
+COPY scripts/bot-exclusion.mjs scripts/bot-exclusion.mjs
 COPY public public
 COPY src src
 

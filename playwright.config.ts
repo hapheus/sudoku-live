@@ -8,9 +8,10 @@ export default defineConfig({
     snapshotPathTemplate: '{testDir}/baselines/{arg}{ext}',
     use: {
         baseURL: 'http://127.0.0.1:5178',
+        headless: true,
         browserName: 'chromium',
         channel: 'chromium',
-        // Match headless rendering: native scrollbars otherwise consume 15px in headed mode.
+        // Keep screenshot geometry stable while leaving scrolling enabled.
         launchOptions: { args: ['--hide-scrollbars'] },
         reducedMotion: 'reduce',
         locale: 'en-US',

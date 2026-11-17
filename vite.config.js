@@ -1,3 +1,4 @@
+import { botExclusionPlugin } from './scripts/bot-exclusion.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { defineConfig } from 'vite';
@@ -44,7 +45,7 @@ export default defineConfig(({ mode }) => {
     const isItch = mode === 'itch' || process.env.BUILD_TARGET === 'itch';
     return {
         base: isItch ? './' : '/',
-        plugins: [react(), ...(isItch ? [itchBoardLimitPlugin()] : [])],
+        plugins: [botExclusionPlugin(), react(), ...(isItch ? [itchBoardLimitPlugin()] : [])],
         build: {
             outDir: isItch ? 'dist-itch' : 'dist',
             emptyOutDir: true,

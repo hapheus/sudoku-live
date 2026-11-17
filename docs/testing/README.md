@@ -27,22 +27,19 @@ npx playwright install chromium
 # Headless Chromium suite
 npm run e2e
 
-# Visible Chromium window
-npm run e2e:headed
-
 # Run a single test by name
-npm run e2e:headed -- --grep "settings change"
+npm run e2e -- --grep "settings change"
 ```
 
 Notes:
-- Both E2E commands automatically start a local Vite server on port `5178`. Run them sequentially.
-- Headed execution requires a graphical desktop session.
+- Tests always run headlessly. Use screenshots and traces to inspect failures.
+- The E2E command automatically starts a local Vite server on port `5178`.
 - Failures retain traces and screenshots under `test-results/`; inspect a trace with:
   ```bash
   npx playwright show-trace <path-to-trace.zip>
   ```
 - Visual reference baselines live in [`tests/qa/baselines/`](../../tests/qa/baselines/). Review screenshots before updating them with `npm run e2e -- --update-snapshots`.
-- Both modes use the full Chromium binary (`channel: chromium`) and hide native scrollbar chrome for consistent screenshot geometry; only the ticking elapsed-time text is masked.
+- Tests use the full Chromium binary (`channel: chromium`) and hide native scrollbar chrome for consistent screenshot geometry; only the ticking elapsed-time text is masked.
 - See [the QA report](../../tests/qa/REPORT.md) for verified coverage and known limitations.
 
 ---

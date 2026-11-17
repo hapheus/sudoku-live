@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { assertNoBotEntries, verifyBotExclusion } from './bot-exclusion.mjs';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -95,6 +96,8 @@ export function verifyItchPackage() {
 
     const html = fs.readFileSync(indexPath, 'utf8');
     const entries = listZipEntries(ZIP_PATH);
+    assertNoBotEntries(entries);
+    verifyBotExclusion(DIST_ITCH_DIR);
     const errors = [
         ...validateItchIndexHtml(html),
         ...validateItchZipEntries(entries),

@@ -1,0 +1,25 @@
+{
+  "sourceRepository": "https://github.com/hapheus/sudoku-push-bot",
+  "sourceRevision": "f2572338668dfc178f900d0a64b159ab9a9f282c",
+  "destinationRepository": "https://github.com/hapheus/sudoku-shift",
+  "destinationBaseRevision": "cd210c6fdd565a4c224f985134266d03caf58c84",
+  "sourceFilesSha256": {
+    "src/bot-manager.ts": "a5820336a512c362895a3ee509fba4cd98bb1ef30e946df6f25d9123d3c4d2a3",
+    "src/bot-runner.ts": "fc04194b388b3904be074ab30a8a022d4876f9aad41f1fb507a4713cb922634a",
+    "src/game-session.ts": "b372d131555cb85ff40731489b4b540ce3a161494663b0f437b979b56f55c4bc",
+    "src/move-scheduler.ts": "973cdce27b32f0a3733e8934af48471ce173a2cd4bddb4d5fc45619861cb7311",
+    "src/centrifugo-adapter.ts": "8226e28fb42b058092af31e0ad80db08a6336392557dad79c47a72e15bf703c7",
+    "tests/session.test.ts": "bcf13816eedca174bac295bfb3283d0f9ad3bd6bb119f43aaa7fbf5fbb8eaa3f",
+    "tests/manager.test.ts": "6270d36389ac7f1507dee599426f8b7b180b1f6e35fedb28d617123a42b13812",
+    "tests/scheduler.test.ts": "3c6aa9946899db0e1a3b03e852ab44ef0ec655c02563df84425ca4520649b82f",
+    "tests/support/memory-websocket.ts": "bdb2bfc30b2066eb72d7e2c4db04adddc05dbde59b53b0d22b9b60b26c80d4a8",
+    "tests/integration/centrifugo.test.ts": "3c041f1448dc758a6b105f504f8758ade9e13f3c697ec53c51eea05482188c22",
+    "LICENSE": "cc467a6c1ee0ea11e0b6cac9d15b9a7dbf9d9060962bd79c93d459a4ecd1ba6c"
+  },
+  "adaptations": [
+    "Current app domain and protocol imports replace vendored snapshots.",
+    "Local build, validated CLI, count and optional Watch browser replace fixed/container deployment.",
+    "Current message envelopes, valid note updates, player names and lobby metadata.",
+    "Tests adapted to actual generator difficulty fallback and local CLI."
+  ]
+}

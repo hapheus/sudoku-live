@@ -1,0 +1,14 @@
+# Disposable QA backend only. Never part of app deployment.
+services:
+  centrifugo:
+    image: centrifugo/centrifugo:v6
+    command: centrifugo -c /centrifugo/config.json
+    volumes:
+      - ./tests/centrifugo.json:/centrifugo/config.json:ro
+    ports:
+      - "127.0.0.1:18081:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 15

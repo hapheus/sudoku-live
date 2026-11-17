@@ -279,7 +279,7 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
             .mockResolvedValueOnce({ publications: [] })
             .mockResolvedValueOnce({
                 publications: [
-                    { offset: 1, data: { type: 'cell-update', data: { eventId: 'evt-miss-1', index: 2, value: 5 } } },
+                    { offset: 1, info: { client: 'sc-old' }, data: { type: 'cell-update', data: { senderId: 'old-host', eventId: 'evt-miss-1', index: 2, value: 5 } } },
                 ],
             });
         const presenceSpy = vi.fn()
@@ -339,6 +339,35 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
         expect(client.getGameMembers()).toHaveLength(1);
         expect(client.getGameMembers()[0].displayName).toBe('CleverLynx');
         expect(publishSpy).toHaveBeenCalledTimes(2);
+        handlers.get('publication')?.({
+            info: { client: 'sc-reconnected' },
+            data: { type: 'cell-update', data: { senderId: 'old-host', eventId: 'evt-after-reconnect', index: 3, value: 2 } },
+        });
+        expect(events.at(-1).data.eventId).toBe('evt-after-reconnect');
+        // A different live transport cannot claim the now-bound player identity.
+        handlers.get('publication')?.({
+            info: { client: 'sc-spoofed' },
+            data: { type: 'cell-update', data: { senderId: 'old-host', eventId: 'evt-spoofed', index: 3, value: 9 } },
+        });
+        expect(events.at(-1).data.eventId).toBe('evt-after-reconnect');
+    });
+
+    it('removes stale Watch rooms when reconnect history no longer contains their hosts', async () => {
+        const handlers = new Map();
+        const sub = {
+            on: (event, callback) => handlers.set(event, callback),
+            subscribe: vi.fn(), unsubscribe: vi.fn(),
+            presence: vi.fn().mockResolvedValue({ clients: { 'sc-self': {} } }),
+            history: vi.fn().mockResolvedValue({ publications: [] }),
+        };
+        const client = new OnlineGameClient();
+        client.client = { newSubscription: () => sub, removeSubscription: vi.fn() };
+        const snapshots = [];
+        client.joinLobby({ onLobbyPresenceChange: rooms => snapshots.push(rooms) });
+        client.lobbyRoomsByGameId.set('old-room', { game_id: 'old-room', serverClientId: 'retired-host' });
+        await handlers.get('subscribed')();
+        expect(snapshots).toEqual([[]]);
+        client.leaveLobby();
     });
 
     it('rejects duplicate, out-of-order, and spoofed-identity live publications and notifies incompatible clients', async () => {
