@@ -25,6 +25,8 @@ npm run e2e -- --ignore-snapshots
 
 The region tests measure equal widths and horizontal containment of descendants in both Sudoku variants at 667×375, 812×375, 844×390, 1024×768 and 1440×900. They repeat geometry checks after portrait/landscape resizing and assert preservation of the displayed puzzle. Another case traverses setup, Settings, Watch and the privacy page. Chromium display-feature emulation tests unequal segments with a 30 px hinge, including help-dialog placement. This is emulated geometry, not physical-device evidence. Existing end-to-end tests exercise completion, spectator interactions, localization, keyboard controls, zoom and accessibility.
 
+Visual baselines for the changed layouts are refreshed alongside the geometry checks. Saved-game screenshot fixtures pin an existing background ID so random artwork does not produce unrelated image differences; the app retains its normal random selection. Baseline comparisons still cover the artwork and controls without new masks.
+
 ## Remaining device acceptance (#45 / #59)
 
 - The owner's physical-iPhone overlap still needs exact device/OS/viewport/content reproduction and physical verification of the fix.

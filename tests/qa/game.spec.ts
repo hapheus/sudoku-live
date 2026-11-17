@@ -24,7 +24,12 @@ async function openFixture(page: Page, theme = 'dark', almostSolved = false) {
             localStorage.setItem('sudoku_difficulty', 'medium');
             localStorage.setItem('sudoku_variant', '3x3');
         }
-    }, { snapshot: JSON.stringify({ gameState: serializeGameState(game), roomId: 'qa-room' }), theme });
+    }, { snapshot: JSON.stringify({
+        gameState: serializeGameState(game),
+        roomId: 'qa-room',
+        // Pin artwork so snapshot differences represent UI changes rather than random selection.
+        boardBackgroundId: 'alpenpanorama_mit_see_im_sonnenuntergang.webp',
+    }), theme });
     // Local/offline coverage must never depend on a live Centrifugo server.
     await page.routeWebSocket(/.*/, socket => socket.close());
     await page.goto('/');
