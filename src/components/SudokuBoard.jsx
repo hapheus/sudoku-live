@@ -1,6 +1,46 @@
 import React from 'react';
 import { getCellCoords, getColLabel, getVariantSpec, inferVariantFromBoardLength } from '../domain/sudoku-generator.js';
+import { getUnitsForVariant } from '../domain/sudoku-variants.js';
 import { getSudokuCellAriaLabel } from '../utils/aria-helpers.js';
+
+function getCompletedUnitCells(gameState, spec, hasArtwork, conflictSet) {
+    const completedUnitCells = new Set();
+    if (hasArtwork && Array.isArray(gameState.board) && gameState.board.length === spec.totalCells) {
+        for (const { indices } of getUnitsForVariant(spec)) {
+            if (indices.every(index => gameState.board[index] > 0 && !conflictSet.has(index))) {
+                for (const index of indices) completedUnitCells.add(index);
+            }
+        }
+    }
+
+    return completedUnitCells;
+}
+
+function isPartnerCell(owner, myRole, isGiven, value) {
+    if (isGiven || value <= 0 || !owner) return false;
+    if (myRole === 'spectator') return owner === 'guest';
+    return (myRole === 'host' || myRole === 'guest') && owner !== myRole;
+}
+
+function cellAnimationStyle(celebrateDelay, r, c, hasArtwork, isSolved) {
+    const style = {};
+    if (celebrateDelay !== undefined) style['--complete-delay'] = `${celebrateDelay}ms`;
+    if (hasArtwork && isSolved) style['--solve-delay'] = `${(r + c) * 42}ms`;
+    return style;
+}
+
+function isFocusPeer(coords, focusCoords, isFocusAnchor) {
+    if (!focusCoords || isFocusAnchor) return false;
+    return coords.row === focusCoords.row || coords.col === focusCoords.col || coords.box === focusCoords.box;
+}
+
+function ownershipClasses(isGiven, value, isPartnerOwned) {
+    return {
+        'sudoku-cell--given': isGiven,
+        'sudoku-cell--partner': !isGiven && value > 0 && isPartnerOwned,
+        'sudoku-cell--user': !isGiven && value > 0 && !isPartnerOwned,
+    };
+}
 
 export function SudokuBoard({
     gameState,
@@ -45,61 +85,7 @@ export function SudokuBoard({
     const hintHighlightTarget = hintHighlight?.targetIndex ?? null;
     const hintHighlightDelays = hintHighlight?.contextDelays || null;
 
-    const completedUnitCells = new Set();
-    if (hasArtwork && Array.isArray(gameState.board) && gameState.board.length === spec.totalCells) {
-        for (let r = 0; r < gridSize; r += 1) {
-            let rowComplete = true;
-            for (let c = 0; c < gridSize; c += 1) {
-                const i = r * gridSize + c;
-                if (gameState.board[i] <= 0 || conflictSet.has(i)) {
-                    rowComplete = false;
-                    break;
-                }
-            }
-            if (rowComplete) {
-                for (let c = 0; c < gridSize; c += 1) {
-                    completedUnitCells.add(r * gridSize + c);
-                }
-            }
-        }
-        for (let c = 0; c < gridSize; c += 1) {
-            let colComplete = true;
-            for (let r = 0; r < gridSize; r += 1) {
-                const i = r * gridSize + c;
-                if (gameState.board[i] <= 0 || conflictSet.has(i)) {
-                    colComplete = false;
-                    break;
-                }
-            }
-            if (colComplete) {
-                for (let r = 0; r < gridSize; r += 1) {
-                    completedUnitCells.add(r * gridSize + c);
-                }
-            }
-        }
-        const boxCountCols = gridSize / boxCols;
-        const boxCountRows = gridSize / boxRows;
-        for (let br = 0; br < boxCountRows; br += 1) {
-            for (let bc = 0; bc < boxCountCols; bc += 1) {
-                let boxComplete = true;
-                const indices = [];
-                for (let dr = 0; dr < boxRows; dr += 1) {
-                    for (let dc = 0; dc < boxCols; dc += 1) {
-                        const i = (br * boxRows + dr) * gridSize + (bc * boxCols + dc);
-                        indices.push(i);
-                        if (gameState.board[i] <= 0 || conflictSet.has(i)) {
-                            boxComplete = false;
-                        }
-                    }
-                }
-                if (boxComplete) {
-                    for (const i of indices) {
-                        completedUnitCells.add(i);
-                    }
-                }
-            }
-        }
-    }
+    const completedUnitCells = getCompletedUnitCells(gameState, spec, hasArtwork, conflictSet);
 
     const digitsList = Array.from({ length: maxDigit }, (_, i) => i + 1);
     const axisIndices = Array.from({ length: gridSize }, (_, i) => i + 1);
@@ -169,21 +155,12 @@ export function SudokuBoard({
                                     const hint = value === 0 ? (hintsByCell.get(idx) || null) : null;
 
                                     const owner = gameState.cellOwners?.[idx] || null;
-                                    const isPartnerOwned = !isGiven && value > 0 && Boolean(
-                                        owner && (
-                                            ((myRole === 'host' || myRole === 'guest') && owner !== myRole)
-                                            || (myRole === 'spectator' && owner === 'guest')
-                                        ),
-                                    );
+                                    const isPartnerOwned = isPartnerCell(owner, myRole, isGiven, value);
                                     const isPlayerFocused = playerCursorIndex === idx;
                                     const isPartnerFocused = partnerCursorSet.has(idx);
 
                                     const isFocusAnchor = isSelected || (selectedIndex === null && isPlayerFocused);
-                                    const isPeer = focusCoords !== null && !isFocusAnchor && (
-                                        coords.row === focusCoords.row
-                                        || coords.col === focusCoords.col
-                                        || coords.box === focusCoords.box
-                                    );
+                                    const isPeer = isFocusPeer(coords, focusCoords, isFocusAnchor);
                                     const isSameDigit = highlightedDigit > 0 && value === highlightedDigit && !isFocusAnchor;
 
                                     const isBoxRight = (c + 1) % boxCols === 0 && c < gridSize - 1;
@@ -195,38 +172,29 @@ export function SudokuBoard({
                                     const isHintContext = hintDelay !== undefined && !isHintTarget;
                                     const isFistBumpCell = fistBump?.index === idx;
 
-                                    const cellStyle = {};
-                                    if (isUnitCelebrating) {
-                                        cellStyle['--complete-delay'] = `${celebrateDelay}ms`;
-                                    }
-                                    if (hasArtwork && isSolved) {
-                                        cellStyle['--solve-delay'] = `${(r + c) * 42}ms`;
-                                    }
+                                    const cellStyle = cellAnimationStyle(celebrateDelay, r, c, hasArtwork, isSolved);
 
-                                    const classNames = [
-                                        'sudoku-cell',
-                                        isGiven
-                                            ? 'sudoku-cell--given'
-                                            : (value > 0
-                                                ? (isPartnerOwned ? 'sudoku-cell--partner' : 'sudoku-cell--user')
-                                                : ''),
-                                        isRevealed ? 'sudoku-cell--revealed' : '',
-                                        isUnitRevealed ? 'sudoku-cell--unit-revealed' : '',
-                                        isSelected ? 'sudoku-cell--selected' : '',
-                                        isPlayerFocused ? 'sudoku-cell--player-cursor' : '',
-                                        isPartnerFocused ? 'sudoku-cell--partner-cursor' : '',
-                                        isPeer ? 'sudoku-cell--peer' : '',
-                                        isSameDigit ? 'sudoku-cell--same-digit' : '',
-                                        isConflict ? 'sudoku-cell--conflict' : '',
-                                        hint ? 'sudoku-cell--hinted' : '',
-                                        isUnitCelebrating ? 'sudoku-cell--unit-complete' : '',
-                                        isHintTarget ? 'sudoku-cell--hint-target' : '',
-                                        isHintContext ? 'sudoku-cell--hint-context' : '',
-                                        (isHintTarget || isHintContext) && isHintPreview ? 'sudoku-cell--hint-preview' : '',
-                                        isFistBumpCell ? 'sudoku-cell--fist-bump' : '',
-                                        isBoxRight ? 'sudoku-cell--box-right' : '',
-                                        isBoxBottom ? 'sudoku-cell--box-bottom' : '',
-                                    ].filter(Boolean).join(' ');
+                                    const cellClasses = {
+                                        'sudoku-cell': true,
+                                        ...ownershipClasses(isGiven, value, isPartnerOwned),
+                                        'sudoku-cell--revealed': isRevealed,
+                                        'sudoku-cell--unit-revealed': isUnitRevealed,
+                                        'sudoku-cell--selected': isSelected,
+                                        'sudoku-cell--player-cursor': isPlayerFocused,
+                                        'sudoku-cell--partner-cursor': isPartnerFocused,
+                                        'sudoku-cell--peer': isPeer,
+                                        'sudoku-cell--same-digit': isSameDigit,
+                                        'sudoku-cell--conflict': isConflict,
+                                        'sudoku-cell--hinted': hint,
+                                        'sudoku-cell--unit-complete': isUnitCelebrating,
+                                        'sudoku-cell--hint-target': isHintTarget,
+                                        'sudoku-cell--hint-context': isHintContext,
+                                        'sudoku-cell--hint-preview': (isHintTarget || isHintContext) && isHintPreview,
+                                        'sudoku-cell--fist-bump': isFistBumpCell,
+                                        'sudoku-cell--box-right': isBoxRight,
+                                        'sudoku-cell--box-bottom': isBoxBottom,
+                                    };
+                                    const classNames = Object.keys(cellClasses).filter(name => cellClasses[name]).join(' ');
 
                                     return (
                                         <button

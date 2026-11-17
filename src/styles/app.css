@@ -3798,3 +3798,17 @@ body {
     }
 }
 
+
+.settings-group--preferences {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+}
+
+.segmented-options--3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 519px) {
+    .settings-group--preferences {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

@@ -15,9 +15,10 @@ import {
 import { getStorageItem, setStorageItem } from '../utils/storage.js';
 
 export function useAppPreferences() {
-    const [theme, setTheme] = useState(() => (
-        getStorageItem('sudoku_theme') === 'light' ? 'light' : 'dark'
-    ));
+    const [theme, setTheme] = useState(() => {
+        const stored = getStorageItem('sudoku_theme');
+        return ['dark', 'light', 'system'].includes(stored) ? stored : 'system';
+    });
     const [language, setLanguage] = useState(() => (
         getStorageItem('sudoku_lang') === 'de' ? 'de' : 'en'
     ));
@@ -43,13 +44,21 @@ export function useAppPreferences() {
     }, []);
 
     useEffect(() => {
-        document.documentElement.dataset.theme = theme;
-        document.documentElement.style.colorScheme = theme;
+        const media = window.matchMedia?.('(prefers-color-scheme: dark)');
+        const applyTheme = () => {
+            let effective = theme;
+            if (theme === 'system') effective = media?.matches === false ? 'light' : 'dark';
+            document.documentElement.dataset.theme = effective;
+            document.documentElement.style.colorScheme = effective;
+            document.querySelector('meta[name="theme-color"]')?.setAttribute(
+                'content', effective === 'light' ? '#f6f2ea' : '#13161b',
+            );
+        };
+        applyTheme();
         setStorageItem('sudoku_theme', theme);
-        const themeMeta = document.querySelector('meta[name="theme-color"]');
-        if (themeMeta) {
-            themeMeta.setAttribute('content', theme === 'light' ? '#f6f2ea' : '#13161b');
-        }
+        if (theme !== 'system' || !media) return;
+        media.addEventListener('change', applyTheme);
+        return () => media.removeEventListener('change', applyTheme);
     }, [theme]);
 
     useEffect(() => {

@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { calculateQualityScore, formatSummaryMarkdown } from '../scripts/quality-score.mjs';
+import { calculateQualityScore, formatSummaryMarkdown, minimumQualityScore } from '../scripts/quality-score.mjs';
 
 describe('quality-score', () => {
+    it('enforces at least 90 even when a caller asks for a lower gate', () => {
+        expect(minimumQualityScore([])).toBe(90);
+        expect(minimumQualityScore(['--min-score=95'])).toBe(95);
+        for (const value of ['70', 'NaN', '-1', '101', '']) {
+            expect(() => minimumQualityScore([`--min-score=${value}`])).toThrow();
+        }
+    });
     it('computes weighted score and grade A for high coverage, low duplication, and zero lint issues', () => {
         const result = calculateQualityScore({
             lineCoveragePct: 95,
