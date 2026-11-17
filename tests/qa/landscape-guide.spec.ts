@@ -18,7 +18,7 @@ for (const variant of ['3x3', '2x3']) {
             await expect(guide).not.toHaveAttribute('aria-modal', 'true');
             await expect(page.locator('.dialog-backdrop')).toHaveCount(0);
             await expect(page.locator('.gameplay-stage__side')).toHaveCount(0);
-            await expect(page.locator('.gameplay-stage > .status-banner')).toHaveCount(0);
+            await expect(page.locator('.gameplay-stage__status > .status-banner')).toHaveCount(0);
             const left = (await page.locator('.gameplay-stage__board').boundingBox())!;
             const right = (await page.locator('.gameplay-stage__guide').boundingBox())!;
             expect(Math.abs(left.width - right.width)).toBeLessThanOrEqual(1);
@@ -46,7 +46,7 @@ for (const variant of ['3x3', '2x3']) {
     }
 }
 
-test('landscape navigation stays left and artwork selection survives navigation and rotation', async ({ page }) => {
+test('landscape navigation stays right and artwork selection survives navigation and rotation', async ({ page }) => {
     await page.setViewportSize({ width: 951, height: 669 });
     await page.routeWebSocket(/.*/, socket => socket.close());
     await page.goto('/');
@@ -54,9 +54,9 @@ test('landscape navigation stays left and artwork selection survives navigation 
     for (const tab of ['#nav-settings', '#nav-watch', '#nav-play']) {
         await page.locator(tab).click();
         const navigation = (await page.locator('.bottom-nav').boundingBox())!;
-        expect(navigation.x + navigation.width).toBeLessThanOrEqual(951 / 2);
+        expect(navigation.x).toBeGreaterThanOrEqual(951 / 2);
         const content = (await page.locator('.landscape-screen__content').boundingBox())!;
-        expect(content.x + content.width).toBeLessThanOrEqual(951 / 2);
+        expect(content.x).toBeGreaterThanOrEqual(951 / 2);
         expect(await page.locator('.landscape-screen__content').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
         expect(await page.locator('.landscape-artwork img').evaluateAll(elements => elements.map(element => element.getAttribute('src')))).toEqual(images);
     }
@@ -68,3 +68,39 @@ test('landscape navigation stays left and artwork selection survives navigation 
     await expect(page.locator('.landscape-artwork')).toBeVisible();
     expect(await page.locator('.landscape-artwork img').evaluateAll(elements => elements.map(element => element.getAttribute('src')))).toEqual(images);
 });
+
+for (const [width, height] of [[844, 390], [951, 669], [1280, 800]]) {
+    test(`New Puzzle notices stay at the top of the right gameplay pane ${width}x${height}`, async ({ page }, testInfo) => {
+        await page.setViewportSize({ width, height });
+        await page.addInitScript(() => localStorage.setItem('sudoku_lang', 'en'));
+        await page.routeWebSocket(/.*/, socket => socket.close());
+        await page.goto('/');
+        await page.locator('#start-game-btn').click();
+        await page.locator('.sudoku-cell:not(.sudoku-cell--given)').first().click();
+        await page.keyboard.press('1');
+        const puzzle = await page.getByRole('grid').innerText();
+        const board = (await page.locator('.gameplay-stage__board').boundingBox())!;
+        await page.getByRole('button', { name: 'New Puzzle', exact: true }).click();
+        const notice = page.getByRole('alertdialog');
+        await expect(notice).toBeVisible();
+        const bounds = (await notice.boundingBox())!;
+        expect(bounds.x).toBeGreaterThanOrEqual(width / 2);
+        expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+        expect(bounds.y).toBeLessThanOrEqual(board.y + 1);
+        expect(await page.locator('.gameplay-stage__board').boundingBox()).toEqual(board);
+        expect(await page.getByRole('grid').innerText()).toBe(puzzle);
+        await expect(page.locator('.dialog-backdrop')).toHaveCount(0);
+        await testInfo.attach('right-game-notice', { body: await page.screenshot(), contentType: 'image/png' });
+        await page.keyboard.press('Escape');
+        await expect(notice).toHaveCount(0);
+        expect(await page.getByRole('grid').innerText()).toBe(puzzle);
+        await page.getByRole('button', { name: 'Notes', exact: true }).click();
+        await page.getByRole('button', { name: 'Fill Candidates', exact: true }).click();
+        const feedback = page.locator('#action-feedback');
+        await expect(feedback).toBeVisible();
+        const feedbackBounds = (await feedback.boundingBox())!;
+        expect(feedbackBounds.x).toBeGreaterThanOrEqual(width / 2);
+        expect(feedbackBounds.y).toBeLessThanOrEqual(board.y + 1);
+        expect(await page.locator('.gameplay-stage__board').boundingBox()).toEqual(board);
+    });
+}

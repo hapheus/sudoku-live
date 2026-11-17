@@ -29,7 +29,7 @@ import { useKeyboardNavigation } from './hooks/useKeyboardNavigation.js';
 import { useNavigationAndSetup } from './hooks/useNavigationAndSetup.js';
 import { useOnlineSession } from './hooks/useOnlineSession.js';
 import { useTicTacToe } from './hooks/useTicTacToe.js';
-import { AlertBannerDialog } from './components/AlertBannerDialog.jsx';
+import { SessionNotices } from './components/SessionNotices.jsx';
 import { GamePlayView } from './components/GamePlayView.jsx';
 import { SetupView } from './components/SetupView.jsx';
 import { WatchDirectory } from './components/WatchDirectory.jsx';
@@ -608,7 +608,20 @@ export function App() {
     const showGlobalRetroBar = isRetroMode && (showLegalPage || navTab !== 'play' || !isPlayingGame);
 
     const inlineGuide = splitLayout && !showBottomNav && isHelpOpen;
+    const sessionNotices = (
+        <SessionNotices
+            pendingConfirm={pendingConfirm}
+            incomingJoinRequest={incomingJoinRequest}
+            myRole={myRole}
+            isSpectating={isSpectating}
+            confirmCancelRef={confirmCancelRef}
+            onClearConfirmation={() => setPendingConfirm(null)}
+            onRespondJoinRequest={handleRespondJoinRequest}
+            messages={messages}
+        />
+    );
     const sharedGameViewProps = {
+        notices: sessionNotices,
         guide: inlineGuide ? <HelpDialog isOpen panel onClose={closeGuide} messages={messages} /> : null,
         connectionStatus: connectionStatus,
         mode: mode,
@@ -678,43 +691,7 @@ export function App() {
                     />
                 )}
 
-                {pendingConfirm && (
-                    <AlertBannerDialog
-                        id="confirm-dialog"
-                        titleId="confirm-title"
-                        title={pendingConfirm.title}
-                        message={pendingConfirm.message}
-                        cancelLabel={pendingConfirm.cancelLabel}
-                        confirmLabel={pendingConfirm.confirmLabel}
-                        confirmVariant="confirm"
-                        cancelRef={confirmCancelRef}
-                        onCancel={() => setPendingConfirm(null)}
-                        onConfirm={() => {
-                            const action = pendingConfirm.onConfirm;
-                            setPendingConfirm(null);
-                            action?.();
-                        }}
-                    />
-                )}
-
-                {incomingJoinRequest && myRole === 'host' && !isSpectating && (
-                    <AlertBannerDialog
-                        id="join-request-banner"
-                        titleId="join-request-title"
-                        title={messages.joinRequestTitle || 'Player wants to join'}
-                        message={incomingJoinRequest.requesterName
-                            ? (messages.joinRequestMessageNamed || '{name} would like to join this puzzle in Co-op mode.')
-                                .replace('{name}', incomingJoinRequest.requesterName)
-                            : (messages.joinRequestMessage || 'Another player would like to join this puzzle in Co-op mode.')}
-                        cancelId="decline-join-btn"
-                        confirmId="accept-join-btn"
-                        cancelLabel={messages.joinRequestDecline || 'Decline'}
-                        confirmLabel={messages.joinRequestAccept || 'Allow'}
-                        confirmVariant="accept"
-                        onCancel={() => handleRespondJoinRequest(false)}
-                        onConfirm={() => handleRespondJoinRequest(true)}
-                    />
-                )}
+                {showBottomNav && sessionNotices}
 
                 {!showLegalPage && navTab === 'play' && !isPlayingGame && (
                     <SetupView

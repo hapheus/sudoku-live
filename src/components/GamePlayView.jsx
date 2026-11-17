@@ -10,6 +10,7 @@ export function GamePlayView({
     mainAriaLabel,
     topBar,
     guide = null,
+    notices = null,
     connectionStatus,
     mode,
     isSpectating,
@@ -46,24 +47,30 @@ export function GamePlayView({
     bottomControls,
     messages,
 }) {
+    const notifications = <>{notices}{actionFeedback && (
+        <div id="action-feedback" className="action-feedback" role="status">{actionFeedback}</div>
+    )}</>;
     return (
         <main className={mainClassName} aria-label={mainAriaLabel}>
             {topBar}
 
             <div className="gameplay-stage">
-                {!guide && <StatusBanner
-                    connectionStatus={connectionStatus}
-                    mode={mode}
-                    isSpectating={isSpectating}
-                    myRole={myRole}
-                    myClientId={myClientId}
-                    currentMembers={currentMembers}
-                    spectatedGameMode={spectatedGameMode}
-                    gameState={gameState}
-                    onReconnect={onReconnect}
-                    onContinueSolo={onContinueSolo}
-                    messages={messages}
-                />}
+                {!guide && <div className="gameplay-stage__status">
+                    {notifications}
+                    <StatusBanner
+                        connectionStatus={connectionStatus}
+                        mode={mode}
+                        isSpectating={isSpectating}
+                        myRole={myRole}
+                        myClientId={myClientId}
+                        currentMembers={currentMembers}
+                        spectatedGameMode={spectatedGameMode}
+                        gameState={gameState}
+                        onReconnect={onReconnect}
+                        onContinueSolo={onContinueSolo}
+                        messages={messages}
+                    />
+                </div>}
 
                 <div className="gameplay-stage__board">
                     {ticTacToeGame && ticTacToeGame.phase !== 'transition' ? (
@@ -104,12 +111,7 @@ export function GamePlayView({
                     )}
                 </div>
 
-                {guide ? <div className="gameplay-stage__guide">{guide}</div> : <div className="gameplay-stage__side">
-                    {actionFeedback && (
-                        <div id="action-feedback" className="action-feedback" role="status">
-                            {actionFeedback}
-                        </div>
-                    )}
+                {guide ? <div className="gameplay-stage__guide">{notifications}{guide}</div> : <div className="gameplay-stage__side">
 
                     {gameState.status === 'solved' ? (
                         <SolveSummary

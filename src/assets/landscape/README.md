@@ -1,6 +1,6 @@
 # Landscape artwork
 
-Place decorative images here for the right-hand panel of non-game landscape
+Place decorative images here for the left-hand panel of non-game landscape
 screens (Setup, Settings, Watch directory and legal pages). This is a separate
 pool from `src/assets/boards/`; adding files here does not change board artwork.
 

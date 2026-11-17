@@ -37,7 +37,7 @@ for (const theme of ['dark', 'light']) {
             if (width > height && height <= 540) {
                 const bounds = (await panel.boundingBox())!;
                 expect(bounds.width).toBeGreaterThan(width * 0.3);
-                expect(bounds.x + bounds.width).toBeLessThanOrEqual(width / 2);
+                expect(bounds.x).toBeGreaterThanOrEqual(width / 2);
             }
             expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
             const settingsAudit = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
