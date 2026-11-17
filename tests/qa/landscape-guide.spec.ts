@@ -51,6 +51,8 @@ test('landscape navigation stays right and artwork selection survives navigation
     await page.routeWebSocket(/.*/, socket => socket.close());
     await page.goto('/');
     await expect(page.locator('.landscape-artwork img')).toBeVisible();
+    expect(await page.locator('.landscape-artwork').boundingBox()).toEqual({ x: 0, y: 0, width: 951 / 2, height: 669 });
+    await expect(page.locator('.landscape-artwork img')).toHaveCSS('object-fit', 'cover');
     const images = await page.locator('.landscape-artwork img').evaluateAll(elements => elements.map(element => element.getAttribute('src')));
     for (const tab of ['#nav-settings', '#nav-watch', '#nav-play']) {
         await page.locator(tab).click();

@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 
-async function assertRegions(page: Page, primary: string, secondary: string) {
+async function assertRegions(page: Page, primary: string, secondary: string, equalWidths = true) {
     const left = page.locator(primary);
     const right = page.locator(secondary);
     await expect(left).toBeVisible();
@@ -13,10 +13,10 @@ async function assertRegions(page: Page, primary: string, secondary: string) {
     ], [primary, secondary]);
     await expect.poll(async () => {
         const [a, b] = await readBounds();
-        return Math.abs(a.width - b.width) <= 1 && a.right <= b.left;
+        return (!equalWidths || Math.abs(a.width - b.width) <= 1) && a.right <= b.left;
     }).toBe(true);
     const [a, b] = await readBounds();
-    expect(Math.abs(a.width - b.width)).toBeLessThanOrEqual(1);
+    if (equalWidths) expect(Math.abs(a.width - b.width)).toBeLessThanOrEqual(1);
     expect(a.x + a.width).toBeLessThanOrEqual(b.x);
     for (const region of [left, right]) {
         const overflow = await region.evaluate(element => {
@@ -61,14 +61,14 @@ test('setup, settings, watch and legal keep artwork left and all content right',
     await page.addInitScript(() => localStorage.setItem('sudoku_lang', 'en'));
     await page.routeWebSocket(/.*/, socket => socket.close());
     await page.goto('/');
-    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content');
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
     await page.locator('#nav-settings').click();
-    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content');
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
     await page.locator('#nav-watch').click();
-    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content');
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
     await page.locator('#nav-play').click();
     await page.locator('#privacy-link').click();
-    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content');
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
 });
 
 test('emulated unequal display segments keep all screens and dialogs clear of the hinge', async ({ page, context }) => {
@@ -82,18 +82,20 @@ test('emulated unequal display segments keep all screens and dialogs clear of th
     await page.routeWebSocket(/.*/, socket => socket.close());
     await page.goto('/');
     expect(await page.evaluate(() => matchMedia('(horizontal-viewport-segments: 2)').matches)).toBe(true);
-    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content');
+    const artwork = (await page.locator('.landscape-artwork').boundingBox())!;
+    expect(artwork).toEqual({ x: 0, y: 0, width: 550, height: 800 });
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
     await page.locator('#nav-settings').click();
-    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content');
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
     await page.locator('#settings-guide-btn').click();
     const dialog = (await page.getByRole('dialog').boundingBox())!;
     expect(dialog.x).toBeGreaterThanOrEqual(580);
     await page.keyboard.press('Escape');
     await page.locator('#nav-watch').click();
-    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content');
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
     await page.locator('#nav-play').click();
     await page.locator('#privacy-link').click();
-    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content');
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
     await page.locator('#legal-back-btn').click();
     await page.locator('#start-game-btn').click();
     await page.keyboard.press('Escape');

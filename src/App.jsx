@@ -943,7 +943,6 @@ export function App() {
                 )}
 
                 </div>
-                {showBottomNav && <LandscapeArtwork artwork={landscapeArtwork} active={landscapeLayout} />}
                 <HelpDialog
                     isOpen={isHelpOpen && !inlineGuide}
                     onClose={closeGuide}
@@ -951,6 +950,7 @@ export function App() {
                 />
             </div>
 
+            {showBottomNav && <LandscapeArtwork artwork={landscapeArtwork} active={landscapeLayout} />}
             {showBottomNav && (
                 <BottomNav
                     activeTab={showLegalPage ? null : navTab}

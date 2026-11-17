@@ -10,8 +10,10 @@ board images. Rebuild and redistribute the web/native app after adding images;
 this is a bundled asset directory, not a runtime upload endpoint.
 
 One image is selected randomly per app mount and retained across screen changes
-and rotation. The panel uses `object-fit: contain` so the whole image is visible;
-it stays within its half of the screen. Images are decorative and hidden from
+and rotation. The image fills the entire left viewport half, edge to edge and full height.
+`object-fit: cover` with centered positioning preserves proportions and crops
+excess edges instead of leaving empty bands. On reported dual segments it fills
+only the first segment, excluding the hinge. Images are decorative and hidden from
 assistive technology. Portrait screens do not show the panel. If the image pool is empty, the reserved panel remains empty without a broken
 image or placeholder text. Prefer optimized WebP/AVIF files to avoid inflating native and web downloads.
 
