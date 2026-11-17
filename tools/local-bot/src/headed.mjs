@@ -1,6 +1,6 @@
-export async function createHeadedView(config) {
+export async function createHeadedView(config, { headless = false } = {}) {
   const { chromium } = await import('playwright');
-  const browser = await chromium.launch({ headless: false });
+  const browser = await chromium.launch({ headless });
   try {
     const context = await browser.newContext();
     // Set before the app boots; use the same backend as the worker, including production WSS.

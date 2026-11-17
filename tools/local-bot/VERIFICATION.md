@@ -96,3 +96,18 @@ bot feature, independently of application release/device QA in #59 and #60.
 - Local bot build, app production build and bot-exclusion scan passed. All QA
   processes and the isolated backend were stopped afterward. No production games
   were started; native SDK/packaging limitations noted above remain unchanged.
+
+## Headless-only test execution — 2026-11-17
+
+All subsequent tests run headlessly. Browser-mode flag/orchestration coverage
+injects a headless view factory through a dedicated test entry point, including
+startup failure and replacement-tab lifecycle cases. Test subprocesses never
+launch the visible bot entry point with `--headed`. Manual `npm run bot --
+--headed` remains a separate operator feature, and was not run for this change.
+The application Playwright configuration explicitly sets `headless: true`; the
+`e2e:headed` npm command and its active testing-guide examples were removed.
+Historical headed QA records above describe runs before this policy change.
+
+Verification: 42 bot unit tests, both updated browser integration cases (all
+headless), the local bot build and `git diff --check` passed. The isolated QA
+backend was stopped afterward. No visible browser test run was performed.

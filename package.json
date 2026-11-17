@@ -31,7 +31,6 @@
         "docker:down": "docker compose down",
         "docker:config": "docker compose config -q && docker compose -f compose.prod.yml config -q",
         "e2e": "playwright test",
-        "e2e:headed": "playwright test --headed",
         "bot": "node tools/local-bot/launch.mjs",
         "build:bot": "npm --prefix tools/local-bot run build",
         "verify:bot-exclusion": "node scripts/bot-exclusion.mjs"

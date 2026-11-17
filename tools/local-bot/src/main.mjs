@@ -3,7 +3,7 @@ import { performance } from 'node:perf_hooks';
 import { BotManager } from './bot-manager.ts';
 import { createHeadedView } from './headed.mjs';
 
-export async function run(config) {
+export async function run(config, { createView = createHeadedView } = {}) {
   console.info('SUDOKU_LOCAL_BOT_ONLY');
   const manager = new BotManager({ wsUrl: config.wsUrl, slots: Array(config.count).fill('random'),
     variant: 'random', notesPolicy: 'random',
@@ -27,7 +27,7 @@ export async function run(config) {
   let started = false;
   let visibleIds = '';
   try {
-    if (config.headed) { view = await createHeadedView(config); view.onClose(stop); }
+    if (config.headed) { view = await createView(config); view.onClose(stop); }
     while (!stopping) {
       await manager.step(performance.now());
       if (stopping) break;

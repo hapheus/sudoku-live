@@ -111,8 +111,11 @@ CENTRIFUGO_TEST_DOCKER_RECOVERY=true npm --prefix tools/local-bot run test:integ
 docker compose -p sudoku-shift-bot-integration -f tools/local-bot/compose.test.yml down
 ```
 
-Integration QA runs real workers, a temporary Vite app and optional visible
-Chromium windows. Ports 15373 and 18081 must be free. Browser installation is
+All tests run headlessly, including browser-view and `--headed` flag coverage.
+Tests inject a headless browser-view factory; they never launch the visible bot
+entry point with `--headed`. The ordinary manual bot command still supports
+visible windows when explicitly requested. Integration QA runs real workers,
+a temporary Vite app and headless Chromium. Ports 15373 and 18081 must be free. Browser installation is
 required for this QA. Unit tests use an explicitly mocked WebSocket boundary;
 they separately cover notes, shifts, completion, co-op edits and departures.
 

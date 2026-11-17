@@ -6,7 +6,7 @@ import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
 import { BotRunner } from '../../src/bot-runner.ts';
-import { createHeadedView } from '../../src/headed.mjs';
+import { createHeadlessView } from '../support/headless-bot.mjs';
 import { OnlineGameClient } from '../../../../src/services/online-game-client.js';
 
 async function stop(child: ChildProcess) {
@@ -25,7 +25,7 @@ async function waitFor(predicate: () => boolean | Promise<boolean>, label: strin
   }
 }
 
-test('default, count, headed and combined CLI publish exactly N independent sessions and stop cleanly', { timeout: 180_000 }, async () => {
+test('default, count and browser-mode flags run headlessly with independent sessions and clean shutdown', { timeout: 180_000 }, async () => {
   const wsUrl = 'ws://127.0.0.1:18081/connection/websocket';
   const root = new URL('../../../../', import.meta.url);
   const vite = spawn(process.execPath, [new URL('node_modules/vite/bin/vite.js', root).pathname,
@@ -47,7 +47,9 @@ test('default, count, headed and combined CLI publish exactly N independent sess
       let ready = false;
       let gameIds: string[] = [];
       let stderr = '';
-      const child = spawn(process.execPath, ['launch.mjs', ...args, '--ws-url', wsUrl, '--app-url', 'http://127.0.0.1:15373'], {
+      const entry = args.includes('--headed' as never)
+        ? ['--import', 'tsx', 'tests/support/headless-bot.mjs'] : ['launch.mjs'];
+      const child = spawn(process.execPath, [...entry, ...args, '--ws-url', wsUrl, '--app-url', 'http://127.0.0.1:15373'], {
         env: { ...process.env, BOT_COUNT: '3' }, stdio: ['ignore', 'pipe', 'pipe'],
       });
       child.stderr!.on('data', chunk => { stderr += chunk; });
@@ -72,7 +74,7 @@ test('default, count, headed and combined CLI publish exactly N independent sess
           if (child.exitCode !== null) throw new Error(`CLI exited ${child.exitCode}: ${stderr}`);
           return ready && rooms.size === expected;
         }, `CLI ${args.join(' ')}`);
-        // Headed-ready is emitted after every real Watch page rendered its board.
+        // The browser-mode flag uses a headless view factory throughout this test.
         if (expected === 5 && args.includes('--headed' as never)) {
           const browser = await chromium.launch({ headless: true });
           try {
@@ -119,7 +121,7 @@ test('default, count, headed and combined CLI publish exactly N independent sess
     // Keeping the browser alive with zero game tabs is necessary during player gaps.
     const runner = new BotRunner('easy', { wsUrl, variant: '2x3', notesPolicy: 'never', random: () => 0,
       durationRanges: { easy: [1_000, 1_000], medium: [1_000, 1_000], hard: [1_000, 1_000], expert: [1_000, 1_000] } });
-    const view = await createHeadedView({ wsUrl, appUrl: 'http://127.0.0.1:15373' });
+    const view = await createHeadlessView({ wsUrl, appUrl: 'http://127.0.0.1:15373' });
     let closed = false;
     view.onClose(() => { closed = true; });
     try {
@@ -145,7 +147,7 @@ test('default, count, headed and combined CLI publish exactly N independent sess
   }
 });
 
-test('a headed startup failure releases already connected bot sessions', { timeout: 45_000 }, async () => {
+test('a browser-mode startup failure tested headlessly releases connected bot sessions', { timeout: 45_000 }, async () => {
   const observer = new OnlineGameClient({ wsConfig: { wsUrl: 'ws://127.0.0.1:18081/connection/websocket' } });
   const rooms = new Set<string>();
   const update = room => ['finished', 'solved'].includes(room.status) ? rooms.delete(room.game_id) : rooms.add(room.game_id);
@@ -154,7 +156,7 @@ test('a headed startup failure releases already connected bot sessions', { timeo
     const lobby = observer.joinLobby({ onLobbyMemberJoin: update, onLobbyUpdate: update,
       onLobbyMemberLeave: room => rooms.delete(room.game_id), onLobbyPresenceChange: values => { rooms.clear(); values.forEach(update); } });
     await lobby.ready(5_000);
-    child = spawn(process.execPath, ['launch.mjs', '--headed', '--count', '5', '--ws-url',
+    child = spawn(process.execPath, ['--import', 'tsx', 'tests/support/headless-bot.mjs', '--headed', '--count', '5', '--ws-url',
       'ws://127.0.0.1:18081/connection/websocket', '--app-url', 'http://127.0.0.1:9'], { stdio: 'ignore' });
     await once(child, 'exit');
     assert.equal(child.exitCode, 1);
