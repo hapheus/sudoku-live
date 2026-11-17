@@ -4026,3 +4026,11 @@ body {
         width: env(viewport-segment-width 0 0);
     }
 }
+
+.settings-panel[hidden] { display: none; }
+
+@media (orientation: landscape), (horizontal-viewport-segments: 2) {
+    .landscape-screen__content > .dialog-card--panel {
+        max-height: calc(100dvh - 7rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    }
+}

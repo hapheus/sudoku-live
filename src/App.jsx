@@ -63,6 +63,7 @@ export function App() {
     const splitLayout = useSplitLayout();
     const landscapeLayout = useSplitLayout(LANDSCAPE_LAYOUT_QUERY);
     const [landscapeArtwork] = useState(() => selectLandscapeArtwork());
+    const settingsGuideOpenerRef = useRef(null);
     const closeGuide = useCallback(() => setIsHelpOpen(false), []);
     const initialRoute = useMemo(() => parseInitialRoute(), []);
 
@@ -608,6 +609,7 @@ export function App() {
     const showGlobalRetroBar = isRetroMode && (showLegalPage || navTab !== 'play' || !isPlayingGame);
 
     const inlineGuide = splitLayout && !showBottomNav && isHelpOpen;
+    const settingsGuide = landscapeLayout && navTab === 'settings' && !showLegalPage && isHelpOpen;
     const sessionNotices = (
         <SessionNotices
             pendingConfirm={pendingConfirm}
@@ -916,35 +918,45 @@ export function App() {
                 )}
 
                 {!showLegalPage && navTab === 'settings' && (
-                    <SettingsPanel
-                        theme={theme}
-                        language={language}
-                        playerName={playerName}
-                        playerTag={formatPlayerTag(playerName, onlineClientRef.current?.clientId || getOrCreateClientId())}
-                        joinsAllowed={joinsAllowed}
-                        joinsAutoAccept={joinsAutoAccept}
-                        musicEnabled={musicEnabled}
-                        musicVolume={musicVolume}
-                        soundEnabled={soundEnabled}
-                        soundVolume={soundVolume}
-                        onChangeTheme={setTheme}
-                        onChangeLanguage={setLanguage}
-                        onChangePlayerName={setPlayerName}
-                        onRandomizePlayerName={randomizePlayerName}
-                        onChangeJoinsAllowed={setJoinsAllowed}
-                        onChangeJoinsAutoAccept={setJoinsAutoAccept}
-                        onChangeMusicEnabled={handleMusicEnabledChange}
-                        onChangeMusicVolume={handleMusicVolumeChange}
-                        onChangeSoundEnabled={handleSoundEnabledChange}
-                        onChangeSoundVolume={handleSoundVolumeChange}
-                        onOpenGuide={() => setIsHelpOpen(true)}
-                        messages={messages}
-                    />
+                    <>
+                        <SettingsPanel
+                            hidden={settingsGuide}
+                            theme={theme}
+                            language={language}
+                            playerName={playerName}
+                            playerTag={formatPlayerTag(playerName, onlineClientRef.current?.clientId || getOrCreateClientId())}
+                            joinsAllowed={joinsAllowed}
+                            joinsAutoAccept={joinsAutoAccept}
+                            musicEnabled={musicEnabled}
+                            musicVolume={musicVolume}
+                            soundEnabled={soundEnabled}
+                            soundVolume={soundVolume}
+                            onChangeTheme={setTheme}
+                            onChangeLanguage={setLanguage}
+                            onChangePlayerName={setPlayerName}
+                            onRandomizePlayerName={randomizePlayerName}
+                            onChangeJoinsAllowed={setJoinsAllowed}
+                            onChangeJoinsAutoAccept={setJoinsAutoAccept}
+                            onChangeMusicEnabled={handleMusicEnabledChange}
+                            onChangeMusicVolume={handleMusicVolumeChange}
+                            onChangeSoundEnabled={handleSoundEnabledChange}
+                            onChangeSoundVolume={handleSoundVolumeChange}
+                            onOpenGuide={(event) => {
+                                settingsGuideOpenerRef.current = event?.currentTarget || document.activeElement;
+                                setIsHelpOpen(true);
+                            }}
+                            messages={messages}
+                        />
+                        {settingsGuide && (
+                            <HelpDialog isOpen panel onClose={closeGuide} returnFocusRef={settingsGuideOpenerRef} messages={messages} />
+                        )}
+                    </>
                 )}
 
                 </div>
                 <HelpDialog
-                    isOpen={isHelpOpen && !inlineGuide}
+                    isOpen={isHelpOpen && !inlineGuide && !settingsGuide}
+                    returnFocusRef={settingsGuideOpenerRef}
                     onClose={closeGuide}
                     messages={messages}
                 />
@@ -955,7 +967,10 @@ export function App() {
                 <BottomNav
                     activeTab={showLegalPage ? null : navTab}
                     isWatchActive={mode === 'watch' || isSpectating}
-                    onSelectTab={handleSelectNavTab}
+                    onSelectTab={(tab) => {
+                        closeGuide();
+                        handleSelectNavTab(tab);
+                    }}
                     messages={messages}
                 />
             )}

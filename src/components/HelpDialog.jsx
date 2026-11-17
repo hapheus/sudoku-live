@@ -1,12 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import enMessages from '../locales/en.json';
 
-export function HelpDialog({ isOpen, onClose, panel = false, messages = enMessages }) {
+export function HelpDialog({ isOpen, onClose, panel = false, returnFocusRef = null, messages = enMessages }) {
     const closeBtnRef = useRef(null);
 
     useEffect(() => {
         if (!isOpen) return undefined;
-        const opener = document.activeElement;
+        const target = returnFocusRef?.current;
+        const opener = target?.isConnected ? target : document.activeElement;
         closeBtnRef.current?.focus();
 
         const onKeyDown = (e) => {
@@ -20,7 +21,7 @@ export function HelpDialog({ isOpen, onClose, panel = false, messages = enMessag
             document.removeEventListener('keydown', onKeyDown);
             if (opener?.isConnected) opener.focus();
         };
-    }, [isOpen, onClose]);
+    }, [isOpen, onClose, returnFocusRef]);
 
     if (!isOpen) return null;
 

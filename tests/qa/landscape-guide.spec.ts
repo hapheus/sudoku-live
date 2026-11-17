@@ -113,3 +113,56 @@ for (const [width, height] of [[844, 390], [951, 669], [1280, 800]]) {
             .toEqual({ ...board, y: boardDocumentY });
     });
 }
+
+for (const [width, height] of [[844, 390], [951, 669], [1280, 800]]) {
+    test(`Settings guide replaces the right pane and keeps artwork visible ${width}x${height}`, async ({ page }, testInfo) => {
+        await page.setViewportSize({ width, height });
+        await page.addInitScript(() => localStorage.setItem('sudoku_lang', 'en'));
+        await page.routeWebSocket(/.*/, socket => socket.close());
+        await page.goto('/');
+        await page.locator('#nav-settings').click();
+        const settings = page.locator('#settings-panel');
+        const name = page.getByRole('textbox', { name: 'Player Name' });
+        await name.fill('GuidePlayer');
+        const opener = page.locator('#settings-guide-btn');
+        await opener.click();
+        const guide = page.getByRole('dialog');
+        await expect(guide).toBeVisible();
+        await expect(guide).not.toHaveAttribute('aria-modal', 'true');
+        await expect(settings).toBeHidden();
+        await expect(page.locator('.dialog-backdrop')).toHaveCount(0);
+        await expect(page.locator('.landscape-artwork img')).toBeVisible();
+        const bounds = (await guide.boundingBox())!;
+        expect(bounds.x).toBeGreaterThanOrEqual(width / 2);
+        expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+        const nav = (await page.locator('.bottom-nav').boundingBox())!;
+        expect(bounds.y + bounds.height).toBeLessThanOrEqual(nav.y);
+        expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()).violations).toEqual([]);
+        const screenshot = testInfo.outputPath('settings-guide-right.png');
+        await page.screenshot({ path: screenshot });
+        await testInfo.attach('settings-guide-right', { path: screenshot, contentType: 'image/png' });
+        await page.keyboard.press('Escape');
+        await expect(guide).toHaveCount(0);
+        await expect(settings).toBeVisible();
+        await expect(opener).toBeFocused();
+        await expect(name).toHaveValue('GuidePlayer');
+        await opener.click();
+        await page.setViewportSize({ width: 390, height: 844 });
+        await expect(page.getByRole('dialog')).toHaveAttribute('aria-modal', 'true');
+        await expect(page.locator('.dialog-backdrop')).toBeVisible();
+        await page.setViewportSize({ width, height });
+        await expect(page.getByRole('dialog')).toHaveCount(1);
+        await expect(page.getByRole('dialog')).not.toHaveAttribute('aria-modal', 'true');
+        await expect(page.locator('.dialog-backdrop')).toHaveCount(0);
+        await expect(settings).toBeHidden();
+        await page.getByRole('button', { name: 'Close', exact: true }).click();
+        await expect(settings).toBeVisible();
+        await expect(opener).toBeFocused();
+        await expect(name).toHaveValue('GuidePlayer');
+        await opener.click();
+        await page.locator('#nav-watch').click();
+        await expect(page.getByRole('dialog')).toHaveCount(0);
+        await expect(page.locator('.dialog-backdrop')).toHaveCount(0);
+        await expect(page.locator('#watch-directory')).toBeVisible();
+    });
+}
