@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createSudokuGame } from '../src/domain/sudoku-engine.js';
 import { useNavigationAndSetup } from '../src/hooks/useNavigationAndSetup.js';
 
 describe('useNavigationAndSetup', () => {
@@ -7,6 +8,36 @@ describe('useNavigationAndSetup', () => {
         localStorage.clear();
         window.history.replaceState({}, '', '/');
         vi.clearAllMocks();
+    });
+
+    it('keeps the same observable room when the remaining guest continues solo', () => {
+        const gameState = createSudokuGame({ difficulty: 'easy' });
+        const spectator = { id: 'watcher', role: 'spectator' };
+        const stateRef = { current: {
+            isPlayingGame: true, isSpectating: false, mode: 'online', myRole: 'guest',
+            onlineGameId: 'room-remaining', currentMembers: [spectator], gameState,
+            boardBackground: null,
+        } };
+        const client = { leaveGameChannel: vi.fn(), leaveLobby: vi.fn() };
+        const ensureHostOnlineSession = vi.fn();
+        const setters = Object.fromEntries([
+            'setMode', 'setMyRole', 'setOnlineGameId', 'setCurrentMembers',
+            'setHostCursorIndex', 'setGuestCursors', 'setRemoteActiveDigit',
+            'setRematchRequestedBy', 'setHintsMap',
+        ].map(name => [name, vi.fn()]));
+        const { result } = renderHook(() => useNavigationAndSetup({
+            ...setters, stateRef, onlineClientRef: { current: client },
+            ensureHostOnlineSession, showFeedback: vi.fn(), announce: vi.fn(),
+        }));
+        window.history.replaceState({}, '', '/games/room-remaining');
+        act(() => result.current.handleContinueSolo());
+        expect(window.location.pathname).toBe('/');
+        expect(stateRef.current.mode).toBe('solo');
+        expect(stateRef.current.myRole).toBe('host');
+        expect(stateRef.current.onlineGameId).toBe('room-remaining');
+        expect(stateRef.current.gameState).toBe(gameState);
+        expect(ensureHostOnlineSession).toHaveBeenCalledWith(gameState, 'room-remaining', 'solo');
+        expect(JSON.parse(localStorage.getItem('sudoku_solo_snapshot_v1')).roomId).toBe('room-remaining');
     });
 
     it('opens and closes legal pages on web and blocks on native app', () => {

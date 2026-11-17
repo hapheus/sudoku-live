@@ -506,15 +506,15 @@ export function useNavigationAndSetup({
         stateRef,
     ]);
 
-    const detachCoopToSolo = useCallback((cur) => {
+    const detachCoopToSolo = useCallback((cur, roomId = null) => {
         onlineClientRef.current?.leaveGameChannel();
         onlineClientRef.current?.leaveLobby();
         setMode('solo');
         stateRef.current.mode = 'solo';
         setMyRole('host');
         stateRef.current.myRole = 'host';
-        setOnlineGameId(null);
-        stateRef.current.onlineGameId = null;
+        setOnlineGameId(roomId);
+        stateRef.current.onlineGameId = roomId;
         setCurrentMembers([]);
         stateRef.current.currentMembers = [];
         setHostCursorIndex(null);
@@ -524,7 +524,7 @@ export function useNavigationAndSetup({
         setHintsMap(new Map());
         updateBrowserUrl('/');
         if (cur.gameState && cur.gameState.status !== 'solved') {
-            saveSoloGameSnapshot(cur.gameState, cur.boardBackground?.id || null);
+            saveSoloGameSnapshot(cur.gameState, roomId, cur.boardBackground?.id || null);
         }
     }, [
         onlineClientRef,
@@ -543,10 +543,12 @@ export function useNavigationAndSetup({
     const handleContinueSolo = useCallback(() => {
         const cur = stateRef.current;
         if (cur.isSpectating) return;
-        detachCoopToSolo(cur);
+        const roomId = cur.onlineGameId;
+        detachCoopToSolo(cur, roomId);
+        if (roomId) ensureHostOnlineSession(cur.gameState, roomId, 'solo');
         showFeedback('Continuing as a solo game.');
         announce('Continuing current board as a solo game.');
-    }, [announce, detachCoopToSolo, showFeedback, stateRef]);
+    }, [announce, detachCoopToSolo, ensureHostOnlineSession, showFeedback, stateRef]);
 
     const handleBackToSetup = useCallback(() => {
         setIsPlayingGame(false);
