@@ -52,3 +52,26 @@ describe('causal snapshot recovery', () => {
         },
     );
 });
+
+describe('puzzle generation boundaries', () => {
+    it('rejects delayed edits from an unseen actor after an accepted rematch', () => {
+        const guard = createStateRecovery();
+        guard.observe('new-puzzle-accept', { gameState: {}, senderId: 'host', seq: 10,
+            eventId: 'next-puzzle', puzzleGeneration: 'next-puzzle', stateVector: {} });
+        expect(guard.generation()).toBe('next-puzzle');
+        expect(guard.accepts('cell-update', { senderId: 'unseen', seq: 100, puzzleGeneration: null })).toBe(false);
+        expect(guard.accepts('cell-update', { senderId: 'unseen', seq: 100, puzzleGeneration: 'next-puzzle' })).toBe(true);
+        expect(guard.accepts('ping', { gameState: {}, stateVector: { host: 10 }, puzzleGeneration: 'old' })).toBe(false);
+    });
+
+    it('requires a new rematch token to identify its own event and include known changes', () => {
+        const guard = createStateRecovery();
+        guard.observe('cell-update', { senderId: 'guest', seq: 5 });
+        const rematch = { gameState: {}, senderId: 'host', seq: 10, eventId: 'rematch',
+            puzzleGeneration: 'rematch', stateVector: { guest: 5 } };
+        expect(guard.accepts('new-puzzle-accept', rematch)).toBe(true);
+        expect(guard.accepts('new-puzzle-accept', { ...rematch, puzzleGeneration: 'other' })).toBe(false);
+        expect(guard.accepts('new-puzzle-accept', { ...rematch, stateVector: {} })).toBe(false);
+        expect(guard.generation()).toBeNull();
+    });
+});

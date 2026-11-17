@@ -6,9 +6,17 @@ const MUTATIONS = new Set(['init', 'sync', 'cell-update', 'new-puzzle-accept', '
 export function createStateRecovery() {
     const seen = new Map();
     let legacyChanges = false;
+    let generation = null;
     return {
+        generation: () => generation,
         vector: () => Object.fromEntries(seen),
         accepts(type, data, authoritative = true) {
+            if (MUTATIONS.has(type) || data.gameState) {
+                if (type === 'new-puzzle-accept') {
+                    if ((generation !== null || data.puzzleGeneration != null)
+                        && data.puzzleGeneration !== data.eventId) return false;
+                } else if (generation !== null && data.puzzleGeneration !== generation) return false;
+            }
             if (!data.gameState) return !MUTATIONS.has(type) || !data.senderId || !data.seq
                 || data.seq > (seen.get(actorOf(data)) || 0);
             // Legacy snapshots can initialize a room, but cannot prove they include known changes.
@@ -19,6 +27,7 @@ export function createStateRecovery() {
             return includesKnownChanges && (type !== 'ping' || authoritative || advances);
         },
         observe(type, data) {
+            if (data.gameState && typeof data.puzzleGeneration === 'string') generation = data.puzzleGeneration;
             if (data.gameState && data.stateVector) {
                 for (const [sender, seq] of Object.entries(data.stateVector)) {
                     seen.set(sender, Math.max(seen.get(sender) || 0, seq));

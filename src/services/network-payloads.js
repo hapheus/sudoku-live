@@ -33,7 +33,8 @@ function validateStateVector(vector) {
 }
 
 export function validateNetworkEnvelope(data) {
-    return optional(data.stateVector, validateStateVector)
+    return optional(data.puzzleGeneration, (v) => v === null || isBoundedString(v))
+        && optional(data.stateVector, validateStateVector)
         && optional(data.stateActor, (v) => isBoundedString(v, 64))
         && optional(data.senderId, (v) => isBoundedString(v, 64))
         && optional(data.eventId, (v) => isBoundedString(v))

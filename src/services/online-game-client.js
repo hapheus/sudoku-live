@@ -116,11 +116,13 @@ export class OnlineGameClient {
         return data;
     }
 
-    buildOutgoingEnvelope(data = {}) {
+    buildOutgoingEnvelope(data = {}, type = null) {
+        const eventId = data.eventId || generateEventId();
         return {
             ...(data.gameState ? { stateVector: this.stateRecovery.vector() } : {}),
             ...data,
-            eventId: data.eventId || generateEventId(),
+            eventId,
+            puzzleGeneration: type === 'new-puzzle-accept' ? eventId : this.stateRecovery.generation(),
             senderId: data.senderId || this.clientId,
             seq: ++this.seqCounter,
             sentAt: Date.now(),
@@ -547,7 +549,7 @@ export class OnlineGameClient {
                 ...data,
                 ...(type === PRESENCE_ANNOUNCE ? { ...this.protocolMeta,
                     approvedGuestIds: this.gameRole === 'host' ? this.roomAuthority.approvedGuestIds() : undefined } : {}),
-            });
+            }, type);
             this.stateRecovery.observe(type, payloadData);
             this.rememberEvent(payloadData.eventId);
             if (payloadData.gameState) this.boardCells = payloadData.gameState.board.length;
@@ -568,7 +570,7 @@ export class OnlineGameClient {
 
         data = this.projectGameFeatures(type, data);
         if (!data) return;
-        const payloadData = this.buildOutgoingEnvelope(data);
+        const payloadData = this.buildOutgoingEnvelope(data, type);
         this.stateRecovery.observe(type, payloadData);
         this.rememberEvent(payloadData.eventId);
         if (payloadData.gameState) this.boardCells = payloadData.gameState.board.length;

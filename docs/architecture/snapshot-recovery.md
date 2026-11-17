@@ -82,3 +82,27 @@ Do not close #68 based on this implementation alone.
   browser-lifecycle suites remain required candidate checks. Native suspension,
   physical device QA and the remaining conflict/history-exhaustion matrix stay in
   #59/#68/#72.
+
+## Puzzle generation fence
+
+Updated clients attach `puzzleGeneration` to every outgoing game envelope. Before
+any observed rematch its value is null. An accepted rematch's event ID becomes its
+unique generation, and the same client retains it through transport suspension
+and same-room rejoin. Moving to another room resets the recovery guard. Snapshots
+carry the generation to late viewers and reconstructed clients.
+
+Once a generation is known, all Sudoku mutations and snapshots must belong to it.
+A new rematch may advance it only when its generation equals its own event ID and
+its snapshot includes known causal changes. A delayed old-generation delta is
+therefore rejected even when its actor has never been seen before. Rejected
+messages never update the generation. The wire field is optional and bounded;
+legacy initial rooms retain their previous path, but untagged traffic after a
+known rematch fails closed. No saved-state key changes: generation is transport
+recovery metadata, recovered from accepted snapshots rather than guessed from a
+saved board. History exhaustion and mixed legacy sessions can still prevent
+recovery and require explicit rejoin/restart.
+
+This closes the previously documented unseen-actor/pre-rematch-delta hole for
+clients that have observed a tagged rematch. It does not establish deterministic
+conflict resolution for concurrent same-cell edits or simultaneous full snapshots;
+those cases and the complete isolated-backend convergence matrix keep #68 open.

@@ -586,3 +586,18 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
         expect(events.map((e) => e.data.eventId)).toEqual(['e-live-2', 'e-reconn-4']);
     });
 });
+
+describe('outgoing puzzle generations', () => {
+    it('stamps a rematch and every following edit with its unique generation', async () => {
+        const client = new OnlineGameClient();
+        const publish = vi.fn().mockResolvedValue({});
+        client.gameChannel = { publish };
+        await client.broadcastGameEvent('generation-room', 'new-puzzle-accept', { gameState: { board: [] } });
+        const rematch = publish.mock.lastCall[0].data;
+        expect(rematch.puzzleGeneration).toBe(rematch.eventId);
+        await client.broadcastGameEvent('generation-room', 'cell-update', { index: 0, value: 1 });
+        expect(publish.mock.lastCall[0].data.puzzleGeneration).toBe(rematch.eventId);
+        client.sendGamePing({ gameState: { board: [] } });
+        expect(publish.mock.lastCall[0].data.puzzleGeneration).toBe(rematch.eventId);
+    });
+});
