@@ -24,9 +24,10 @@ function place(work: number[], candidates: Candidates, peers: Array<Set<number>>
     for (const peer of peers[index]) candidates[peer].delete(digit);
 }
 
-function findSingle(work: number[], candidates: Candidates, units: number[][], maxDigit: number) {
+function findSingle(work: number[], candidates: Candidates, units: number[][], maxDigit: number, allowHidden: boolean) {
     const naked = candidates.findIndex(values => values.size === 1);
     if (naked !== -1) return { index: naked, digit: [...candidates[naked]][0], technique: 'nakedSingles' as Technique };
+    if (!allowHidden) return null;
     for (const unit of units) {
         for (let digit = 1; digit <= maxDigit; digit++) {
             if (unit.some(index => work[index] === digit)) continue;
@@ -82,7 +83,7 @@ function applyPairs(candidates: Candidates, units: number[][]) {
  * Expert: needs techniques beyond this non-guessing solver (not a claim of a specific advanced technique).
  * The caller must separately verify uniqueness before treating a stalled board as Expert.
  */
-export function rateSudokuDifficulty(board: number[], variant = '3x3') {
+export function rateSudokuDifficulty(board: number[], variant = '3x3', { maxTechnique = 'all' }: { maxTechnique?: 'nakedSingles' | 'hiddenSingles' | 'all' } = {}) {
     const spec = getVariantSpec(variant);
     if (board.length !== spec.totalCells || board.some(value => !Number.isInteger(value) || value < 0 || value > spec.maxDigit)) {
         throw new Error('Invalid board for difficulty rating.');
@@ -99,13 +100,13 @@ export function rateSudokuDifficulty(board: number[], variant = '3x3') {
             ![...peers[index]].some(peer => work[peer] === digit))));
     const techniques = { nakedSingles: 0, hiddenSingles: 0, lockedCandidates: 0, nakedPairs: 0 };
     while (work.includes(0)) {
-        const single = findSingle(work, candidates, units, spec.maxDigit);
+        const single = findSingle(work, candidates, units, spec.maxDigit, maxTechnique !== 'nakedSingles');
         if (single) {
             place(work, candidates, peers, single.index, single.digit);
             techniques[single.technique]++;
-        } else if (applyLocked(candidates, units, spec.maxDigit)) {
+        } else if (maxTechnique === 'all' && applyLocked(candidates, units, spec.maxDigit)) {
             techniques.lockedCandidates++;
-        } else if (applyPairs(candidates, units)) {
+        } else if (maxTechnique === 'all' && applyPairs(candidates, units)) {
             techniques.nakedPairs++;
         } else {
             break;

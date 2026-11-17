@@ -1,43 +1,8 @@
 import React from 'react';
 import enMessages from '../locales/en.json';
 
-export function LegalPage({
-    page,
-    language = 'en',
-    onBack,
-    onSwitchPage,
-    messages = enMessages,
-}) {
-    const isGerman = language === 'de';
-    const isPrivacy = page === 'privacy';
-
-    return (
-        <main id={`legal-${page}`} className="legal-page" aria-labelledby="legal-page-title">
-            <div className="legal-page__top-bar">
-                <button
-                    type="button"
-                    id="legal-back-btn"
-                    className="game-top-bar__back-btn"
-                    onClick={onBack}
-                >
-                    <span aria-hidden="true">←</span>
-                    <span>{messages.legalBackToApp || 'Back to Sudoku Shift'}</span>
-                </button>
-                <a
-                    id={isPrivacy ? 'legal-switch-impressum' : 'legal-switch-privacy'}
-                    href={isPrivacy ? '/impressum' : '/privacy'}
-                    className="legal-page__switch-link"
-                    onClick={(e) => {
-                        e.preventDefault();
-                        onSwitchPage(isPrivacy ? 'impressum' : 'privacy');
-                    }}
-                >
-                    {isPrivacy ? messages.impressumTitle : messages.privacyTitle}
-                </a>
-            </div>
-
-            <article className="legal-card">
-                {isPrivacy ? (
+function renderLegalContent(isPrivacy, isGerman) {
+    if (isPrivacy) return (
                     isGerman ? (
                         <>
                             <h1 id="legal-page-title" className="legal-card__title">
@@ -213,7 +178,8 @@ export function LegalPage({
                             </section>
                         </>
                     )
-                ) : isGerman ? (
+                );
+    return isGerman ? (
                     <>
                         <h1 id="legal-page-title" className="legal-card__title">
                             Impressum
@@ -285,7 +251,46 @@ export function LegalPage({
                             </p>
                         </section>
                     </>
-                )}
+                );
+}
+
+export function LegalPage({
+    page,
+    language = 'en',
+    onBack,
+    onSwitchPage,
+    messages = enMessages,
+}) {
+    const isGerman = language === 'de';
+    const isPrivacy = page === 'privacy';
+
+    return (
+        <main id={`legal-${page}`} className="legal-page" aria-labelledby="legal-page-title">
+            <div className="legal-page__top-bar">
+                <button
+                    type="button"
+                    id="legal-back-btn"
+                    className="game-top-bar__back-btn"
+                    onClick={onBack}
+                >
+                    <span aria-hidden="true">←</span>
+                    <span>{messages.legalBackToApp || 'Back to Sudoku Shift'}</span>
+                </button>
+                <a
+                    id={isPrivacy ? 'legal-switch-impressum' : 'legal-switch-privacy'}
+                    href={isPrivacy ? '/impressum' : '/privacy'}
+                    className="legal-page__switch-link"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        onSwitchPage(isPrivacy ? 'impressum' : 'privacy');
+                    }}
+                >
+                    {isPrivacy ? messages.impressumTitle : messages.privacyTitle}
+                </a>
+            </div>
+
+            <article className="legal-card">
+                {renderLegalContent(isPrivacy, isGerman)}
             </article>
         </main>
     );

@@ -16,14 +16,17 @@ import {
     inferVariantFromBoardLength,
 } from '../domain/sudoku-variants.js';
 
+const CELL_UPDATE_EVENT = 'cell-update';
+
 function formatLogicalHintMessage(hint, activeVariant, messages, isPreview) {
     const { row, col } = getCellCoords(hint.index, activeVariant);
     const cell = formatCellCoord(hint.index, activeVariant);
-    const unitLabel = hint.unitType === 'box'
-        ? (messages?.hintUnitBox || 'box')
-        : (hint.unitType === 'row'
-            ? (messages?.hintUnitRow || 'row')
-            : (messages?.hintUnitCol || 'column'));
+    const unitLabels = {
+        box: messages?.hintUnitBox || 'box',
+        row: messages?.hintUnitRow || 'row',
+        col: messages?.hintUnitCol || 'column',
+    };
+    const unitLabel = unitLabels[hint.unitType] || unitLabels.col;
 
     const previewTemplates = {
         full_house: messages?.hintPreviewFullHouse || 'Hint: Check {cell} (last empty cell in {unit}). Tap Hint again to fill.',
@@ -158,7 +161,7 @@ export function useBoardActions({
             stateRef.current.activeDigit = null;
         }
         if (isOnlineBroadcaster(cur)) {
-            onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'cell-update', {
+            onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, CELL_UPDATE_EVENT, {
                 index: targetIndex,
                 value: digit,
                 notes: nextState.notes[targetIndex],
@@ -205,7 +208,7 @@ export function useBoardActions({
                 setGameState(nextState);
                 stateRef.current.gameState = nextState;
                 if (isOnlineBroadcaster(cur)) {
-                    onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'cell-update', {
+                    onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, CELL_UPDATE_EVENT, {
                         index: targetIndex,
                         value: null,
                         notes: nextState.notes[targetIndex],
@@ -304,7 +307,7 @@ export function useBoardActions({
         const totalCells = nextState.board.length;
         for (let i = 0; i < totalCells; i++) {
             if (prevNotes[i].join(',') !== nextState.notes[i].join(',')) {
-                onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'cell-update', {
+                onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, CELL_UPDATE_EVENT, {
                     index: i,
                     value: nextState.board[i] === 0 ? null : nextState.board[i],
                     notes: nextState.notes[i],
@@ -367,7 +370,7 @@ export function useBoardActions({
                     const boardChanged = prevBoard[i] !== nextState.board[i];
                     const notesChanged = prevNotes[i].join(',') !== nextState.notes[i].join(',');
                     if (boardChanged || notesChanged) {
-                        onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'cell-update', {
+                        onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, CELL_UPDATE_EVENT, {
                             index: i,
                             value: nextState.board[i],
                             notes: nextState.notes[i],

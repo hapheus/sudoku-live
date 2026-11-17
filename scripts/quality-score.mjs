@@ -57,9 +57,18 @@ function runStep(cmd, args, { allowNonZero = false } = {}) {
     return res;
 }
 
+export function minimumQualityScore(args) {
+    const option = args.find(arg => arg.startsWith('--min-score='));
+    const score = option ? Number(option.split('=')[1]) : 90;
+    if (!Number.isFinite(score) || score < 90 || score > 100) {
+        throw new Error('Quality minimum must be between 90 and 100.');
+    }
+    return score;
+}
+
 function main() {
-    const minScoreArg = process.argv.find((arg) => arg.startsWith('--min-score='));
-    const minScore = minScoreArg ? Number(minScoreArg.split('=')[1]) : 70;
+    const minScore = minimumQualityScore(process.argv.slice(2));
+    runStep('npm', ['run', 'typecheck']);
 
     runStep('npx', ['vitest', 'run', '--coverage']);
     runStep('npx', ['jscpd', '--silent']);

@@ -26,6 +26,82 @@ function formatSpectatorOpponentLabel(resolvedMode, hostOnline, guestCount, gues
     return `Host: ${hostState} | Partner: ${guestState}`;
 }
 
+function buildPresenceBadges({ isSpectating, isCoopActive, myRole, partnerCount, partnerOnline, partnerMembers, messages, gameState, onContinueSolo, myMember, currentMembers, spectatedGameMode }) {
+    let opponentBadge = null;
+    let continueSoloBtn = null;
+    let spectatorBadge = null;
+    let coopLegend = null;
+    const spectatorCount = currentMembers.filter((m) => m.role === 'spectator').length;
+
+    if (isSpectating) {
+        const hostMember = currentMembers.find((m) => m.role === 'host');
+        const hostOnline = Boolean(hostMember);
+        const guestCount = currentMembers.filter((m) => m.role === 'guest').length;
+        const guestOnline = guestCount > 0;
+        const resolvedMode = guestOnline ? 'online' : (hostMember?.game_mode || spectatedGameMode);
+
+        opponentBadge = (
+            <span id="opponent-status" className="presence-badge" aria-live="polite">
+                {formatSpectatorOpponentLabel(resolvedMode, hostOnline, guestCount, guestOnline)}
+            </span>
+        );
+
+        spectatorBadge = (
+            <span id="spectator-status" className="presence-badge presence-badge--spectators" aria-live="polite">
+                {`${spectatorCount} Watching`}
+            </span>
+        );
+    return { opponentBadge, continueSoloBtn, spectatorBadge, coopLegend };
+    }
+    if (isCoopActive && (myRole === 'host' || myRole === 'guest')) {
+        const partnerStatusLabel = formatPartnerStatusLabel(partnerCount, partnerOnline, partnerMembers, messages);
+        opponentBadge = (
+            <span
+                id="opponent-status"
+                className={`presence-badge ${partnerOnline ? 'presence-badge--online' : 'presence-badge--offline'}`}
+                aria-live="polite"
+            >
+                {partnerStatusLabel}
+            </span>
+        );
+
+        if (!partnerOnline && gameState.status !== 'solved' && onContinueSolo) {
+            continueSoloBtn = (
+                <button
+                    type="button"
+                    id="continue-solo-btn"
+                    className="connection-retry-btn"
+                    onClick={onContinueSolo}
+                >
+                    {messages.continueSolo || 'Continue Solo'}
+                </button>
+            );
+        }
+
+        coopLegend = (
+            <span className="coop-legend" aria-label="Cell ownership colors">
+                <span className="coop-legend__item coop-legend__item--self">
+                    <span className="coop-legend__swatch" aria-hidden="true" />
+                    {myMember?.displayName ? `${messages.youLabel} (${myMember.displayName})` : messages.youLabel}
+                </span>
+                <span className="coop-legend__item coop-legend__item--partner">
+                    <span className="coop-legend__swatch" aria-hidden="true" />
+                    {partnerCount === 1 && partnerMembers[0]?.displayName ? partnerMembers[0].displayName : messages.partnerLabel}
+                </span>
+            </span>
+        );
+    }
+
+    if (spectatorCount > 0) {
+        spectatorBadge = (
+            <span id="spectator-status" className="presence-badge presence-badge--spectators" aria-live="polite">
+                {`${spectatorCount} Spectator${spectatorCount === 1 ? '' : 's'}`}
+            </span>
+        );
+    }
+    return { opponentBadge, continueSoloBtn, spectatorBadge, coopLegend };
+}
+
 export function StatusBanner({
     connectionStatus,
     mode,
@@ -101,79 +177,9 @@ export function StatusBanner({
         );
     }
 
-    // Presence badges
-    let opponentBadge = null;
-    let continueSoloBtn = null;
-    let spectatorBadge = null;
-    let coopLegend = null;
-    const spectatorCount = currentMembers.filter((m) => m.role === 'spectator').length;
-
-    if (!isSpectating) {
-        if (isCoopActive && (myRole === 'host' || myRole === 'guest')) {
-            const partnerStatusLabel = formatPartnerStatusLabel(partnerCount, partnerOnline, partnerMembers, messages);
-            opponentBadge = (
-                <span
-                    id="opponent-status"
-                    className={`presence-badge ${partnerOnline ? 'presence-badge--online' : 'presence-badge--offline'}`}
-                    aria-live="polite"
-                >
-                    {partnerStatusLabel}
-                </span>
-            );
-
-            if (!partnerOnline && gameState.status !== 'solved' && onContinueSolo) {
-                continueSoloBtn = (
-                    <button
-                        type="button"
-                        id="continue-solo-btn"
-                        className="connection-retry-btn"
-                        onClick={onContinueSolo}
-                    >
-                        {messages.continueSolo || 'Continue Solo'}
-                    </button>
-                );
-            }
-
-            coopLegend = (
-                <span className="coop-legend" aria-label="Cell ownership colors">
-                    <span className="coop-legend__item coop-legend__item--self">
-                        <span className="coop-legend__swatch" aria-hidden="true" />
-                        {myMember?.displayName ? `${messages.youLabel} (${myMember.displayName})` : messages.youLabel}
-                    </span>
-                    <span className="coop-legend__item coop-legend__item--partner">
-                        <span className="coop-legend__swatch" aria-hidden="true" />
-                        {partnerCount === 1 && partnerMembers[0]?.displayName ? partnerMembers[0].displayName : messages.partnerLabel}
-                    </span>
-                </span>
-            );
-        }
-
-        if (spectatorCount > 0) {
-            spectatorBadge = (
-                <span id="spectator-status" className="presence-badge presence-badge--spectators" aria-live="polite">
-                    {`${spectatorCount} Spectator${spectatorCount === 1 ? '' : 's'}`}
-                </span>
-            );
-        }
-    } else {
-        const hostMember = currentMembers.find((m) => m.role === 'host');
-        const hostOnline = Boolean(hostMember);
-        const guestCount = currentMembers.filter((m) => m.role === 'guest').length;
-        const guestOnline = guestCount > 0;
-        const resolvedMode = guestOnline ? 'online' : (hostMember?.game_mode || spectatedGameMode);
-
-        opponentBadge = (
-            <span id="opponent-status" className="presence-badge" aria-live="polite">
-                {formatSpectatorOpponentLabel(resolvedMode, hostOnline, guestCount, guestOnline)}
-            </span>
-        );
-
-        spectatorBadge = (
-            <span id="spectator-status" className="presence-badge presence-badge--spectators" aria-live="polite">
-                {`${spectatorCount} Watching`}
-            </span>
-        );
-    }
+    const { opponentBadge, continueSoloBtn, spectatorBadge, coopLegend } = buildPresenceBadges({
+        isSpectating, isCoopActive, myRole, partnerCount, partnerOnline, partnerMembers, messages, gameState, onContinueSolo, myMember, currentMembers, spectatedGameMode,
+    });
 
     const hasMetaBadges = Boolean(connectionBadge || canRetryConnection || opponentBadge || continueSoloBtn || spectatorBadge || coopLegend);
 

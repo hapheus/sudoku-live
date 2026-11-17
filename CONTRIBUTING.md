@@ -12,7 +12,7 @@ English is mandatory throughout the entire project for all code, comments, commi
 
 ## Git Workflow & Branch Conventions
 
-- `main`: Protected integration and release branch (requires passing CI checks and 2 Code Owner approvals).
+- `main`: Protected integration and release branch (requires passing CI checks, quality >=90, and 2 Code Owner approvals). The live ruleset and integration order are documented in [GitHub issue #51](https://github.com/hapheus/sudoku-shift/issues/51).
 - `feat/<name>`: New features or enhancements (branched from `main`).
 - `fix/<name>`: Bug fixes (branched from `main`).
 - `docs/<name>`: Documentation updates (branched from `main`).
@@ -77,6 +77,17 @@ Before opening a pull request, ensure all tests, builds, and container checks pa
    ```bash
    docker compose config -q
    ```
+
+---
+
+## TypeScript and Quality Gate
+
+```bash
+npm run typecheck
+npm run quality
+```
+
+The quality CLI always enforces a minimum of 90/100; lowering the CLI threshold is rejected. TypeScript is checked without migrating or claiming to typecheck the existing JavaScript. Scores, lint rules and coverage scope must not be weakened to make a change pass. For stacked PRs, CI also runs when the base is a feature branch.
 
 ---
 
