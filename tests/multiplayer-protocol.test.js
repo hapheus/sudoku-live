@@ -74,4 +74,8 @@ describe('multiplayer-protocol', () => {
         expect(tooOldRemote.requiresUpdate).toBe('remote');
         expect(tooOldRemote.reason).toBe('remote-outdated');
     });
+    it.each([0, -1, 1.5, '1', null, NaN, Infinity, 3])('rejects malformed or contradictory minimum %s', (minimum) => {
+        expect(checkProtocolCompatibility({ protocolVersion: 2, minProtocolVersion: minimum }).compatible).toBe(false);
+    });
+
 });

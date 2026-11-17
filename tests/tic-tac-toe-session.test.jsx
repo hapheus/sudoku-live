@@ -7,6 +7,24 @@ const members = [{ id: 'a', role: 'host' }, { id: 'b', role: 'guest' }, { id: 's
 describe('online tic tac toe session', () => {
     afterEach(() => { vi.useRealTimers(); sessionStorage.clear(); });
 
+    it('keeps a mixed-version room in Sudoku when the mini-game is unsupported', () => {
+        const stateRef = { current: { myRole: 'host', isSpectating: false, onlineGameId: 'legacy-room', currentMembers: members } };
+        const onlineClientRef = { current: { clientId: 'a', supportsFeature: () => false, broadcastGameEvent: vi.fn() } };
+        const { result } = renderHook(() => useTicTacToe({ stateRef, onlineClientRef }));
+        act(() => {
+            result.current.onShift({ axis: 'row', from: 0, to: 1, direction: 1 });
+            result.current.onEvent('tic-tac-toe-shift', { playerId: 'b', axis: 'row', from: 1, to: 0, direction: -1 });
+        });
+        expect(result.current.challenge.shifts).toEqual([]);
+        act(() => result.current.update({ triggered: true, shifts: [], game: {
+            board: Array(9).fill(null), players: { X: 'a', O: 'b' }, turn: 'X', winner: null, draw: false, phase: 'transition',
+        } }));
+        act(() => result.current.onMembersChange(members));
+        expect(result.current.challenge.game).toBeNull();
+        expect(result.current.challenge.triggered).toBe(true);
+        expect(onlineClientRef.current.broadcastGameEvent).not.toHaveBeenCalled();
+    });
+
     it('restores the once-per-puzzle state for a reconnecting host', () => {
         vi.useFakeTimers();
         const stateRef = { current: { myRole: 'host', isSpectating: false, onlineGameId: 'restore-room', currentMembers: members } };

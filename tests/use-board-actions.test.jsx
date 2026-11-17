@@ -4,6 +4,18 @@ import { createSudokuGame } from '../src/domain/sudoku-engine.js';
 import { useBoardActions } from '../src/hooks/useBoardActions.js';
 
 describe('useBoardActions', () => {
+    it('does not mutate a shared board when a participant does not support shifts', () => {
+        const gameState = createSudokuGame({ difficulty: 'easy', variant: '2x3' });
+        const stateRef = { current: { gameState, selectedIndex: 0, mode: 'online', isSpectating: false, myRole: 'host', onlineGameId: 'legacy-room' } };
+        const setGameState = vi.fn();
+        const { result } = renderHook(() => useBoardActions({
+            stateRef, onlineClientRef: { current: { supportsFeature: () => false } }, setGameState,
+        }));
+        act(() => result.current.handleShift('row', 1));
+        expect(setGameState).not.toHaveBeenCalled();
+        expect(stateRef.current.gameState).toBe(gameState);
+    });
+
     it('reports the actual pair of swapped rows to the online challenge', () => {
         const game = createSudokuGame({ difficulty: 'easy', variant: '3x3' });
         const stateRef = { current: { gameState: game, selectedIndex: 0, mode: 'online', isSpectating: false, onlineGameId: null } };

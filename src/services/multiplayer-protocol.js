@@ -45,7 +45,7 @@ export function checkProtocolCompatibility(remoteMeta = {}) {
     const rawVersion = remoteMeta?.protocolVersion;
     const remoteVersion = rawVersion === undefined ? 1 : rawVersion;
 
-    if (typeof remoteVersion !== 'number' || !Number.isInteger(remoteVersion) || remoteVersion < 0) {
+    if (!Number.isSafeInteger(remoteVersion) || remoteVersion < 0) {
         return {
             compatible: false,
             reason: 'invalid-version',
@@ -66,7 +66,10 @@ export function checkProtocolCompatibility(remoteMeta = {}) {
     }
 
     const rawMin = remoteMeta?.minProtocolVersion;
-    const remoteMinVersion = typeof rawMin === 'number' && Number.isInteger(rawMin) ? rawMin : 1;
+    const remoteMinVersion = rawMin === undefined ? 1 : rawMin;
+    if (!Number.isSafeInteger(remoteMinVersion) || remoteMinVersion < 1 || remoteMinVersion > remoteVersion) {
+        return { compatible: false, reason: 'invalid-min-version', requiresUpdate: 'remote', remoteVersion, negotiatedFeatures: [] };
+    }
     if (remoteMinVersion > PROTOCOL_VERSION) {
         return {
             compatible: false,

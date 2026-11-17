@@ -13,6 +13,70 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
         delete window.Capacitor;
     });
 
+    it('suspends and restores the same subscriptions without duplicating transport work', () => {
+        const client = new OnlineGameClient();
+        const transport = { connect: vi.fn(), disconnect: vi.fn(), removeSubscription: vi.fn() };
+        const game = { unsubscribe: vi.fn() };
+        const lobby = { unsubscribe: vi.fn() };
+        client.client = transport;
+        client.gameChannel = game;
+        client.lobbyChannel = lobby;
+        client.currentGameId = 'resume-room';
+        client.hostedLobbyMeta = { game_id: 'resume-room' };
+        client.suspend();
+        client.suspend();
+        expect(transport.disconnect).toHaveBeenCalledTimes(1);
+        expect(game.unsubscribe).not.toHaveBeenCalled();
+        expect(lobby.unsubscribe).not.toHaveBeenCalled();
+        expect(client.currentGameId).toBe('resume-room');
+        client.resume();
+        client.resume();
+        expect(transport.connect).toHaveBeenCalledTimes(1);
+        expect(client.gameChannel).toBe(game);
+        expect(client.lobbyChannel).toBe(lobby);
+        expect(client.hostedLobbyMeta).toEqual({ game_id: 'resume-room' });
+        client.suspend();
+        client.disconnect();
+        client.resume();
+        expect(game.unsubscribe).toHaveBeenCalledTimes(1);
+        expect(lobby.unsubscribe).toHaveBeenCalledTimes(1);
+        expect(transport.connect).toHaveBeenCalledTimes(1);
+        expect(client.client).toBeNull();
+    });
+
+    it('enforces optional outgoing actions and projects mini-game metadata for legacy players', async () => {
+        const client = new OnlineGameClient();
+        const publish = vi.fn().mockResolvedValue({});
+        client.gameChannel = { publish };
+        client.roomAuthority.announce('legacy', { id: 'legacy', role: 'host' });
+        client.peerCompatibility.announce('legacy', {});
+        await client.broadcastGameEvent('feature-room', 'fist-bump', { index: 0 });
+        client.sendWhisperEvent('tic-tac-toe-move', { index: 0, playerId: client.clientId });
+        expect(publish).not.toHaveBeenCalled();
+        await client.broadcastGameEvent('feature-room', 'sync', { gameState: { board: [] }, ticTacToe: { triggered: true } });
+        expect(publish.mock.lastCall[0].data).not.toHaveProperty('ticTacToe');
+        client.peerCompatibility.remove('legacy');
+        client.roomAuthority.leave('legacy');
+        client.sendWhisperEvent('fist-bump', { index: 0 });
+        expect(publish.mock.lastCall[0].type).toBe('fist-bump');
+    });
+
+    it('applies historical peer features when projecting recovered snapshots', async () => {
+        const client = new OnlineGameClient();
+        const publication = (type, data, offset) => ({ offset, info: { client: 'legacy-transport' }, data: { type, data } });
+        const sub = { history: vi.fn().mockResolvedValue({ publications: [
+            publication('presence-announce', { id: 'legacy-host', role: 'host' }, 1),
+            publication('sync', { senderId: 'legacy-host', gameState: { board: Array(36).fill(0), givens: Array(36).fill(false) },
+                ticTacToe: { triggered: false, shifts: [], game: null } }, 2),
+        ] }) };
+        client.gameChannel = sub;
+        const events = [];
+        await client.replayGameHistory(sub, (type, data) => events.push({ type, data }));
+        expect(events).toHaveLength(1);
+        expect(events[0].data).not.toHaveProperty('ticTacToe');
+        expect(client.gameMembersByServerClient.size).toBe(0);
+    });
+
     it('validates game IDs strictly', () => {
         expect(isValidGameId('room-123_abc')).toBe(true);
         expect(isValidGameId(generateGameId())).toBe(true);
@@ -439,6 +503,17 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
         });
         expect(incompatible).toHaveLength(1);
         expect(incompatible[0].requiresUpdate).toBe('local');
+        handlers.get('publication')({
+            info: { client: 'sc-peer', user: 'u-peer' },
+            data: { type: 'cell-update', data: { senderId: 'peer-1', index: 1, value: 4, eventId: 'incompatible-move' } },
+        });
+        expect(events).toEqual([]);
+        expect([...client.gameMembersByServerClient.values()].some(member => member.id === 'peer-1')).toBe(false);
+        handlers.get('publication')({
+            info: { client: 'sc-peer', user: 'u-peer' },
+            data: { type: 'presence-announce', data: { id: 'peer-1', role: 'guest', protocolVersion: 2 } },
+        });
+
 
         const now = Date.now();
         // Valid live event seq 2

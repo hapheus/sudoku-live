@@ -38,12 +38,13 @@ export function useTicTacToe({ stateRef, onlineClientRef }) {
 
     const receiveShift = useCallback((shift) => {
         const cur = stateRef.current;
-        if (cur.myRole !== 'host' || cur.isSpectating || challengeRef.current.game) return;
+        if (cur.myRole !== 'host' || cur.isSpectating || challengeRef.current.game
+            || onlineClientRef.current?.supportsFeature?.('tic-tac-toe') === false) return;
         const next = recordShift(challengeRef.current, shift, cur.currentMembers);
         if (next.game) next.game.phase = 'transition';
         if (next.game) publish(next);
         else update(next);
-    }, [publish, stateRef, update]);
+    }, [onlineClientRef, publish, stateRef, update]);
 
     const onShift = useCallback((shift) => {
         const cur = stateRef.current;
@@ -75,6 +76,12 @@ export function useTicTacToe({ stateRef, onlineClientRef }) {
     }, [applyMove, onlineClientRef, stateRef]);
 
     const onMembersChange = useCallback((members) => {
+        if (onlineClientRef.current?.supportsFeature?.('tic-tac-toe') === false) {
+            if (challengeRef.current.game || challengeRef.current.shifts.length) {
+                update({ ...challengeRef.current, game: null, shifts: [] });
+            }
+            return;
+        }
         if (stateRef.current.myRole !== 'host') return;
         const players = members.filter((member) => member.role === 'host' || member.role === 'guest');
         const game = challengeRef.current.game;
@@ -85,7 +92,7 @@ export function useTicTacToe({ stateRef, onlineClientRef }) {
         } else if (!game && !valid && challengeRef.current.shifts.length) {
             update({ ...challengeRef.current, shifts: [] });
         }
-    }, [publish, stateRef, update]);
+    }, [onlineClientRef, publish, stateRef, update]);
 
     const onHostLeave = useCallback(() => {
         const game = challengeRef.current.game;

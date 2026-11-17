@@ -1094,12 +1094,19 @@ export function useOnlineSession({
         }
 
         const cleanup = () => client.disconnect();
-        window.addEventListener('beforeunload', cleanup);
-        window.addEventListener('pagehide', cleanup);
+        const handlePageHide = (event) => {
+            if (event.persisted) client.suspend();
+            else cleanup();
+        };
+        const handlePageShow = (event) => {
+            if (event.persisted) client.resume();
+        };
+        window.addEventListener('pagehide', handlePageHide);
+        window.addEventListener('pageshow', handlePageShow);
 
         return () => {
-            window.removeEventListener('beforeunload', cleanup);
-            window.removeEventListener('pagehide', cleanup);
+            window.removeEventListener('pagehide', handlePageHide);
+            window.removeEventListener('pageshow', handlePageShow);
             cleanup();
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps

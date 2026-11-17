@@ -25,6 +25,8 @@ vi.mock('../src/services/online-game-client.js', () => ({
             this.broadcastLobbyUpdate = vi.fn();
             this.updateGameJoinPolicy = vi.fn();
             this.disconnect = vi.fn();
+            this.suspend = vi.fn();
+            this.resume = vi.fn();
             this.getGameMembers = vi.fn(() => []);
         }
     },
@@ -135,7 +137,7 @@ describe('useOnlineSession', () => {
         const ticTacToe = { reset: vi.fn(), update: vi.fn(), challengeRef: { current: { triggered: false, shifts: [], game: null } }, onMembersChange: vi.fn() };
         const setIncomingJoinRequests = vi.fn();
 
-        const { result } = renderHook(() => useOnlineSession({
+        const { result, unmount } = renderHook(() => useOnlineSession({
             ticTacToe,
             initialRoute: { initialMode: 'solo', initialWatch: false, initialGameId: null },
             joinPolicy: 'confirm',
@@ -180,6 +182,15 @@ describe('useOnlineSession', () => {
         }));
 
         expect(onlineClientRef.current).toBeTruthy();
+        const sessionClient = onlineClientRef.current;
+        act(() => {
+            window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+            window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+        });
+        expect(sessionClient.suspend).toHaveBeenCalledTimes(1);
+        expect(sessionClient.resume).toHaveBeenCalledTimes(1);
+        expect(sessionClient.disconnect).not.toHaveBeenCalled();
+        expect(onlineClientRef.current).toBe(sessionClient);
 
         act(() => {
             result.current.handleReconnect();
@@ -239,5 +250,10 @@ describe('useOnlineSession', () => {
             'room-abc', 'in_progress', gameState.filledCount, 'easy', 'solo',
             expect.objectContaining({ hasGuest: false, totalCells: 81 }),
         );
+        unmount();
+        sessionClient.resume.mockClear();
+        window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+        expect(sessionClient.resume).not.toHaveBeenCalled();
+        expect(sessionClient.disconnect).toHaveBeenCalledTimes(1);
     });
 });

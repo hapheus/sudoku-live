@@ -60,3 +60,22 @@ Notes:
 ## Responsive regions
 
 See [the responsive region contract](responsive-layout.md) for screen placement, geometry assertions, safe-area and hinge handling, and outstanding device acceptance.
+
+## Local broker regression checks
+
+With an isolated Centrifugo using `docker/centrifugo/config.json` bound to local
+port 8081, run:
+
+```bash
+CENTRIFUGO_E2E=1 npm run e2e -- tests/qa/protocol-boundary.spec.ts tests/qa/session-compatibility.spec.ts tests/qa/lifecycle-restore.spec.ts tests/qa/tic-tac-toe-online.spec.ts
+```
+
+These are headless Chromium tests against a real local broker, not production or
+physical devices. They cover compatible/incompatible live and recovered events,
+player versus spectator feature scope, leave/rejoin, repeated transport suspension,
+subscription identity/counts, and co-op with both admission policies. The lifecycle
+UI test also exercises persisted browser page events and real back navigation,
+attaching the observed page-transition sequence. Its launch configuration allows
+Chromium's back/forward cache; the recorded `pageshow.persisted` value distinguishes
+actual cache restoration from a non-cached remount. Native lifecycle and mixed
+installed app builds remain device QA in #59/#72.
