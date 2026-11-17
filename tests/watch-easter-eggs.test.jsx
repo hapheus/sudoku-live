@@ -130,7 +130,7 @@ describe('Watch Mode Easter Eggs visibility', () => {
                     givens: Array(81).fill(false),
                     variant: '3x3',
                     difficulty: 'medium',
-                    status: 'playing',
+                    status: 'in_progress',
                     elapsedSeconds: 25,
                 },
                 isRetroMode: true,

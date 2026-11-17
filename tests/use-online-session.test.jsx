@@ -132,9 +132,11 @@ describe('useOnlineSession', () => {
         const onlineClientRef = { current: null };
         const pendingJoinTimerRef = { current: null };
         const showFeedback = vi.fn();
+        const ticTacToe = { reset: vi.fn(), update: vi.fn(), challengeRef: { current: { triggered: false, shifts: [], game: null } }, onMembersChange: vi.fn() };
         const setIncomingJoinRequests = vi.fn();
 
         const { result } = renderHook(() => useOnlineSession({
+            ticTacToe,
             initialRoute: { initialMode: 'solo', initialWatch: false, initialGameId: null },
             joinPolicy: 'confirm',
             hostJoinPolicy: 'confirm',
@@ -225,6 +227,13 @@ describe('useOnlineSession', () => {
         onlineClientRef.current.getGameMembers.mockReturnValue(members);
         const callbacks = onlineClientRef.current.joinGameChannel.mock.calls.at(-1)[1];
         act(() => callbacks.onPresenceChange(members));
+        const snapshot = { board: Array(81).fill(0), givens: Array(81).fill(false) };
+        act(() => {
+            callbacks.onEvent('new-puzzle-accept', { gameState: snapshot, hints: [null] });
+            callbacks.onEvent('sync', { gameState: snapshot, ticTacToe: { bad: true } });
+        });
+        expect(ticTacToe.reset).not.toHaveBeenCalled();
+        expect(ticTacToe.update).not.toHaveBeenCalled();
         expect(stateRef.current.currentMembers).toEqual(members);
         expect(onlineClientRef.current.broadcastLobbyUpdate).toHaveBeenLastCalledWith(
             'room-abc', 'in_progress', gameState.filledCount, 'easy', 'solo',

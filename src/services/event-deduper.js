@@ -7,6 +7,7 @@ export function createEventDeduper(maxSize = DEFAULT_MAX_SEEN_EVENT_IDS) {
     const seen = new Set();
 
     return {
+        has: (eventId) => seen.has(eventId),
         remember(eventId) {
             if (!eventId || typeof eventId !== 'string') {
                 return false;

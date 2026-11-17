@@ -46,7 +46,7 @@ describe('message-security', () => {
         expect(validateIncomingGameMessage('fist-bump', { index: -1 }, 81, 9)).toBe(false);
         expect(validateIncomingGameMessage('fist-bump', { index: 36 }, 36, 6)).toBe(false);
 
-        expect(validateIncomingGameMessage('tic-tac-toe-shift', { playerId: 'guest-1', axis: 'row', index: 0, direction: 1 }, 81, 9)).toBe(true);
+        expect(validateIncomingGameMessage('tic-tac-toe-shift', { playerId: 'guest-1', axis: 'row', from: 0, to: 1, direction: 1 }, 81, 9)).toBe(true);
         expect(validateIncomingGameMessage('tic-tac-toe-shift', { axis: 'row' }, 81, 9)).toBe(false);
 
         expect(validateIncomingGameMessage('tic-tac-toe-move', { playerId: 'guest-1', index: 4 }, 81, 9)).toBe(true);

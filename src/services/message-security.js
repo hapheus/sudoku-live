@@ -1,5 +1,5 @@
 import { ALLOWED_REACTIONS } from '../utils/watcher-helpers.js';
-import { isValidChallenge } from '../domain/tic-tac-toe.js';
+import { isBoundedString, optional, validateContextEntries, validateNetworkChallenge, validateNetworkEnvelope, validateShift, validateSnapshotPayload } from './network-payloads.js';
 import { isValidGameId } from './ws-config.js';
 
 const VALID_JOIN_POLICIES = new Set(['auto', 'confirm', 'disabled']);
@@ -75,15 +75,6 @@ function validateHint(data, totalCells, maxDigit) {
     return true;
 }
 
-function validateGameStatePayload(data) {
-    if (!isPlainObject(data.gameState)) return false;
-    const { board, givens, elapsedSeconds } = data.gameState;
-    if (!Array.isArray(board) || !Array.isArray(givens)) return false;
-    if ((board.length !== 81 && board.length !== 36) || givens.length !== board.length) return false;
-    if (elapsedSeconds !== undefined && (!Number.isFinite(elapsedSeconds) || elapsedSeconds < 0)) return false;
-    return true;
-}
-
 /**
  * Validates complete presence-announce payloads so manipulated member fields cannot crash clients.
  */
@@ -91,11 +82,16 @@ export function validatePresenceAnnounce(data) {
     if (!isPlainObject(data)) return false;
     if (typeof data.id !== 'string' || data.id.length < 4 || data.id.length > 64) return false;
     if (data.role !== undefined && !VALID_MEMBER_ROLES.has(data.role)) return false;
+    if (!validateNetworkEnvelope(data)) return false;
+    if (data.senderId !== undefined && data.senderId !== data.id) return false;
+    if (!optional(data.minProtocolVersion, (v) => Number.isSafeInteger(v) && v >= 1)) return false;
+    if (data.approvedGuestIds !== undefined && (!Array.isArray(data.approvedGuestIds)
+        || data.approvedGuestIds.length > 256 || !data.approvedGuestIds.every((id) => isBoundedString(id, 64)))) return false;
     if (data.game_mode !== undefined && !VALID_LOBBY_MODES.has(data.game_mode)) return false;
     if (data.join_policy !== undefined && !VALID_JOIN_POLICIES.has(data.join_policy)) return false;
-    if (data.name !== undefined && data.name !== null && typeof data.name !== 'string') return false;
-    if (data.clientPlatform !== undefined && typeof data.clientPlatform !== 'string') return false;
-    if (data.features !== undefined && (!Array.isArray(data.features) || !data.features.every((f) => typeof f === 'string'))) {
+    if (data.name !== undefined && data.name !== null && (typeof data.name !== 'string' || data.name.length > 256)) return false;
+    if (data.clientPlatform !== undefined && !isBoundedString(data.clientPlatform, 64)) return false;
+    if (data.features !== undefined && (!Array.isArray(data.features) || data.features.length > 64 || !data.features.every((f) => isBoundedString(f, 64)))) {
         return false;
     }
     return true;
@@ -126,7 +122,7 @@ export function validateLobbyUpdateMessage(data) {
  * Validates incoming multiplayer game event type and payload bounds.
  */
 export function validateIncomingGameMessage(type, data, totalCells = 81, maxDigit = 9) {
-    if (typeof type !== 'string' || !VALID_GAME_TYPES.has(type) || !isPlainObject(data)) {
+    if (typeof type !== 'string' || !VALID_GAME_TYPES.has(type) || !isPlainObject(data) || !validateNetworkEnvelope(data)) {
         return false;
     }
 
@@ -141,40 +137,49 @@ export function validateIncomingGameMessage(type, data, totalCells = 81, maxDigi
     case 'hint':
         return validateHint(data, totalCells, maxDigit);
     case 'hint-highlight':
-        return data.mode === 'clear' || isValidCellIndex(data.index, totalCells);
+        return optional(data.mode, (mode) => ['clear', 'preview', 'solve'].includes(mode))
+            && optional(data.contextEntries, (entries) => validateContextEntries(entries, totalCells))
+            && (data.mode === 'clear' || isValidCellIndex(data.index, totalCells));
     case 'reaction':
         return typeof data.emoji === 'string' && ALLOWED_REACTIONS.has(data.emoji);
     case 'join-request':
-        return typeof data.requestId === 'string' && data.requestId.length > 0
-            && typeof data.requesterId === 'string' && data.requesterId.length > 0
-            && (data.requesterName === undefined || data.requesterName === null || typeof data.requesterName === 'string');
+        return isBoundedString(data.requestId)
+            && isBoundedString(data.requesterId, 64)
+            && (data.requesterName === undefined || data.requesterName === null || (typeof data.requesterName === 'string' && data.requesterName.length <= 256));
     case 'join-cancel':
-        return typeof data.requestId === 'string' && data.requestId.length > 0
-            && typeof data.requesterId === 'string' && data.requesterId.length > 0;
+        return isBoundedString(data.requestId)
+            && isBoundedString(data.requesterId, 64);
     case 'join-response':
-        return typeof data.requestId === 'string' && data.requestId.length > 0
-            && typeof data.requesterId === 'string' && data.requesterId.length > 0
-            && typeof data.accepted === 'boolean';
+        return isBoundedString(data.requestId)
+            && isBoundedString(data.requesterId, 64)
+            && typeof data.accepted === 'boolean'
+            && optional(data.reason, (v) => isBoundedString(v));
     case 'join-policy':
         return VALID_JOIN_POLICIES.has(data.joinPolicy);
     case 'init':
     case 'sync':
     case 'new-puzzle-accept':
     case 'ping':
-        return validateGameStatePayload(data);
+        return validateSnapshotPayload(data);
     case 'fist-bump':
-        return isValidCellIndex(data.index, totalCells);
+        return isValidCellIndex(data.index, totalCells)
+            && optional(data.value, (v) => v === null || (Number.isInteger(v) && v >= 1 && v <= maxDigit))
+            && optional(data.phraseKey, (v) => ['fistBumpAmazing', 'fistBumpAwesome'].includes(v));
     case 'retro-mode':
         return typeof data.enabled === 'boolean';
     case 'tic-tac-toe-state':
-        return isValidChallenge(data.challenge);
+        return validateNetworkChallenge(data.challenge, maxDigit);
     case 'tic-tac-toe-shift':
-        return typeof data.playerId === 'string' && data.playerId.length > 0;
+        return validateShift(data, maxDigit);
     case 'tic-tac-toe-move':
-        return typeof data.playerId === 'string' && data.playerId.length > 0
+        return isBoundedString(data.playerId, 64)
             && Number.isInteger(data.index) && data.index >= 0 && data.index < 9;
+    case 'new-puzzle-request':
+    case 'new-puzzle-cancel':
+    case 'new-puzzle-decline':
+        return VALID_ROLES.has(data.role);
     default:
-        return true;
+        return false;
     }
 }
 

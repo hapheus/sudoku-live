@@ -62,7 +62,7 @@ describe('remote-event-router', () => {
                     board,
                     givens,
                     filledCount: 0,
-                    status: 'playing',
+                    status: 'in_progress',
                     elapsedSeconds: 10,
                     variant: '3x3',
                 },
@@ -101,7 +101,7 @@ describe('remote-event-router', () => {
             gameState: {
                 board,
                 givens,
-                status: 'playing',
+                status: 'in_progress',
                 elapsedSeconds: 42,
                 variant: '3x3',
             },
