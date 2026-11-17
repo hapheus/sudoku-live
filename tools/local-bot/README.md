@@ -61,12 +61,20 @@ page loading has its own bounded timeout.
 
 ## Behavior and recovery
 
-Each bot gets a unique player identity, visible `Bot_<id>` name and game ID.
+Each bot gets a unique player identity, ordinary generated player name (for example `CalmOtter`) and game ID.
 Difficulty, 9x9/6x6 variant and notes policy vary between games. Puzzles and actual
 difficulty metadata come from the current app generator, including its rating
 fallbacks. Autoplay prefers logical opportunities and uses the stored solution
-when needed. Natural pauses, notes, occasional shifts, hints and automatic co-op
-joins reuse the source worker. Human edits protect givens; mistakes pause the bot
+when needed. Move timing is recalculated from the current technique, number of logical
+opportunities, average candidate count, proximity to the previous move and recent
+fluent moves. Obvious nearby placements come faster; difficult searches take
+longer. Each player has an individual tempo, with occasional longer thinking
+pauses and short runs of faster moves. The actual generated difficulty (including
+an Expert rating) sets the initial pace. These are soft pace targets, so the last
+cell never waits out an arbitrary whole-game duration. Search cursors, hesitation,
+digit selection, notes, shifts and placements are actual protocol events visible
+in Watch. Partner edits and shifts trigger fresh analysis. Hints and automatic
+co-op joins reuse the source worker. Human edits protect givens; mistakes pause the bot
 until corrected. Shifts pause while a partner is present. Solved sessions rotate
 after a short cooldown.
 

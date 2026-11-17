@@ -41,3 +41,30 @@ bot feature, independently of application release/device QA in #59 and #60.
   Android APK/AAB compilation was unavailable because no Android SDK is installed.
   No signed IPA, device install or store upload was performed.
 - The isolated QA backend and browser/worker processes were stopped after QA.
+
+## Human-looking play follow-up — 2026-11-17
+
+- Players now use the same ordinary generated names as the app (for example
+  `CalmOtter`), without a bot prefix or machine ID. Presence and Watch metadata
+  are covered by protocol tests.
+- Move deadlines now respond to actual rated difficulty, the next technique,
+  available logical opportunities, candidate density, nearby follow-on moves,
+  an individual tempo and occasional hesitation. Expert-rated generated puzzles
+  have a valid pace profile. Partner notes invalidate the cached analysis, and
+  partner edits/shifts reset fluent runs and recalculate thinking time.
+- Removed an unused precomputed-pause helper; tests exercise the scheduler used
+  by actual workers. Fixed the final-cell wait that could consume the remaining
+  whole-game budget. Targets are now soft starting paces with bounded pauses.
+- 36 local unit tests passed, including a complete game on the normal scheduler,
+  varied placement gaps, visible search gestures, current-board analysis, player
+  names and the final-cell regression. The app build and bot exclusion scan passed.
+- All four real-backend integration cases passed together with Docker outage
+  recovery enabled. The combined headed/count case also opens an independent
+  browser Watch client and requires a newly rendered placement, visible host
+  cursor and no conflict cells. Its final screenshot was inspected locally.
+- This stronger browser check corrected a limitation in the initial evidence:
+  simply finding a board also matched the app's offline placeholder. The isolated
+  backend now allows precisely the local test app Origin, and the check waits
+  for the authoritative host snapshot before measuring new placements.
+- These timing and gesture rules simulate human play; no human indistinguishability
+  benchmark is claimed. Production games were not created during this follow-up.

@@ -5,8 +5,18 @@ import {
   getCandidateDigits, getPeerIndices, shiftRow, shiftCol, shiftBand, shiftStack, applyRemoteCellPatch,
 } from '../../../src/domain/sudoku-engine.js';
 
-export type Difficulty = 'easy' | 'medium' | 'hard';
+export type Difficulty = 'easy' | 'medium' | 'hard' | 'expert';
 export type Variant = '3x3' | '2x3';
+
+interface PlannedMove {
+  index: number;
+  value: number;
+  hint: LogicalHint | null;
+  candidateCount: number;
+  opportunities: number;
+  averageCandidates: number;
+  nearFocus: boolean;
+}
 
 function buildUnits(variant: Variant) {
   const size = variant === '2x3' ? 6 : 9;
@@ -114,7 +124,7 @@ export class GameSession {
   private state;
   private focus: number | null = null;
   private readonly random: () => number;
-  private planned: { index: number; value: number; hint: LogicalHint | null; candidateCount: number } | null = null;
+  private planned: PlannedMove | null = null;
 
   constructor(difficulty: Difficulty, variant: Variant, random: () => number = Math.random) {
     this.random = random;
@@ -161,7 +171,7 @@ export class GameSession {
       index, value: hasValue ? value as number : this.state.board[index],
       notes: Array.isArray(notes) ? [...new Set<number>(notes)] : null, owner: 'guest',
     });
-    if (hasValue) this.planned = null;
+    this.planned = null;
     return true;
   }
 
@@ -173,7 +183,7 @@ export class GameSession {
     return structuredClone(serializeGameState(this.state));
   }
 
-  preview(): { index: number; value: number; hint: LogicalHint | null; candidateCount: number } | null {
+  preview(): PlannedMove | null {
     if (!this.canAutoplay) return null;
     if (this.planned) return { ...this.planned };
     const empty = this.state.board.flatMap((value, index) => value === 0 ? [index] : []);
@@ -188,7 +198,7 @@ export class GameSession {
       const value = this.state.solution[index];
       const baseHint = findLogicalHint(this.state, { preferredIndex: index });
       const hint = baseHint ? { ...baseHint, technique: 'note_single' } : null;
-      this.planned = { index, value, hint, candidateCount: 1 };
+      this.planned = this.plan(index, value, hint, noteSingles.length);
       return { ...this.planned };
     }
     // Enumerate the upstream engine's best available logical technique, without
@@ -216,9 +226,19 @@ export class GameSession {
     if (index === undefined) return null;
     const value = this.state.solution[index];
     const hint = logicalHints.get(index) ?? findLogicalHint(this.state, { preferredIndex: index });
-    const candidateCount = Math.max(1, getCandidateDigits(this.state.board, index, this.variant).length);
-    this.planned = { index, value, hint, candidateCount };
+    this.planned = this.plan(index, value, hint, logicalHints.size);
     return { ...this.planned };
+  }
+
+  private plan(index: number, value: number, hint: LogicalHint | null, opportunities: number): PlannedMove {
+    const counts = this.state.board.flatMap((digit, cell) => digit === 0
+      ? [getCandidateDigits(this.state.board, cell, this.variant).length] : []);
+    return {
+      index, value, hint, opportunities,
+      candidateCount: Math.max(1, getCandidateDigits(this.state.board, index, this.variant).length),
+      averageCandidates: counts.reduce((sum, count) => sum + count, 0) / Math.max(1, counts.length),
+      nearFocus: this.focus !== null && getPeerIndices(this.focus, this.variant).includes(index),
+    };
   }
 
   advance() {

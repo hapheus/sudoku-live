@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { LogicalHint } from './types.ts';
 import { OnlineGameClient } from '../../../src/services/online-game-client.js';
+import { generateRandomPlayerName } from '../../../src/services/player-name.js';
 import { buildProtocolMetadata } from '../../../src/services/multiplayer-protocol.js';
 import type { GameSession } from './game-session.ts';
 
@@ -64,7 +65,7 @@ export class CentrifugoAdapter {
     // Browser session storage is shared across clients in one Node process.
     // Each bot is a separate player, not three tabs with the same sender ID.
     this.online.clientId = randomUUID();
-    this.online.playerName = `Bot_${this.online.clientId.slice(0, 8)}`;
+    this.online.playerName = generateRandomPlayerName();
   }
 
   private publish(channel: { publish(data: unknown): Promise<unknown> }, payload: { type: string; data: Record<string, unknown> }) {

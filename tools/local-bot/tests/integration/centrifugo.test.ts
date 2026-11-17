@@ -70,7 +70,7 @@ test('real Centrifugo exposes three worker games, late-watch snapshots, moves an
       await lobby.ready(5_000);
       startWorker();
       await waitFor(() => rooms.size === 3 && readySlots === 3, 'three published rooms');
-      assert.ok([...rooms.values()].every(room => ['easy', 'medium', 'hard'].includes(room.difficulty)));
+      assert.ok([...rooms.values()].every(room => ['easy', 'medium', 'hard', 'expert'].includes(room.difficulty)));
       for (const room of rooms.values()) {
         assert.equal(room.game_mode, 'solo');
         assert.equal(room.join_policy, 'auto');

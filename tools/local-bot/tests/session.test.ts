@@ -152,3 +152,22 @@ test('fillCandidates populates empty cell notes and preview prioritizes single-n
   assert.equal(next.hint?.technique, 'note_single');
   assert.equal(session.snapshot().notes[next.index].length, 1);
 });
+
+test('timing describes the current board and is recalculated after notes and placements', () => {
+  const session = new GameSession('medium', '3x3', () => 0.5);
+  const before = session.snapshot();
+  const first = session.preview()!;
+  assert.ok(first.averageCandidates >= 1);
+  assert.ok(first.opportunities >= 0);
+  assert.equal(first.nearFocus, false);
+  const other = before.board.findIndex((value, index) => value === 0 && index !== first.index);
+  session.applyGuestPatch({ index: other, notes: [before.solution[other]] });
+  const noted = session.preview()!;
+  assert.equal(noted.index, other);
+  assert.equal(noted.hint?.technique, 'note_single');
+  assert.equal(noted.opportunities, 1);
+  session.advance();
+  const after = session.preview()!;
+  assert.notEqual(after.index, other);
+  assert.ok(after.averageCandidates >= 1);
+});

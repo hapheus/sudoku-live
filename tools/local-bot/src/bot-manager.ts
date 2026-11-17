@@ -6,6 +6,7 @@ const DEFAULT_NOTES_POLICY: Record<Difficulty, NotesPolicy> = {
   easy: 'never',
   medium: 'later',
   hard: 'always',
+  expert: 'always',
 };
 
 export class BotManager {

@@ -60,7 +60,12 @@ test('heartbeats republish current snapshots and lobby presence without making e
   const manager = new BotManager({ wsUrl: 'ws://memory.test', random: () => 0.5 });
   try {
     await manager.step(0);
-    // The faster profile has already made a move before the first heartbeat.
+    // Pause placements on a partner's mistake, isolating heartbeat from move timing.
+    for (const session of manager.sessions()) {
+      const state = session.snapshot();
+      const index = state.board.indexOf(0);
+      session.applyGuestPatch({ index, value: state.solution[index] % 9 + 1, owner: 'guest' });
+    }
     await manager.step(9_900);
     network.publications.length = 0;
     await manager.step(10_000);
@@ -123,7 +128,7 @@ test('custom target durations are used and a stopped worker cannot restart its s
   const previous = globalThis.WebSocket;
   globalThis.WebSocket = network.Socket as unknown as typeof WebSocket;
   const manager = new BotManager({ wsUrl: 'ws://memory.test', random: () => 0.5,
-    durationRanges: { easy: [1_000, 1_000], medium: [1_000, 1_000], hard: [1_000, 1_000] } });
+    durationRanges: { easy: [1_000, 1_000], medium: [1_000, 1_000], hard: [1_000, 1_000], expert: [1_000, 1_000] } });
   try {
     await manager.step(0);
     await manager.step(500);
@@ -182,7 +187,7 @@ test('slots occasionally shift and retry the same shifted snapshot without a sec
   const previous = globalThis.WebSocket;
   globalThis.WebSocket = network.Socket as unknown as typeof WebSocket;
   const manager = new BotManager({ wsUrl: 'ws://memory.test', random: () => 0.5,
-    durationRanges: { easy: [1_000, 1_000], medium: [1_000, 1_000], hard: [1_000, 1_000] } });
+    durationRanges: { easy: [1_000, 1_000], medium: [1_000, 1_000], hard: [1_000, 1_000], expert: [1_000, 1_000] } });
   try {
     await manager.step(0);
     for (let tick = 1; tick <= 9; tick++) await manager.step(tick * 500);
@@ -218,14 +223,14 @@ test('host cursors are visible before moves, hesitate occasionally and survive h
     const initial = network.publications.find(p => p.channel === room && p.data.type === 'sync')!;
     assert.ok(Number.isInteger(initial.data.data.hostCursorIndex));
     const target = initial.data.data.hostCursorIndex;
-    for (let tick = 1; tick <= 10; tick++) await manager.step(tick * 250);
+    for (let tick = 1; tick <= 60; tick++) await manager.step(tick * 250);
     const events = network.publications.filter(p => p.channel === room && p.data.type === 'cursor');
     assert.ok(events.length >= 3);
-    assert.equal(events[0].data.data.index, target);
-    assert.notEqual(events[1].data.data.index, target, 'briefly reconsider another cell');
-    assert.equal(events[2].data.data.index, target, 'return to the intended move');
+    assert.ok(events.some(event => event.data.data.index !== target), 'scan another cell while considering moves');
+    assert.ok(network.publications.some(event => event.channel === room && event.data.type === 'cell-update'
+      && event.data.data.index === target), 'place the considered digit on the real board');
     const offset = network.publications.length;
-    await manager.step(10_000);
+    await manager.step(25_000);
     const heartbeat = network.publications.slice(offset).find(p => p.channel === room && p.data.type === 'sync')!;
     assert.ok(Number.isInteger(heartbeat.data.data.hostCursorIndex));
     for (const move of network.publications.filter(p => p.channel === room && p.data.type === 'cell-update')) {
@@ -246,7 +251,7 @@ test('all three bots automatically accept joins and preserve co-op placements wi
   const previous = globalThis.WebSocket;
   globalThis.WebSocket = network.Socket as unknown as typeof WebSocket;
   const manager = new BotManager({ wsUrl: 'ws://memory.test', random: () => 0.5,
-    durationRanges: { easy: [1_000, 1_000], medium: [1_000, 1_000], hard: [1_000, 1_000] } });
+    durationRanges: { easy: [1_000, 1_000], medium: [1_000, 1_000], hard: [1_000, 1_000], expert: [1_000, 1_000] } });
   const guests: InstanceType<typeof OnlineGameClient>[] = [];
   try {
     await manager.step(0);
@@ -366,7 +371,7 @@ test('bots emit real hint-highlight preview/solve events, sync hintPreview, and 
   const network = memoryWebSocket();
   const previous = globalThis.WebSocket;
   globalThis.WebSocket = network.Socket as unknown as typeof WebSocket;
-  const manager = new BotManager({ wsUrl: 'ws://memory.test', random: () => 0.05 });
+  const manager = new BotManager({ wsUrl: 'ws://memory.test', slots: ['expert'], notesPolicy: 'never', random: () => 0.04 });
   const guest = new OnlineGameClient({ wsConfig: { wsUrl: 'ws://memory.test' } });
   const watcher = new OnlineGameClient({ wsConfig: { wsUrl: 'ws://memory.test' } });
   try {
@@ -376,7 +381,7 @@ test('bots emit real hint-highlight preview/solve events, sync hintPreview, and 
     // Step until hint-highlight preview fires
     let previewEvent: (typeof network.publications)[number] | undefined;
     let now = 0;
-    for (; now <= 15_000; now += 250) {
+    for (; now <= 120_000; now += 250) {
       await manager.step(now);
       previewEvent = network.publications.find(p => p.channel === room && p.data.type === 'hint-highlight' && p.data.data.mode === 'preview');
       if (previewEvent) break;
@@ -398,7 +403,7 @@ test('bots emit real hint-highlight preview/solve events, sync hintPreview, and 
     assert.equal(hintPreview?.index, previewEvent.data.data.index);
 
     // Advance until the move is placed and solve highlight fires
-    for (; now <= 30_000; now += 250) {
+    for (; now <= 240_000; now += 250) {
       await manager.step(now);
       if (network.publications.some(p => p.channel === room && p.data.type === 'hint-highlight' && p.data.data.mode === 'solve')) break;
     }
@@ -411,7 +416,7 @@ test('bots emit real hint-highlight preview/solve events, sync hintPreview, and 
     // Wait for next preview, then have a guest edit the board to verify hint-highlight clear
     const clearOffset = network.publications.length;
     let nextPreview: (typeof network.publications)[number] | undefined;
-    for (; now <= 60_000; now += 250) {
+    for (; now <= 480_000; now += 250) {
       await manager.step(now);
       nextPreview = network.publications.slice(clearOffset).find(p => p.channel === room && p.data.type === 'hint-highlight' && p.data.data.mode === 'preview');
       if (nextPreview) break;
@@ -441,7 +446,7 @@ test('guest Fill Candidates note updates (value: null, no owner) persist across 
   const previous = globalThis.WebSocket;
   globalThis.WebSocket = network.Socket as unknown as typeof WebSocket;
   const manager = new BotManager({ wsUrl: 'ws://memory.test', random: () => 0.5,
-    durationRanges: { easy: [2_000, 2_000], medium: [2_000, 2_000], hard: [2_000, 2_000] } });
+    durationRanges: { easy: [2_000, 2_000], medium: [2_000, 2_000], hard: [2_000, 2_000], expert: [2_000, 2_000] } });
   const guest = new OnlineGameClient({ wsConfig: { wsUrl: 'ws://memory.test' } });
   try {
     await manager.step(0);
@@ -463,7 +468,8 @@ test('guest Fill Candidates note updates (value: null, no owner) persist across 
     await delay(10);
     await manager.step(500);
     // Advance until bot places a move and triggers a heartbeat sync
-    for (let now = 1_000; now <= 15_000; now += 500) await manager.step(now);
+    await manager.step(1_000);
+    await manager.step(10_000);
 
     const latestSync = network.publications.findLast(p => p.channel === room && p.data.type === 'sync')!;
     const syncedState = latestSync.data.data.gameState as { board: number[]; notes: number[][] };
@@ -531,4 +537,36 @@ test('randomized bot pool spawns 2..10 bots with mixed difficulties, 9x9/6x6 var
     await manager.stop();
     globalThis.WebSocket = previous;
   }
+});
+
+test('the normal scheduler plays a complete game with visible thinking, varied deadlines and no endgame stall', async () => {
+  const network = memoryWebSocket();
+  const previous = globalThis.WebSocket;
+  globalThis.WebSocket = network.Socket as unknown as typeof WebSocket;
+  let seed = 42;
+  const random = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  const manager = new BotManager({ wsUrl: 'ws://memory.test', slots: ['expert'], variant: '2x3', notesPolicy: 'never', random });
+  try {
+    await manager.step(0);
+    const session = manager.sessions()[0];
+    const channel = `sudoku:game.${session.id}`;
+    const placements: number[] = [];
+    let cursorChanges = 0;
+    for (let now = 250; now <= 900_000 && !session.solved; now += 250) {
+      const offset = network.publications.length;
+      await manager.step(now);
+      for (const event of network.publications.slice(offset).filter(event => event.channel === channel)) {
+        if (event.data.type === 'cursor') cursorChanges++;
+        if (event.data.type === 'cell-update' && Number(event.data.data.value) > 0) placements.push(now);
+      }
+    }
+    assert.equal(session.solved, true, 'normal runtime must complete instead of only moving its cursor');
+    const gaps = placements.map((at, index) => at - (placements[index - 1] ?? 0));
+    assert.ok(placements.length > 5);
+    assert.ok(cursorChanges > placements.length * 2, 'search and selection are visible between placements');
+    assert.ok(new Set(gaps).size > 3, 'moves are not metronomic');
+    assert.ok(Math.max(...gaps) <= 40_000, 'thought and shift pauses remain bounded');
+    assert.ok(gaps.at(-1)! < 18_000, 'last cell is placed without waiting out the game target');
+    assert.deepEqual(session.snapshot().board, session.snapshot().solution);
+  } finally { await manager.stop(); globalThis.WebSocket = previous; }
 });

@@ -47,6 +47,9 @@ export class BotRunner {
   private failures = 0;
   private targetDurationMs = 0;
   private totalMoves = 0;
+  private readonly tempo: number;
+  private flowStreak = 0;
+  private pendingFluentMove = false;
   private pendingMove: ReturnType<GameSession['advance']> = null;
   private pendingShift: { eventId: string; snapshot: ReturnType<GameSession['snapshot']> } | null = null;
   private movesSinceShift = 0;
@@ -61,6 +64,7 @@ export class BotRunner {
     this.difficultySetting = difficulty;
     this.activeDifficulty = difficulty === 'random' ? 'easy' : difficulty;
     this.options = options;
+    this.tempo = 0.85 + (options.random || Math.random)() * 0.3;
     this.adapter = new CentrifugoAdapter(options.wsUrl);
   }
 
@@ -106,8 +110,9 @@ export class BotRunner {
     if (!this.started) {
       if (this.activeNotesPolicy === 'always') session.fillCandidates();
       await this.adapter.open(session);
-      this.targetDurationMs = pickTargetDuration(this.activeDifficulty, session.variant, random,
-        this.options.durationRanges?.[this.activeDifficulty]);
+      this.flowStreak = 0;
+      this.targetDurationMs = pickTargetDuration(session.difficulty, session.variant, random,
+        this.options.durationRanges?.[session.difficulty]);
       this.totalMoves = Math.max(1, session.remaining);
       this.startedAt = now;
       this.due = now + this.computePause(session, now, random);
@@ -122,11 +127,15 @@ export class BotRunner {
     }
     const changed = await this.adapter.receive(session);
     if (changed.size) {
+      this.flowStreak = 0;
       if (this.pendingMove && changed.has(this.pendingMove.index)) this.pendingMove = null;
       this.cursorSteps = [];
       this.pendingHintStep = null;
       await this.adapter.clearHintHighlight();
-      if (!session.solved && session.canAutoplay) await this.planCursor(session, now, Math.max(500, this.due - now));
+      if (!session.solved && session.canAutoplay) {
+        if (!this.pendingMove && !this.pendingShift) this.due = now + this.computePause(session, now, random);
+        await this.planCursor(session, now, Math.max(500, this.due - now));
+      }
       else await this.adapter.cursor(null);
       if (session.solved && this.rotateAt === Infinity) this.rotateAt = now + 20_000;
     }
@@ -154,7 +163,8 @@ export class BotRunner {
         this.pendingHintStep = null;
         await this.adapter.clearHintHighlight();
         await this.adapter.fillCandidates(updates);
-        this.due = now + 700 + random() * 1_100;
+        this.flowStreak = 0;
+        this.due = now + Math.max(700, this.computePause(session, now, random));
         await this.planCursor(session, now, this.due - now, true);
         return;
       }
@@ -167,16 +177,23 @@ export class BotRunner {
       this.pendingShift = null;
       this.movesSinceShift = 0;
       this.nextShift = 6 + Math.floor(random() * 7);
-      this.due = now + 800 + random() * 2_200;
+      this.flowStreak = 0;
+      this.due = now + Math.max(800, this.computePause(session, now, random));
       this.heartbeatAt = now + 10_000;
       await this.planCursor(session, now, this.due - now);
       return;
     }
-    this.pendingMove ||= session.advance();
+    if (!this.pendingMove) {
+      const next = session.preview();
+      this.pendingFluentMove = Boolean(next && next.nearFocus
+        && ['full_house', 'note_single', 'naked_single'].includes(next.hint?.technique ?? ''));
+      this.pendingMove = session.advance();
+    }
     if (this.pendingMove) {
       await this.adapter.cursor(this.pendingMove.index, this.pendingMove.value);
       await this.adapter.move(this.pendingMove);
       this.pendingMove = null;
+      this.flowStreak = this.pendingFluentMove ? Math.min(3, this.flowStreak + 1) : 0;
       if (this.pendingHintStep?.shown) {
         await this.adapter.hintHighlight(this.pendingHintStep.hint, 'solve');
       }
@@ -206,6 +223,11 @@ export class BotRunner {
       candidateCount: next.candidateCount,
       remaining: session.remaining,
       totalMoves: this.totalMoves,
+      opportunities: next.opportunities,
+      averageCandidates: next.averageCandidates,
+      nearFocus: next.nearFocus,
+      flowStreak: this.flowStreak,
+      tempo: this.tempo,
     }, remainingBudget, this.targetDurationMs, random);
   }
 
@@ -216,7 +238,7 @@ export class BotRunner {
     const startAt = linger && pause >= 1_200 ? now + Math.min(600, pause * 0.2) : now;
     const activeWindow = Math.max(0, now + pause - startAt);
     this.cursorSteps = [{ at: startAt, index: target.index, digit: null }];
-    if (linger && activeWindow >= 2_400) {
+    if (activeWindow >= 2_400) {
       const board = session.snapshot().board;
       const peers = getPeerIndices(target.index, session.variant);
       const emptyPeers = peers.filter(index => board[index] === 0 && index !== target.index);

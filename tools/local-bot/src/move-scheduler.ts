@@ -4,6 +4,7 @@ export const NATURAL_RANGES = {
   easy: [90_000, 180_000],
   medium: [150_000, 270_000],
   hard: [210_000, 420_000],
+  expert: [300_000, 540_000],
 } satisfies Record<Difficulty, [number, number]>;
 
 export interface MoveTimingContext {
@@ -12,18 +13,30 @@ export interface MoveTimingContext {
   candidateCount: number;
   remaining: number;
   totalMoves: number;
+  opportunities?: number;
+  averageCandidates?: number;
+  nearFocus?: boolean;
+  flowStreak?: number;
+  tempo?: number;
 }
 
 export function estimateMoveFactor(ctx: MoveTimingContext): number {
   let factor: number;
   switch (ctx.technique) {
-    case 'full_house': factor = 0.6; break;
-    case 'note_single': factor = 0.65; break;
-    case 'hidden_single': factor = ctx.unitType === 'box' ? 0.8 : 1.0; break;
-    case 'naked_single': factor = 1.35; break;
+    case 'full_house': factor = 0.5; break;
+    case 'note_single': factor = 0.6; break;
+    case 'naked_single': factor = 0.85; break;
+    case 'hidden_single': factor = ctx.unitType === 'box' ? 1.15 : 1.35; break;
     case 'locked_candidate':
-    case 'naked_pair': factor = 1.75; break;
-    default: factor = 1.8 + Math.min(0.8, Math.max(0, ctx.candidateCount - 2) * 0.25); break;
+    case 'naked_pair': factor = 1.9; break;
+    default: factor = 2.2 + Math.min(0.8, Math.max(0, ctx.candidateCount - 2) * 0.2); break;
+  }
+  // Re-evaluate after every board change, rather than relying on the setup label.
+  if (ctx.opportunities !== undefined) factor *= ctx.opportunities === 0 ? 1.3 : Math.max(0.7, 1.12 - ctx.opportunities * 0.06);
+  if (ctx.averageCandidates !== undefined) factor *= 0.85 + Math.min(6, ctx.averageCandidates) * 0.08;
+  if (ctx.nearFocus) factor *= 0.9;
+  if (['full_house', 'note_single', 'naked_single'].includes(ctx.technique)) {
+    factor *= Math.max(0.7, 1 - (ctx.flowStreak ?? 0) * 0.1);
   }
   if (ctx.remaining <= 6) factor *= 0.65;
   else if (ctx.remaining <= 12) factor *= 0.82;
@@ -52,56 +65,15 @@ export function nextMovePause(
   targetDurationMs: number,
   random: () => number = Math.random,
 ): number {
-  if (ctx.remaining <= 1) return Math.max(350, Math.round(remainingBudgetMs));
   const baselineAvg = targetDurationMs / Math.max(1, ctx.totalMoves);
-  const budgetAvg = Math.max(baselineAvg * 0.75, remainingBudgetMs / ctx.remaining);
-  const blendedAvg = baselineAvg * 0.35 + budgetAvg * 0.65;
+  // The total duration is a soft starting pace, never a deadline to wait out.
+  const budgetAvg = Math.max(baselineAvg * 0.65, Math.min(baselineAvg * 1.25,
+    remainingBudgetMs / Math.max(1, ctx.remaining)));
+  const blendedAvg = baselineAvg * 0.7 + budgetAvg * 0.3;
   const minPause = Math.min(400, Math.max(10, baselineAvg * 0.25));
+  const decision = random();
   const jitter = 0.8 + random() * 0.4;
-  return Math.round(Math.max(minPause, Math.min(baselineAvg * 3.5, blendedAvg * estimateMoveFactor(ctx) * jitter)));
-}
-
-export function planPauses(
-  difficulty: Difficulty, variant: Variant, moves: number,
-  random: () => number = Math.random,
-  range: readonly [number, number] = NATURAL_RANGES[difficulty],
-): number[] {
-  if (!Number.isInteger(moves) || moves < 0 || moves > 81) throw new Error('Invalid move count');
-  if (!Number.isFinite(range[0]) || !Number.isFinite(range[1]) || range[0] <= 0 || range[1] < range[0]) {
-    throw new Error('Invalid duration range');
-  }
-  if (moves === 0) return [];
-  const draw = () => {
-    const value = random();
-    if (!Number.isFinite(value) || value < 0 || value >= 1) throw new Error('Invalid random source');
-    return value;
-  };
-  // Keep legacy environment settings from slowing the new natural profile;
-  // explicitly shorter targets remain supported.
-  const min = Math.min(range[0], NATURAL_RANGES[difficulty][0]);
-  const max = Math.min(range[1], NATURAL_RANGES[difficulty][1]);
-  const total = Math.round((min + draw() * (max - min)) * (variant === '2x3' ? 36 / 81 : 1));
-  const average = total / moves;
-  const low = average * 0.25;
-  const high = average * 3.5;
-  let burst = 0;
-  const weights = Array.from({ length: moves }, () => {
-    const decision = draw();
-    if (burst > 0) { burst--; return 0.2 + draw() * 0.35; }
-    if (decision < 0.3) { burst = 1 + Math.floor(draw() * 3); return 0.25 + draw() * 0.4; }
-    return (0.5 + draw()) * (decision > 0.88 ? 3 : 1);
-  });
-  // Project random weights onto a bounded allocation with the requested total.
-  let left = 0;
-  let right = total * 2;
-  for (let iteration = 0; iteration < 60; iteration++) {
-    const scale = (left + right) / 2;
-    const sum = weights.reduce((value, weight) => value + Math.max(low, Math.min(high, weight * scale)), 0);
-    if (sum < total) left = scale;
-    else right = scale;
-  }
-  const result = weights.map(weight => Math.floor(Math.max(low, Math.min(high, weight * right))));
-  const remainder = total - result.reduce((a, b) => a + b, 0);
-  for (let index = 0; index < remainder; index++) result[index % moves]++;
-  return result;
+  const rhythm = decision > 0.88 ? 1.7 + random() * 0.7 : (decision < 0.22 ? 0.55 : 1);
+  const thinking = blendedAvg * estimateMoveFactor(ctx) * jitter * rhythm * (ctx.tempo ?? 1);
+  return Math.round(Math.max(minPause, Math.min(18_000, baselineAvg * 5, thinking)));
 }

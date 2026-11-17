@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
+import { chromium } from 'playwright';
 import { OnlineGameClient } from '../../../../src/services/online-game-client.js';
 
 async function stop(child: ChildProcess) {
@@ -42,6 +43,7 @@ test('default, count, headed and combined CLI publish exactly N independent sess
     await lobby.ready(5_000);
     for (const [args, expected] of [[[], 3], [['--count', '5'], 5], [['--headed'], 3], [['--headed', '--count', '5'], 5]] as const) {
       let ready = false;
+      let gameIds: string[] = [];
       let stderr = '';
       const child = spawn(process.execPath, ['launch.mjs', ...args, '--ws-url', wsUrl, '--app-url', 'http://127.0.0.1:15373'], {
         env: { ...process.env, BOT_COUNT: '3' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -57,6 +59,7 @@ test('default, count, headed and combined CLI publish exactly N independent sess
             if (message.event === (args.includes('--headed' as never) ? 'headed-ready' : 'sessions')) {
               assert.equal(message.games.length, expected);
               assert.equal(new Set(message.games.map(game => game.id)).size, expected);
+              gameIds = message.games.map(game => game.id);
               ready = true;
             }
           } catch (error) { if (error instanceof assert.AssertionError) throw error; }
@@ -68,7 +71,46 @@ test('default, count, headed and combined CLI publish exactly N independent sess
           return ready && rooms.size === expected;
         }, `CLI ${args.join(' ')}`);
         // Headed-ready is emitted after every real Watch page rendered its board.
-        await delay(500);
+        if (expected === 5 && args.includes('--headed' as never)) {
+          const browser = await chromium.launch({ headless: true });
+          try {
+            const page = await browser.newPage();
+            const traffic: string[] = [];
+            let receivedState: { board: number[] } | null = null;
+            page.on('websocket', socket => {
+              traffic.push(socket.url());
+              socket.on('framereceived', frame => {
+                try {
+                  for (const line of String(frame.payload).split('\n')) {
+                    const payload = JSON.parse(line)?.push?.pub?.data;
+                    if (payload) {
+                      traffic.push(payload.type);
+                      if (payload.type === 'sync' && payload.data?.gameState) receivedState = payload.data.gameState;
+                    }
+                  }
+                } catch { /* SDK control frames do not carry publications. */ }
+              });
+            });
+            await page.goto(`http://127.0.0.1:15373/?game=${gameIds[0]}&watch=1`);
+            await page.locator('.sudoku-board').waitFor();
+            // The app briefly renders a local placeholder before the host snapshot arrives.
+            await waitFor(async () => receivedState !== null
+              && await page.locator('.sudoku-cell').count() === receivedState.board.length
+              && await page.locator('.sudoku-cell__digit').count() >= receivedState.board.filter(Boolean).length, 'authoritative Watch snapshot');
+            const before = await page.locator('.sudoku-cell__digit').count();
+            try {
+              await waitFor(async () => await page.locator('.sudoku-cell__digit').count() > before, 'real bot placement rendered in Watch');
+            } catch (error) {
+              await page.screenshot({ path: new URL('../../../../test-results/local-bot-watch-failure.png', import.meta.url).pathname });
+              console.log(JSON.stringify({ before, after: await page.locator('.sudoku-cell__digit').count(), traffic, stderr }));
+              throw error;
+            }
+            const cursor = page.locator('.sudoku-cell--partner-cursor, .sudoku-cell--player-cursor');
+            await waitFor(async () => await cursor.count() > 0, 'visible host cursor');
+            assert.equal(await page.locator('.sudoku-cell--conflict').count(), 0);
+            await page.screenshot({ path: new URL('../../../../test-results/local-bot-watch.png', import.meta.url).pathname });
+          } finally { await browser.close(); }
+        } else await delay(500);
       } finally { await stop(child); }
       await waitFor(() => rooms.size === 0, 'all sessions cleaned up');
     }
