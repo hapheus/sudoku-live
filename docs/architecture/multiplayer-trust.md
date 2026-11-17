@@ -149,10 +149,10 @@ editable cell. Numeric values, notes, indexes and ownership continue through the
 same validation. Null does not mean erase (numeric zero does), and this delivery
 compatibility does not replace heartbeat/revision work in #68.
 
-## Causal recovery follow-up (#68)
+## Causal recovery and convergence (#68)
 
-The initial causal snapshot guard and heartbeat note/ownership recovery are now
-specified in [snapshot-recovery.md](snapshot-recovery.md). That document supersedes
-the earlier statement that stale history racing live snapshots is entirely
-unguarded. The broader concurrency, puzzle-generation and mixed-client limits
-remain explicit; #68 is not complete merely because snapshot inclusion is checked.
+The completed revision/generation contract, concurrent cell/checkpoint rules,
+merged heartbeat recovery, publication retry and verified backend matrix are in
+[snapshot-recovery.md](snapshot-recovery.md). That document supersedes earlier
+statements here that cross-sender ordering and stale replay are unguarded. Anonymous
+trust, legacy mixed-writer and physical-device limitations remain explicit.

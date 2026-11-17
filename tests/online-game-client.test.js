@@ -601,3 +601,58 @@ describe('outgoing puzzle generations', () => {
         expect(publish.mock.lastCall[0].data.puzzleGeneration).toBe(rematch.eventId);
     });
 });
+
+describe('retrying unacknowledged optimistic edits', () => {
+    it('retries the original envelope once and clears acknowledged work', async () => {
+        const client = new OnlineGameClient();
+        const publish = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue({});
+        client.gameChannel = { publish };
+        await client.broadcastGameEvent('retry-room', 'cell-update', { index: 0, value: 1 });
+        const packet = publish.mock.calls[0][0];
+        expect(client.pendingMutations.size).toBe(1);
+        await client.flushPendingMutations(client.gameChannel);
+        expect(publish.mock.calls[1][0]).toEqual(packet);
+        expect(client.pendingMutations.size).toBe(0);
+        await client.flushPendingMutations(client.gameChannel);
+        expect(publish).toHaveBeenCalledTimes(2);
+    });
+    it('discards failed old-puzzle edits when a new generation has superseded them', async () => {
+        const client = new OnlineGameClient();
+        const publish = vi.fn().mockRejectedValue(new Error('offline'));
+        client.gameChannel = { publish };
+        await client.broadcastGameEvent('retry-room', 'cell-update', { index: 0, value: 1 });
+        client.stateRecovery.observe('new-puzzle-accept', { gameState: {}, eventId: 'fresh', puzzleGeneration: 'fresh', stateClock: 10, senderId: 'host', seq: 10 });
+        await client.flushPendingMutations(client.gameChannel);
+        expect(publish).toHaveBeenCalledTimes(1);
+        expect(client.pendingMutations.size).toBe(0);
+    });
+});
+
+describe('modern history replay order', () => {
+    it('does not discard a winning snapshot just because a losing concurrent snapshot has a later offset', () => {
+        const client = new OnlineGameClient();
+        const state = { variant: '2x3', board: Array(36).fill(0), givens: Array(36).fill(false) };
+        const publication = (actor, value, offset) => ({ offset, data: { type: 'sync', data: {
+            senderId: actor, stateActor: actor, stateClock: 1, seq: 1, eventId: actor,
+            puzzleGeneration: null, stateVector: {}, gameState: { ...state, board: state.board.map((n, i) => i === 0 ? value : n) },
+        } } });
+        const received = vi.fn();
+        client.deliverHistory([publication('b', 2, 1), publication('a', 1, 2)], received);
+        expect(received).toHaveBeenCalledTimes(1);
+        expect(received.mock.calls[0][1].gameState.board[0]).toBe(2);
+    });
+});
+
+describe('immutable retry payloads', () => {
+    it('keeps the original snapshot even if the caller mutates its source before retry', async () => {
+        const client = new OnlineGameClient();
+        const publish = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue({});
+        client.gameChannel = { publish };
+        const gameState = { board: Array(36).fill(0), givens: Array(36).fill(false), variant: '2x3' };
+        await client.broadcastGameEvent('retry-room', 'init', { gameState });
+        gameState.board[0] = 6;
+        await client.flushPendingMutations(client.gameChannel);
+        expect(publish.mock.calls[1][0].data.gameState.board[0]).toBe(0);
+        expect(publish.mock.calls[1][0].data.eventId).toBe(publish.mock.calls[0][0].data.eventId);
+    });
+});

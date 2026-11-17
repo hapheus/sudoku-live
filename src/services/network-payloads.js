@@ -32,8 +32,27 @@ function validateStateVector(vector) {
             && isIntegerIn(seq, 1, Number.MAX_SAFE_INTEGER));
 }
 
+const isRevision = (v) => Array.isArray(v) && v.length === 2
+    && isIntegerIn(v[0], 1, Number.MAX_SAFE_INTEGER) && isBoundedString(v[1], 64);
+
+function validateStateRevisions(value) {
+    return isObject(value) && optional(value.control, (v) => v === null || (isObject(v)
+        && isRevision(v.revision) && (v.pending === null || isRole(v.pending))))
+        && (value.replacement === null || isRevision(value.replacement))
+        && (value.latest === null || isRevision(value.latest))
+        && Array.isArray(value.cells) && value.cells.length <= 81
+        && value.cells.every((entry) => Array.isArray(entry) && entry.length === 2
+            && isIntegerIn(entry[0], 0, 80) && isObject(entry[1])
+            && optional(entry[1].value, isRevision) && optional(entry[1].notes, isRevision))
+        && new Set(value.cells.map(([index]) => index)).size === value.cells.length;
+}
+
 export function validateNetworkEnvelope(data) {
-    return optional(data.puzzleGeneration, (v) => v === null || isBoundedString(v))
+    return optional(data.stateRevisions, validateStateRevisions)
+        && optional(data.puzzleRevision, (v) => v === null || (Array.isArray(v) && v.length === 2
+        && isIntegerIn(v[0], 1, Number.MAX_SAFE_INTEGER) && isBoundedString(v[1], 64)))
+        && optional(data.stateClock, (v) => isIntegerIn(v, 1, Number.MAX_SAFE_INTEGER))
+        && optional(data.puzzleGeneration, (v) => v === null || isBoundedString(v))
         && optional(data.stateVector, validateStateVector)
         && optional(data.stateActor, (v) => isBoundedString(v, 64))
         && optional(data.senderId, (v) => isBoundedString(v, 64))
@@ -74,7 +93,8 @@ export function validateSnapshotPayload(data) {
     if (!validateBoardState(data.gameState)) return false;
     const cells = data.gameState.board.length;
     const digit = cells === 36 ? 6 : 9;
-    return optional(data.boardBackgroundId, nullable((v) => isBoundedString(v)))
+    return optional(data.stateRevisions, (v) => validateStateRevisions(v) && v.cells.every(([index]) => index < cells))
+        && optional(data.boardBackgroundId, nullable((v) => isBoundedString(v)))
         && optional(data.rematchRequestedBy, nullable(isRole))
         && optional(data.role, isRole)
         && optional(data.isRetroMode, (v) => typeof v === 'boolean')

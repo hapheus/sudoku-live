@@ -97,6 +97,20 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e -- --ignore-snapshots
 
+      - name: Start isolated convergence broker
+        run: |
+          docker compose -p sudoku-convergence-qa run --no-deps --detach --name sudoku-convergence-qa -p 127.0.0.1:17881:8080 centrifugo
+          curl --fail --silent --show-error --retry 20 --retry-delay 1 --retry-all-errors http://127.0.0.1:17881/health
+
+      - name: Verify concurrent edits and exhausted-history recovery
+        run: SYNC_E2E=1 npx playwright test --config playwright.sync.config.ts
+
+      - name: Stop isolated convergence broker
+        if: always()
+        run: |
+          docker rm -f sudoku-convergence-qa || true
+          docker compose -p sudoku-convergence-qa down --remove-orphans
+
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
