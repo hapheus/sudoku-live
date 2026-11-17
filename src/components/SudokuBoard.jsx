@@ -269,7 +269,7 @@ export function SudokuBoard({
                                                                         key={d}
                                                                         className={`sudoku-cell__note ${isMatchedNote ? 'sudoku-cell__note--match' : ''}`}
                                                                     >
-                                                                        {hasNote ? d : ''}
+                                                                        {hasNote ? `${d} ` : ''}
                                                                     </span>
                                                                 );
                                                             })}
