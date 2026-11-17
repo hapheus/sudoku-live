@@ -246,7 +246,9 @@ test('all three bots automatically accept joins and preserve co-op placements wi
       guests.push(guest);
       const room = guest.joinGameChannel(session.id, { role: 'spectator', gameMode: 'solo', joinPolicy: 'auto' });
       await room.ready(1_000);
-      await room.publish({ type: 'join-request', data: { requestId: `join-${session.id}`, requesterId: guest.clientId } });
+      // Subscription readiness precedes the async presence exchange.
+      await delay(10);
+      await room.publish({ type: 'join-request', data: guest.buildOutgoingEnvelope({ requestId: `join-${session.id}`, requesterId: guest.clientId }) });
     }
     await manager.step(250);
     for (const session of sessions) {
@@ -263,7 +265,7 @@ test('all three bots automatically accept joins and preserve co-op placements wi
       const cell = session.snapshot().board.indexOf(0);
       const value = session.snapshot().solution[cell];
       edits.push({ index: cell, value });
-      await room.publish({ type: 'cell-update', data: { index: cell, value, notes: [], owner: 'guest', eventId: `human-${session.id}` } });
+      await room.publish({ type: 'cell-update', data: guest.buildOutgoingEnvelope({ index: cell, value, notes: [], owner: 'guest', eventId: `human-${session.id}` }) });
     }
     for (let tick = 1; tick <= 12; tick++) await manager.step(250 + tick * 500);
     sessions.forEach((session, index) => {
@@ -326,8 +328,8 @@ test('a human edit wins over a failed bot publication and survives a failed join
     await room.ready(1_000);
     await delay(10);
     network.fail(false);
-    await room.publish({ type: 'cell-update', data: { index, value, owner: 'guest', eventId: 'human-correction' } });
-    await room.publish({ type: 'join-request', data: { requestId: 'second-join', requesterId: guest.clientId } });
+    await room.publish({ type: 'cell-update', data: guest.buildOutgoingEnvelope({ index, value, owner: 'guest', eventId: 'human-correction' }) });
+    await room.publish({ type: 'join-request', data: guest.buildOutgoingEnvelope({ requestId: 'second-join', requesterId: guest.clientId }) });
     network.fail(true, 'join-response', channel);
     await manager.step(202_000);
     network.fail(false);
@@ -410,7 +412,7 @@ test('bots emit real hint-highlight preview/solve events, sync hintPreview, and 
     await guestRoom.ready(1_000);
     await delay(10);
     const emptyIdx = session.snapshot().board.findIndex(v => v === 0);
-    await guestRoom.publish({ type: 'cell-update', data: { index: emptyIdx, value: session.snapshot().solution[emptyIdx], owner: 'guest', eventId: 'guest-clear-hint' } });
+    await guestRoom.publish({ type: 'cell-update', data: guest.buildOutgoingEnvelope({ index: emptyIdx, value: session.snapshot().solution[emptyIdx], owner: 'guest', eventId: 'guest-clear-hint' }) });
     await delay(10);
     await manager.step(now + 10);
     const clearEvent = network.publications.slice(clearOffset).find(p => p.channel === room && p.data.type === 'hint-highlight' && p.data.data.mode === 'clear');
@@ -446,7 +448,7 @@ test('guest Fill Candidates note updates (value: null, no owner) persist across 
     for (const idx of emptyCells) {
       await guestRoom.publish({
         type: 'cell-update',
-        data: { index: idx, value: null, notes: getCandidateDigits(snapshot.board, idx, snapshot.variant), eventId: `fill-${idx}` },
+        data: guest.buildOutgoingEnvelope({ index: idx, value: null, notes: getCandidateDigits(snapshot.board, idx, snapshot.variant), eventId: `fill-${idx}` }),
       });
     }
     await delay(10);

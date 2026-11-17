@@ -85,3 +85,66 @@ legacy-client compatibility, and need a separately scoped architecture decision.
 They are not introduced by these client-only changes. Device lifecycle and release
 acceptance stay in #59/#72; anonymous ownership and resource abuse must not be
 represented as solved by the local tests.
+
+## Peer compatibility and optional features (#70)
+
+Compatibility is recorded per broker connection, independently of room admission.
+An unannounced or incompatible connection cannot deliver game events. Missing
+version metadata deliberately means supported legacy v1 with baseline co-op,
+spectator hints and reactions. Explicit versions/minimums must be safe integers;
+minimums must be positive, no larger than the advertised version, and supported
+locally. Future versions remain allowed when they explicitly support our version.
+An explicit event version must match the peer's accepted announcement. An
+incompatible announcement reports the existing update message and removes that
+connection from accepted membership; it cannot claim host authority.
+
+The shared optional feature set is recomputed from compatible, admitted hosts and
+guests, including the local participant. Spectators and pending requesters never
+reduce player capabilities. Their own announcements still gate the features they
+send. Leave, role/admission changes, fresh announcements and resubscription can
+restore capabilities; negotiation is not a permanent shrinking intersection.
+Every presence refresh, including player-name changes, carries protocol metadata.
+
+Outgoing and incoming hint, reaction, fist-bump, co-op join-request and Tic Tac Toe
+events enforce the applicable feature. Snapshot projection removes optional
+Tic Tac Toe metadata when player capabilities exclude it. Shift input is checked
+before changing the shared board; the host does not start a mini-game in a room
+that lacks that capability. A shift is still transported as the existing complete
+Sudoku snapshot, and legacy untagged snapshots remain valid core state. Player
+names/tags are backward-compatible presentation metadata, not a separate action.
+
+Live delivery and history share schema, identity, compatibility and authority
+checks. Replay uses a separate copy of peer capabilities and applies historical
+announcements before events and snapshot projection; it never registers historical
+connections as live members. Existing broker-order, skew and sequence differences
+remain as documented above. A truncated history with no compatible membership
+evidence waits for a fresh announcement rather than inferring permission. These
+checks do not establish state revisions or solve the stale-snapshot races in #68.
+
+## Browser session lifecycle (#72)
+
+A cached `pagehide` (`persisted: true`) suspends the transport while retaining the
+client, game/lobby subscriptions, room policy, callbacks and in-memory game state.
+The matching persisted `pageshow` reconnects that same transport. Both operations
+are idempotent. Normal resubscription refreshes presence and recovers history using
+the existing recovery path. Terminal pagehide and React unmount dispose the
+subscriptions and connection; cleanup removes both page-transition listeners.
+There is no destructive beforeunload listener, which could otherwise discard a
+session before a cached navigation or a navigation cancelled by the browser.
+
+This does not restart the puzzle, alter role or pending join/rematch state, create
+another room, or add application intervals. Existing action/periodic persistence
+and hidden-document puzzle-clock rules remain unchanged; no suspended wall time is
+added to the puzzle clock. Existing join timeouts retain their semantics rather
+than being renewed on resume. A non-cached browser-history return mounts normally
+and restores supported saved state. Native suspension, lock/unlock, network changes
+and extended suspension require device-specific evidence in #59/#72; browser
+page-transition tests do not establish iOS/Android lifecycle acceptance.
+
+## Note-only cell patches (#76)
+
+`cell-update` retains the existing `value: null` sentinel used by app and bot note
+editing. It means no numeric board edit; valid notes still apply to an empty,
+editable cell. Numeric values, notes, indexes and ownership continue through the
+same validation. Null does not mean erase (numeric zero does), and this delivery
+compatibility does not replace heartbeat/revision work in #68.

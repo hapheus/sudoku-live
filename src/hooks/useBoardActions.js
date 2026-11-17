@@ -396,6 +396,7 @@ export function useBoardActions({
     const handleShift = useCallback((axis, direction) => {
         const cur = stateRef.current;
         if (isRetroMode || cur.ticTacToeActive || cur.isSpectating || cur.mode === 'watch' || cur.gameState.status === 'solved') return;
+        if (isOnlineBroadcaster(cur) && onlineClientRef.current?.supportsFeature?.('shift') === false) return;
         const activeIdx = cur.selectedIndex;
         if (activeIdx === null || activeIdx === undefined) return;
 

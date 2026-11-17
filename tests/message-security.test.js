@@ -9,6 +9,10 @@ import {
 } from '../src/services/message-security.js';
 
 describe('message-security', () => {
+    it.each([[36, 6], [81, 9]])('accepts legacy note-only patches with a null value (%s cells)', (cells, maxDigit) => {
+        expect(validateIncomingGameMessage('cell-update', { index: 0, value: null, notes: [1, maxDigit] }, cells, maxDigit)).toBe(true);
+    });
+
     it('validates well-formed game actions and rejects malformed payloads', () => {
         expect(validateIncomingGameMessage('cell-update', { index: 10, value: 5, notes: [1, 2], owner: 'host' }, 81, 9)).toBe(true);
         expect(validateIncomingGameMessage('cell-update', { index: -1, value: 5 }, 81, 9)).toBe(false);

@@ -50,7 +50,7 @@ function isValidNotesArray(notes, maxDigit) {
 
 function validateCellUpdate(data, totalCells, maxDigit) {
     if (!isValidCellIndex(data.index, totalCells)) return false;
-    if (data.value !== undefined && (!Number.isInteger(data.value) || data.value < 0 || data.value > maxDigit)) {
+    if (data.value !== undefined && data.value !== null && (!Number.isInteger(data.value) || data.value < 0 || data.value > maxDigit)) {
         return false;
     }
     if (data.notes !== undefined && !isValidNotesArray(data.notes, maxDigit)) return false;

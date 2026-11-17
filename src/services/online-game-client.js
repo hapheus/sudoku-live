@@ -1,4 +1,5 @@
 import { Centrifuge } from 'centrifuge';
+import { createPeerCompatibility, eventFeature } from './peer-compatibility.js';
 import { createRoomAuthority } from './room-authority.js';
 import { createEventDeduper } from './event-deduper.js';
 import { normalizeJoinPolicy } from './join-settings.js';
@@ -11,9 +12,7 @@ import {
 } from './message-security.js';
 import {
     buildProtocolMetadata,
-    checkProtocolCompatibility,
     PROTOCOL_VERSION,
-    SUPPORTED_MULTIPLAYER_FEATURES,
 } from './multiplayer-protocol.js';
 import {
     assignUniqueMemberNames,
@@ -66,6 +65,7 @@ export class OnlineGameClient {
         this.wsConfig = resolveRuntimeWsConfig(wsConfig || {});
         this.onConnectionChange = onConnectionChange || (() => {});
         this.client = null;
+        this.suspended = false;
         this.serverClientId = null;
         this.gameChannel = null;
         this.lobbyChannel = null;
@@ -87,10 +87,30 @@ export class OnlineGameClient {
         this.messageOrderGuard = createMessageOrderGuard();
         this.senderIdentityGuard = createSenderIdentityGuard();
         this.protocolMeta = buildProtocolMetadata();
-        this.negotiatedFeatures = new Set(SUPPORTED_MULTIPLAYER_FEATURES);
+        this.peerCompatibility = createPeerCompatibility();
         this.seqCounter = 0;
         this.clientId = getOrCreateClientId();
         this.playerName = sanitizePlayerName(playerName) || loadOrCreatePlayerName();
+    }
+
+    get negotiatedFeatures() {
+        return new Set(this.peerCompatibility.features(this.roomAuthority));
+    }
+
+    supportsFeature(feature) {
+        return this.negotiatedFeatures.has(feature);
+    }
+
+    projectGameFeatures(type, data, peers = this.peerCompatibility, authority = this.roomAuthority) {
+        const features = peers.features(authority);
+        const feature = eventFeature(type);
+        if (feature && !features.includes(feature)) return null;
+        if (!features.includes('tic-tac-toe') && data.ticTacToe !== undefined) {
+            const projected = { ...data };
+            delete projected.ticTacToe;
+            return projected;
+        }
+        return data;
     }
 
     buildOutgoingEnvelope(data = {}) {
@@ -170,7 +190,7 @@ export class OnlineGameClient {
         }
     }
 
-    acceptPublication(ctx, authority = this.roomAuthority, identity = this.senderIdentityGuard, cells = this.boardCells) {
+    acceptPublication(ctx, authority = this.roomAuthority, identity = this.senderIdentityGuard, cells = this.boardCells, peers = this.peerCompatibility) {
         const connection = ctx?.info?.client;
         const payload = ctx?.data;
         if (!connection || !payload) return false;
@@ -178,6 +198,7 @@ export class OnlineGameClient {
             if (!validatePresenceAnnounce(payload.data)) return false;
         } else {
             if (!validateIncomingGameMessage(payload.type, payload.data, cells, cells === 36 ? 6 : 9)) return false;
+            if (!peers.allows(connection, payload.type, payload.data, authority)) return false;
             if (!authority.allows(connection, payload.type, payload.data)) return false;
         }
         return identity.verify({
@@ -187,49 +208,59 @@ export class OnlineGameClient {
         });
     }
 
+    announceCompatiblePeer(connection, data, authority = this.roomAuthority, peers = this.peerCompatibility) {
+        const compatibility = peers.announce(connection, data);
+        if (compatibility.compatible) authority.announce(connection, data);
+        else authority.leave(connection);
+        return compatibility;
+    }
+
     async replayGameHistory(sub, onEvent) {
         const hist = await sub.history({ limit: 25 });
         if (this.gameChannel !== sub || !Array.isArray(hist?.publications)) return;
         if (this.gameRole === 'host' && this.gameMode === 'solo') return;
         const authority = this.roomAuthority.fork();
         const identity = createSenderIdentityGuard();
+        const peers = this.peerCompatibility.fork();
         const accepted = [];
         const publications = [...hist.publications].sort((a, b) => (a.offset || 0) - (b.offset || 0));
         let cells = this.boardCells;
         for (const pub of publications) {
-            if (!this.acceptPublication(pub, authority, identity, cells)) continue;
+            if (!this.acceptPublication(pub, authority, identity, cells, peers)) continue;
             const payload = pub.data;
             const connection = pub.info.client;
             if (payload.type === PRESENCE_ANNOUNCE) {
-                authority.announce(connection, payload.data);
+                this.announceCompatiblePeer(connection, payload.data, authority, peers);
                 continue;
             }
             authority.observe(payload.type, payload.data);
             if (payload.data.gameState) cells = payload.data.gameState.board.length;
-            if (RECOVERABLE_EVENTS.has(payload.type)) accepted.push({ ...pub, data: { type: payload.type, data: authority.project(connection, payload.data) } });
+            if (RECOVERABLE_EVENTS.has(payload.type)) accepted.push({ ...pub, data: { type: payload.type, data: this.projectGameFeatures(payload.type, authority.project(connection, payload.data), peers, authority) } });
         }
         for (const pub of replayPublications(accepted)) {
             const { type, data } = pub.data;
             if (data.eventId && this.rememberEvent(data.eventId)) continue;
             if (data.gameState) this.boardCells = data.gameState.board.length;
-            onEvent(type, data);
+            const projected = this.projectGameFeatures(type, data);
+            if (projected) onEvent(type, projected);
         }
     }
 
-    handlePresenceAnnouncement(ctx, payload, { onIncompatibleClient, onPresenceChange, onMemberJoin, finalizeInitialPresence }) {
+    handlePresenceAnnouncement(ctx, payload, { onIncompatibleClient, onPresenceChange, onMemberJoin, onMemberLeave, finalizeInitialPresence }) {
         const sc = ctx?.info?.client;
         if (!sc || payload.data?.id === this.clientId) return;
         if (!validatePresenceAnnounce(payload.data)) return;
 
-        const compat = checkProtocolCompatibility(payload.data || {});
+        const compat = this.announceCompatiblePeer(sc, payload.data);
         if (!compat.compatible) {
-            onIncompatibleClient(compat, payload.data || {});
-        } else {
-            const nextNegotiated = compat.negotiatedFeatures.filter((f) => this.negotiatedFeatures.has(f));
-            this.negotiatedFeatures = new Set(nextNegotiated);
+            const leaving = this.gameMembersByServerClient.get(sc);
+            this.gameMembersByServerClient.delete(sc);
+            onIncompatibleClient(compat, payload.data);
+            if (leaving && this.gamePresenceReady) onMemberLeave(leaving);
+            return;
         }
 
-        const acceptedRole = this.roomAuthority.announce(sc, payload.data);
+        const acceptedRole = this.roomAuthority.role(sc);
         const existed = this.gameMembersByServerClient.has(sc);
         const member = {
             id: payload.data?.id || sc,
@@ -326,7 +357,7 @@ export class OnlineGameClient {
         this.eventDeduper.clear();
         this.messageOrderGuard.clear();
         this.senderIdentityGuard.clear();
-        this.negotiatedFeatures = new Set(SUPPORTED_MULTIPLAYER_FEATURES);
+        this.peerCompatibility.clear();
 
         if (this.authorityRoomId !== gameId) {
             this.roomAuthority = createRoomAuthority();
@@ -353,6 +384,7 @@ export class OnlineGameClient {
         const announceSelf = () => {
             if (this.gameChannel !== sub) return;
             const selfKey = this.serverClientId || this.clientId;
+            this.peerCompatibility.announce(selfKey, this.protocolMeta);
             this.roomAuthority.announce(selfKey, { id: this.clientId, role: this.gameRole, join_policy: this.gameJoinPolicy });
             this.gameMembersByServerClient.set(selfKey, {
                 id: this.clientId,
@@ -389,6 +421,7 @@ export class OnlineGameClient {
 
             this.clearPresenceSettleTimer();
             this.gameMembersByServerClient.clear();
+            this.peerCompatibility.clear();
             this.senderIdentityGuard.clear();
             this.gamePresenceReady = false;
 
@@ -442,6 +475,7 @@ export class OnlineGameClient {
 
             this.activeServerClients.delete(sc);
             this.roomAuthority.leave(sc);
+            this.peerCompatibility.remove(sc);
             this.senderIdentityGuard.releaseServerClient(sc);
             const leaving = this.gameMembersByServerClient.get(sc);
             this.gameMembersByServerClient.delete(sc);
@@ -460,7 +494,7 @@ export class OnlineGameClient {
 
             if (!this.acceptPublication(ctx)) return;
             if (payload.type === PRESENCE_ANNOUNCE) {
-                this.handlePresenceAnnouncement(ctx, payload, { onIncompatibleClient, onPresenceChange, onMemberJoin, finalizeInitialPresence });
+                this.handlePresenceAnnouncement(ctx, payload, { onIncompatibleClient, onPresenceChange, onMemberJoin, onMemberLeave, finalizeInitialPresence });
                 return;
             }
 
@@ -475,7 +509,8 @@ export class OnlineGameClient {
             if (eventId) this.rememberEvent(eventId);
             this.roomAuthority.observe(payload.type, payload.data);
             if (payload.data.gameState) this.boardCells = payload.data.gameState.board.length;
-            onEvent(payload.type, this.roomAuthority.project(ctx.info.client, payload.data));
+            const projected = this.projectGameFeatures(payload.type, this.roomAuthority.project(ctx.info.client, payload.data));
+            if (projected) onEvent(payload.type, projected);
         });
 
         sub.subscribe();
@@ -484,11 +519,13 @@ export class OnlineGameClient {
     }
 
     sendWhisperEvent(type, data = {}) {
+        data = this.projectGameFeatures(type, data);
+        if (!data) return;
         if (this.gameChannel) {
             const payloadData = this.buildOutgoingEnvelope({
                 ...data,
-                ...(type === PRESENCE_ANNOUNCE && this.gameRole === 'host'
-                    ? { approvedGuestIds: this.roomAuthority.approvedGuestIds(), ...this.protocolMeta } : {}),
+                ...(type === PRESENCE_ANNOUNCE ? { ...this.protocolMeta,
+                    approvedGuestIds: this.gameRole === 'host' ? this.roomAuthority.approvedGuestIds() : undefined } : {}),
             });
             this.rememberEvent(payloadData.eventId);
             if (payloadData.gameState) this.boardCells = payloadData.gameState.board.length;
@@ -507,6 +544,8 @@ export class OnlineGameClient {
     async broadcastGameEvent(gameId, type, data = {}) {
         if (!isValidGameId(gameId)) return;
 
+        data = this.projectGameFeatures(type, data);
+        if (!data) return;
         const payloadData = this.buildOutgoingEnvelope(data);
         this.rememberEvent(payloadData.eventId);
         if (payloadData.gameState) this.boardCells = payloadData.gameState.board.length;
@@ -774,6 +813,7 @@ export class OnlineGameClient {
     }
 
     leaveGameChannel() {
+        this.peerCompatibility.clear();
         this.clearPresenceSettleTimer();
         if (this.gameChannel) {
             try {
@@ -807,7 +847,21 @@ export class OnlineGameClient {
         }
     }
 
+    suspend() {
+        if (!this.client || this.suspended) return;
+        this.suspended = true;
+        this.clearPresenceSettleTimer();
+        this.client.disconnect();
+    }
+
+    resume() {
+        if (!this.client || !this.suspended) return;
+        this.suspended = false;
+        this.client.connect();
+    }
+
     disconnect() {
+        this.suspended = false;
         this.leaveGameChannel();
         this.leaveLobby();
         if (this.client) {
