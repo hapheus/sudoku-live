@@ -296,8 +296,16 @@ export function createRemoteEventRouter(ctx) {
             : null;
         const localElapsed = Number(cur.gameState.elapsedSeconds) || 0;
         const elapsedDiffers = remoteElapsed !== null && remoteElapsed > localElapsed;
-        const shouldAdoptRemote = cur.myRole !== 'host' && (
+        const notesDiffer = Array.isArray(data.gameState.notes) && data.gameState.notes.some((notes, index) =>
+            notes.length !== (cur.gameState.notes?.[index]?.length || 0)
+            || notes.some((note, digitIndex) => note !== cur.gameState.notes?.[index]?.[digitIndex]));
+        const ownersDiffer = Array.isArray(data.gameState.cellOwners) && data.gameState.cellOwners.some(
+            (owner, index) => owner !== (cur.gameState.cellOwners?.[index] ?? null),
+        );
+        const shouldAdoptRemote = (cur.myRole !== 'host' || (cur.mode === 'online' && data.stateVector)) && (
             boardsDiffer
+            || notesDiffer
+            || ownersDiffer
             || remoteFilled !== localFilled
             || remoteInitial !== localInitial
             || data.gameState.status !== cur.gameState.status

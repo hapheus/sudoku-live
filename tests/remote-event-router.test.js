@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { hydrateGameState } from '../src/domain/sudoku-engine.js';
 import { createRemoteEventRouter } from '../src/services/remote-event-router.js';
 
 describe('remote-event-router', () => {
@@ -137,5 +138,40 @@ describe('remote-event-router', () => {
         expect(setGameState).not.toHaveBeenCalled();
         expect(triggerFloatingReaction).not.toHaveBeenCalled();
         expect(setHostCursorIndex).not.toHaveBeenCalled();
+    });
+});
+
+describe('heartbeat recovery without advancing the puzzle clock', () => {
+    it.each([36, 81])('recovers added and cleared notes and ownership for %s cells', (cells) => {
+        const raw = {
+            board: Array(cells).fill(0), givens: Array(cells).fill(false),
+            notes: Array.from({ length: cells }, () => []), cellOwners: Array(cells).fill(null),
+            elapsedSeconds: 0, status: 'in_progress', variant: cells === 36 ? '2x3' : '3x3',
+        };
+        raw.board[1] = 1;
+        const stateRef = { current: {
+            gameState: hydrateGameState(raw), myRole: 'spectator', isSpectating: true,
+        } };
+        const setGameState = vi.fn();
+        const router = createRemoteEventRouter({
+            stateRef, setGameState, setSelectedIndex: vi.fn(), persistSnapshotIfNeeded: vi.fn(),
+        });
+        const update = (changes) => router('ping', { gameState: { ...raw, ...changes } });
+        const notes = raw.notes.map((entry, i) => i === 0 ? [2, 3] : entry);
+        update({ notes });
+        expect(stateRef.current.gameState.notes[0]).toEqual([2, 3]);
+        update({ notes: raw.notes });
+        expect(stateRef.current.gameState.notes[0]).toEqual([]);
+        const owners = raw.cellOwners.map((owner, i) => i === 1 ? 'guest' : owner);
+        update({ cellOwners: owners });
+        expect(stateRef.current.gameState.cellOwners[1]).toBe('guest');
+        update({ cellOwners: raw.cellOwners });
+        expect(stateRef.current.gameState.cellOwners[1]).toBeNull();
+        expect(setGameState).toHaveBeenCalledTimes(4);
+        expect(stateRef.current.gameState.elapsedSeconds).toBe(0);
+        stateRef.current.myRole = 'host';
+        stateRef.current.mode = 'online';
+        router('ping', { gameState: { ...raw, notes }, stateVector: { guest: 2 } });
+        expect(stateRef.current.gameState.notes[0]).toEqual([2, 3]);
     });
 });

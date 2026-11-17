@@ -26,8 +26,16 @@ export function validateNetworkChallenge(value, grid = 9) {
         && (!value.game || (isBoundedString(value.game.players.X, 64) && isBoundedString(value.game.players.O, 64)));
 }
 
+function validateStateVector(vector) {
+    return isObject(vector) && Object.keys(vector).length <= 256
+        && Object.entries(vector).every(([sender, seq]) => isBoundedString(sender, 64)
+            && isIntegerIn(seq, 1, Number.MAX_SAFE_INTEGER));
+}
+
 export function validateNetworkEnvelope(data) {
-    return optional(data.senderId, (v) => isBoundedString(v, 64))
+    return optional(data.stateVector, validateStateVector)
+        && optional(data.stateActor, (v) => isBoundedString(v, 64))
+        && optional(data.senderId, (v) => isBoundedString(v, 64))
         && optional(data.eventId, (v) => isBoundedString(v))
         && optional(data.seq, (v) => isIntegerIn(v, 1, Number.MAX_SAFE_INTEGER))
         && optional(data.sentAt, (v) => isIntegerIn(v, 0, Number.MAX_SAFE_INTEGER))
