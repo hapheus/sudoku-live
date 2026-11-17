@@ -148,3 +148,11 @@ editing. It means no numeric board edit; valid notes still apply to an empty,
 editable cell. Numeric values, notes, indexes and ownership continue through the
 same validation. Null does not mean erase (numeric zero does), and this delivery
 compatibility does not replace heartbeat/revision work in #68.
+
+## Causal recovery follow-up (#68)
+
+The initial causal snapshot guard and heartbeat note/ownership recovery are now
+specified in [snapshot-recovery.md](snapshot-recovery.md). That document supersedes
+the earlier statement that stale history racing live snapshots is entirely
+unguarded. The broader concurrency, puzzle-generation and mixed-client limits
+remain explicit; #68 is not complete merely because snapshot inclusion is checked.

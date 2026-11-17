@@ -77,6 +77,40 @@ describe('OnlineGameClient (Serverless Centrifugo)', () => {
         expect(client.gameMembersByServerClient.size).toBe(0);
     });
 
+    it('retains local mutations across delayed history and does not truncate at an unsafe snapshot', async () => {
+        const client = new OnlineGameClient();
+        client.gameChannel = { publish: vi.fn().mockResolvedValue({}) };
+        await client.broadcastGameEvent('recovery-room', 'cell-update', { index: 0, value: 1 });
+        const localVector = client.stateRecovery.vector();
+        expect(localVector[client.stateActor]).toBeGreaterThan(0);
+        const received = vi.fn();
+        const event = (offset, type, data) => ({ offset, data: { type, data } });
+        client.deliverHistory([
+            event(10, 'cell-update', { senderId: 'host', seq: 5, index: 1, value: 2, eventId: 'missing-cell' }),
+            event(11, 'sync', { senderId: 'host', seq: 6, eventId: 'stale-history', stateVector: {},
+                gameState: { board: Array(81).fill(0) } }),
+        ], received);
+        expect(received).toHaveBeenCalledTimes(1);
+        expect(received.mock.calls[0][1].eventId).toBe('missing-cell');
+        // Once a snapshot covers an edit, an evicted event ID cannot replay that old edit.
+        client.stateRecovery.observe('sync', {
+            senderId: 'host', seq: 10, gameState: {}, stateVector: { ...localVector, host: 9 },
+        });
+        client.eventDeduper.clear();
+        client.deliverHistory([
+            event(10, 'cell-update', { senderId: 'host', seq: 5, index: 1, value: 2, eventId: 'old-cell' }),
+        ], received);
+        expect(received).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses a fresh state actor when the logical player identity is reused', () => {
+        const first = new OnlineGameClient();
+        const second = new OnlineGameClient();
+        expect(first.clientId).toBe(second.clientId);
+        expect(first.stateActor).not.toBe(second.stateActor);
+        expect(first.buildOutgoingEnvelope({}).stateActor).toBe(first.stateActor);
+    });
+
     it('validates game IDs strictly', () => {
         expect(isValidGameId('room-123_abc')).toBe(true);
         expect(isValidGameId(generateGameId())).toBe(true);
