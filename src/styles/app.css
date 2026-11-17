@@ -2247,6 +2247,11 @@ body {
     gap: 0.6rem;
 }
 
+/* Compact paired headings need the same line height without expanded tracking. */
+.settings-group--2col .settings-fieldset__legend {
+    letter-spacing: normal;
+}
+
 .settings-group--2col .segmented-label {
     font-size: 0.8125rem;
     padding: 0.35rem 0.25rem;
@@ -3797,6 +3802,11 @@ body {
 
 /* Equal content regions exclude the shared gutter and outer safe-area padding. */
 @media (orientation: landscape) and (max-height: 540px), (min-width: 900px) and (min-height: 540px), (horizontal-viewport-segments: 2) {
+    /* Unequal safe-area insets must not move the split away from the fold. */
+    body {
+        padding-inline: calc(0.75rem + max(env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)));
+    }
+
     .gameplay-stage__board, .gameplay-stage__side {
         max-width: 100%;
         overflow-wrap: anywhere;
