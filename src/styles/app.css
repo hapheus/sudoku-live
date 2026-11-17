@@ -3696,7 +3696,7 @@ body {
 
     .gameplay-stage {
         display: grid;
-        grid-template-columns: auto minmax(240px, 440px);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         grid-template-rows: auto 1fr;
         grid-template-areas:
             "board status"
@@ -3720,7 +3720,7 @@ body {
 
     .gameplay-stage__board .board-wrapper,
     .gameplay-stage__board .tic-tac-toe {
-        width: min(calc(100dvh - 3.75rem), 46vw);
+        width: min(100%, calc(100dvh - 3.75rem));
         max-width: 360px;
     }
 
@@ -3752,7 +3752,7 @@ body {
 
     .gameplay-stage {
         display: grid;
-        grid-template-columns: minmax(360px, 480px) minmax(280px, 1fr);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         grid-template-rows: auto 1fr;
         grid-template-areas:
             "board status"
@@ -3778,27 +3778,6 @@ body {
     }
 }
 
-@media (horizontal-viewport-segments: 2) {
-    .app-container--gameplay {
-        max-width: none;
-        padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
-    }
-
-    .gameplay-stage {
-        display: grid;
-        grid-template-columns:
-            minmax(280px, calc(env(viewport-segment-width 0 0) - 1.5rem))
-            1fr;
-        column-gap: max(1rem, calc(env(viewport-segment-left 1 0) - env(viewport-segment-right 0 0) + 1rem));
-        align-items: start;
-    }
-
-    .gameplay-stage__board .board-wrapper {
-        max-width: min(var(--board-max-size), calc(100dvh - 140px));
-    }
-}
-
-
 .settings-group--preferences {
     grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
 }
@@ -3810,5 +3789,120 @@ body {
 @media (max-width: 519px) {
     .settings-group--preferences {
         grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* Equal content regions exclude the shared gutter and outer safe-area padding. */
+@media (orientation: landscape) and (max-height: 540px), (min-width: 900px) and (min-height: 540px), (horizontal-viewport-segments: 2) {
+    .gameplay-stage__board, .gameplay-stage__side {
+        max-width: 100%;
+        overflow-wrap: anywhere;
+    }
+
+    .gameplay-stage__board .board-wrapper,
+    .gameplay-stage__board .tic-tac-toe,
+    .gameplay-stage__board .board-frame {
+        max-width: 100%;
+    }
+
+    .gameplay-stage__side .shift-bar__actions {
+        flex-basis: min(100%, calc(4 * var(--touch-min) + 3 * 0.45rem));
+    }
+}
+
+.split-region {
+    display: contents;
+}
+
+@media (orientation: landscape) and (max-height: 540px), (horizontal-viewport-segments: 2) {
+    .app-container--with-nav {
+        max-width: 960px;
+    }
+
+    .split-layout {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--split-gap, 0.85rem);
+        align-items: start;
+        justify-content: normal;
+    }
+
+    .split-region {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .split-region > *, .legal-page > * {
+        min-width: 0;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+    }
+
+    .settings-group--2col {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .game-top-bar, .spectator-bar {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--split-gap, 0.85rem);
+    }
+
+    .game-top-bar__actions, .spectator-bar__actions,
+    .watch-box__header, .live-game-card, .live-game-card__actions,
+    .dialog-card__header, .legal-page__top-bar {
+        flex-wrap: wrap;
+        min-width: 0;
+    }
+
+    .confirm-banner {
+        width: calc((100% - var(--split-gap, 0.85rem)) / 2);
+        align-self: end;
+    }
+}
+
+/* Segment coordinates, rather than a device name, define the unavailable gap.
+   Use the smaller usable segment so unequal displays still have a 1:1 contract. */
+@media (horizontal-viewport-segments: 2) {
+    :root {
+        --segment-padding: max(0.75rem, env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
+        --segment-content: calc(min(env(viewport-segment-width 0 0), env(viewport-segment-width 1 0)) - 2 * var(--segment-padding));
+        --split-gap: calc(env(viewport-segment-left 1 0) - env(viewport-segment-right 0 0) + 2 * var(--segment-padding));
+    }
+
+    body {
+        padding-left: calc(env(viewport-segment-right 0 0) - var(--segment-padding) - var(--segment-content));
+        padding-right: calc(100vw - env(viewport-segment-left 1 0) - var(--segment-padding) - var(--segment-content));
+    }
+
+    .app-container--with-nav, .app-container--gameplay {
+        max-width: none;
+    }
+
+    .gameplay-stage {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-areas: "board status" "board side";
+        gap: 0.5rem var(--split-gap);
+    }
+
+    .gameplay-stage__board { grid-area: board; }
+    .gameplay-stage__side { grid-area: side; }
+    .gameplay-stage > .status-banner { grid-area: status; }
+
+    .bottom-nav {
+        left: calc(env(viewport-segment-left 1 0) + var(--segment-padding));
+        right: auto;
+        width: var(--segment-content);
+    }
+
+    .dialog-backdrop {
+        left: calc(env(viewport-segment-left 1 0) + var(--segment-padding));
+        right: auto;
+        width: var(--segment-content);
+        padding-inline: 0;
     }
 }
