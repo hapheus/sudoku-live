@@ -34,55 +34,7 @@ import { replaceBrowserUrl, updateBrowserUrl } from '../utils/app-routing.js';
 import { setStorageItem } from '../utils/storage.js';
 import { buildHintPreviewPayload } from './useGameTimersAndModals.js';
 
-/**
- * Broadcasts a join-response for every queued incoming join request and clears the queue.
- */
-export function respondToQueuedJoinRequests({
-    stateRef,
-    onlineClientRef,
-    setIncomingJoinRequests,
-    accepted,
-    reason = 'declined',
-}) {
-    const queued = stateRef.current.incomingJoinRequests;
-    if (!queued || queued.length === 0) return;
-
-    setIncomingJoinRequests([]);
-    stateRef.current.incomingJoinRequests = [];
-    for (const req of queued) {
-        onlineClientRef.current?.broadcastGameEvent(req.gameId, 'join-response', {
-            requestId: req.requestId,
-            requesterId: req.requesterId,
-            accepted: Boolean(accepted),
-            reason: accepted ? undefined : reason,
-        });
-    }
-}
-
-/**
- * Clears any pending join timeout and broadcasts join-cancel if a join request is active.
- */
-export function clearPendingJoinState({
-    pendingJoinTimerRef,
-    stateRef,
-    onlineClientRef,
-    setPendingJoinRequest,
-}) {
-    if (pendingJoinTimerRef.current) {
-        clearTimeout(pendingJoinTimerRef.current);
-        pendingJoinTimerRef.current = null;
-    }
-    const pending = stateRef.current.pendingJoinRequest;
-    if (!pending) return null;
-
-    setPendingJoinRequest(null);
-    stateRef.current.pendingJoinRequest = null;
-    onlineClientRef.current?.broadcastGameEvent(pending.gameId, 'join-cancel', {
-        requestId: pending.requestId,
-        requesterId: onlineClientRef.current?.clientId,
-    });
-    return pending;
-}
+import { clearPendingJoinState, respondToQueuedJoinRequests, createJoinTransitions } from '../services/join-transitions.js';
 
 /**
  * Manages WebSocket session lifecycle, persistence, lobby sync, presence, spectating, and co-op joins.
@@ -139,6 +91,11 @@ export function useOnlineSession({
     announce,
     showFeedback,
 }) {
+    const joinRequests = useMemo(() => createJoinTransitions({
+        stateRef, onlineClientRef, pendingJoinTimerRef,
+        setIncomingJoinRequests, setPendingJoinRequest,
+    }), [stateRef, onlineClientRef, pendingJoinTimerRef, setIncomingJoinRequests, setPendingJoinRequest]);
+
     const persistSnapshotIfNeeded = useCallback((
         nextGameState,
         nextRematch = stateRef.current.rematchRequestedBy,
@@ -230,17 +187,8 @@ export function useOnlineSession({
         const queue = stateRef.current.incomingJoinRequests;
         if (!queue || queue.length === 0) return;
 
-        const [req, ...rest] = queue;
-        setIncomingJoinRequests(rest);
-        stateRef.current.incomingJoinRequests = rest;
-
-        onlineClientRef.current?.broadcastGameEvent(req.gameId, 'join-response', {
-            requestId: req.requestId,
-            requesterId: req.requesterId,
-            accepted: Boolean(accepted),
-            reason: accepted ? undefined : 'declined',
-        });
-    }, [onlineClientRef, setIncomingJoinRequests, stateRef]);
+        joinRequests.respondNext(accepted);
+    }, [joinRequests, stateRef]);
 
     useEffect(() => {
         const cur = stateRef.current;
@@ -277,7 +225,7 @@ export function useOnlineSession({
     const routeRemoteGameEvent = useMemo(() => createRemoteEventRouter({
         stateRef,
         onlineClientRef,
-        pendingJoinTimerRef,
+        joinRequests,
         joinActionsRef,
         setGameState,
         setSelectedIndex,
@@ -289,8 +237,6 @@ export function useOnlineSession({
         setGuestCursors,
         setRemoteActiveDigit,
         setHostJoinPolicy,
-        setIncomingJoinRequests,
-        setPendingJoinRequest,
         setRemoteRetroMode,
         triggerHintHighlight,
         clearHintHighlight,
@@ -307,13 +253,13 @@ export function useOnlineSession({
         announce,
         showFeedback,
     }), [
+        joinRequests,
         announce,
         clearHintHighlight,
         clearHintsForCell,
         clearPendingHint,
         clearUnitCelebration,
         onlineClientRef,
-        pendingJoinTimerRef,
         persistSnapshotIfNeeded,
         playMoveSoundFeedback,
         setActiveDigit,
@@ -323,8 +269,6 @@ export function useOnlineSession({
         setHintsMap,
         setHostCursorIndex,
         setHostJoinPolicy,
-        setIncomingJoinRequests,
-        setPendingJoinRequest,
         setRematchRequestedBy,
         setRemoteActiveDigit,
         setRemoteRetroMode,
@@ -402,9 +346,7 @@ export function useOnlineSession({
         }
         if (member?.role === 'guest' && cur.myRole === 'host') {
             if (member?.id && cur.incomingJoinRequests.some((r) => r.requesterId === member.id)) {
-                const nextReqs = cur.incomingJoinRequests.filter((r) => r.requesterId !== member.id);
-                setIncomingJoinRequests(nextReqs);
-                stateRef.current.incomingJoinRequests = nextReqs;
+                joinRequests.remove(request => request.requesterId === member.id);
             }
             showFeedback('A partner joined your game!');
         }
@@ -413,11 +355,11 @@ export function useOnlineSession({
             syncLobbyProgress();
         }
     }, [
+        joinRequests,
         buildSyncPayload,
         onlineClientRef,
         setCurrentMembers,
         setHostJoinPolicy,
-        setIncomingJoinRequests,
         showFeedback,
         stateRef,
         syncLobbyProgress,
@@ -453,9 +395,7 @@ export function useOnlineSession({
 
         const cur = stateRef.current;
         if (member?.id && cur.incomingJoinRequests.some((r) => r.requesterId === member.id)) {
-            const nextReqs = cur.incomingJoinRequests.filter((r) => r.requesterId !== member.id);
-            setIncomingJoinRequests(nextReqs);
-            stateRef.current.incomingJoinRequests = nextReqs;
+            joinRequests.remove(request => request.requesterId === member.id);
         }
 
         if (member?.id) {
@@ -471,12 +411,12 @@ export function useOnlineSession({
             syncLobbyProgress();
         }
     }, [
+        joinRequests,
         onlineClientRef,
         setCurrentMembers,
         setGuestCursors,
         setHintsMap,
         setHostCursorIndex,
-        setIncomingJoinRequests,
         setRemoteActiveDigit,
         stateRef,
         syncLobbyProgress,
@@ -513,12 +453,7 @@ export function useOnlineSession({
     const spectateGame = useCallback((gameId) => {
         if (!isValidGameId(gameId)) return;
 
-        if (pendingJoinTimerRef.current) {
-            clearTimeout(pendingJoinTimerRef.current);
-            pendingJoinTimerRef.current = null;
-        }
-        setPendingJoinRequest(null);
-        stateRef.current.pendingJoinRequest = null;
+        joinRequests.finish();
 
         clearUnitCelebration();
         onlineClientRef.current?.leaveLobby();
@@ -566,6 +501,7 @@ export function useOnlineSession({
             onIncompatibleClient: handleIncompatibleClient,
         });
     }, [
+        joinRequests,
         clearUnitCelebration,
         enterSpectatorView,
         handleGameMemberJoin,
@@ -574,13 +510,11 @@ export function useOnlineSession({
         handleIncompatibleClient,
         handleRemoteGameEvent,
         onlineClientRef,
-        pendingJoinTimerRef,
         setBoardBackground,
         setCurrentMembers,
         setGameState,
         setHintsMap,
         setHostJoinPolicy,
-        setPendingJoinRequest,
         setRemoteRetroMode,
         setRematchRequestedBy,
         setSpectatedGameMode,
@@ -769,8 +703,7 @@ export function useOnlineSession({
             fromSpectating: fromSpectatingSameRoom,
             gameStateSnapshot: initialSnapshot,
         };
-        setPendingJoinRequest(req);
-        stateRef.current.pendingJoinRequest = req;
+        joinRequests.begin(req);
 
         if (pendingJoinTimerRef.current) {
             clearTimeout(pendingJoinTimerRef.current);
@@ -779,12 +712,7 @@ export function useOnlineSession({
             pendingJoinTimerRef.current = null;
             const activeReq = stateRef.current.pendingJoinRequest;
             if (!activeReq || activeReq.requestId !== requestId) return;
-            setPendingJoinRequest(null);
-            stateRef.current.pendingJoinRequest = null;
-            onlineClientRef.current?.broadcastGameEvent(activeReq.gameId, 'join-cancel', {
-                requestId: activeReq.requestId,
-                requesterId: onlineClientRef.current?.clientId,
-            });
+            joinRequests.cancel();
             if (!activeReq.fromSpectating) {
                 onlineClientRef.current?.leaveGameChannel();
                 openWatchDirectory();
@@ -818,6 +746,7 @@ export function useOnlineSession({
             });
         }
     }, [
+        joinRequests,
         completeApprovedJoin,
         handleGameMemberJoin,
         handleGameMemberLeave,
@@ -828,7 +757,6 @@ export function useOnlineSession({
         onlineClientRef,
         openWatchDirectory,
         pendingJoinTimerRef,
-        setPendingJoinRequest,
         setRematchRequestedBy,
         showFeedback,
         stateRef,
@@ -939,8 +867,7 @@ export function useOnlineSession({
         setHintsMap(new Map());
         setRematchRequestedBy(null);
         setRemoteRetroMode?.(false);
-        setIncomingJoinRequests([]);
-        stateRef.current.incomingJoinRequests = [];
+        joinRequests.clearQueue();
         setGameState(nextState);
         setBoardBackground(nextBg);
         if (!keepActiveRoom) {
@@ -974,6 +901,7 @@ export function useOnlineSession({
             ? `Resumed ${specInfo.shortLabel} ${nextState.difficulty} Solo puzzle.`
             : `New ${specInfo.shortLabel} ${diff} Sudoku puzzle ready.`);
     }, [
+        joinRequests,
         announce,
         clearUnitCelebration,
         ensureHostOnlineSession,
@@ -986,7 +914,6 @@ export function useOnlineSession({
         setGuestCursors,
         setHintsMap,
         setHostCursorIndex,
-        setIncomingJoinRequests,
         setIsSpectating,
         setMode,
         setMyRole,

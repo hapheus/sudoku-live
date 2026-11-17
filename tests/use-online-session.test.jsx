@@ -1,10 +1,9 @@
+import { clearPendingJoinState, respondToQueuedJoinRequests } from '../src/services/join-transitions.js';
 import { useNavigationAndSetup } from '../src/hooks/useNavigationAndSetup.js';
 import { createSudokuGame } from '../src/domain/sudoku-engine.js';
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-    clearPendingJoinState,
-    respondToQueuedJoinRequests,
     useOnlineSession,
 } from '../src/hooks/useOnlineSession.js';
 

@@ -1,7 +1,8 @@
+import { createJoinTransitions } from '../src/services/join-transitions.js';
 import { describe, expect, it, vi } from 'vitest';
 import { hydrateGameState } from '../src/domain/sudoku-engine.js';
 import boardCatalog from '../src/services/board-background-catalog.json';
-import { createRemoteEventRouter } from '../src/services/remote-event-router.js';
+import { createRemoteEventRouter as createRouter } from '../src/services/remote-event-router.js';
 
 describe('remote-event-router', () => {
     it.each(['init', 'sync'])('migrates retired artwork in %s and avoids resetting it on every heartbeat', (type) => {
@@ -193,3 +194,7 @@ describe('heartbeat recovery without advancing the puzzle clock', () => {
         expect(stateRef.current.gameState.notes[0]).toEqual([2, 3]);
     });
 });
+
+function createRemoteEventRouter(context) {
+    return createRouter({ ...context, joinRequests: createJoinTransitions(context) });
+}

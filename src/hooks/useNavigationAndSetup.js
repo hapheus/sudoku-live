@@ -12,7 +12,7 @@ import { selectBoardBackground } from '../services/board-backgrounds.js';
 import { saveSoloGameSnapshot } from '../services/online-state-storage.js';
 import { hasUnsavedProgress, normalizePathname, updateBrowserUrl } from '../utils/app-routing.js';
 import { setStorageItem } from '../utils/storage.js';
-import { clearPendingJoinState, respondToQueuedJoinRequests } from './useOnlineSession.js';
+import { clearPendingJoinState, respondToQueuedJoinRequests } from '../services/join-transitions.js';
 
 function hasPartnerOnline(cur) {
     return cur.currentMembers.some(

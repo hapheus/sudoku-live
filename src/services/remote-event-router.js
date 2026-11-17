@@ -115,42 +115,25 @@ export function createRemoteEventRouter(ctx) {
             requesterName: sanitizePlayerName(data.requesterName) || null,
             gameId: cur.onlineGameId,
         };
-        const alreadyQueued = cur.incomingJoinRequests.some(
-            (r) => r.requestId === nextReq.requestId || r.requesterId === nextReq.requesterId,
-        );
-        if (!alreadyQueued) {
-            const nextQueue = [...cur.incomingJoinRequests, nextReq];
-            ctx.setIncomingJoinRequests(nextQueue);
-            ctx.stateRef.current.incomingJoinRequests = nextQueue;
+        if (ctx.joinRequests.enqueue(nextReq)) {
             ctx.announce(cur.messages?.joinRequestTitle || 'Player wants to join');
         }
     };
 
-    const handleJoinCancel = (data, cur) => {
-        if (data?.requestId && cur.incomingJoinRequests.some((r) => r.requestId === data.requestId)) {
-            const nextQueue = cur.incomingJoinRequests.filter((r) => r.requestId !== data.requestId);
-            ctx.setIncomingJoinRequests(nextQueue);
-            ctx.stateRef.current.incomingJoinRequests = nextQueue;
-        }
+    const handleJoinCancel = (data) => {
+        if (data?.requestId) ctx.joinRequests.remove(request => request.requestId === data.requestId);
     };
 
     const handleJoinResponse = (data, cur) => {
         const myClientId = ctx.onlineClientRef.current?.clientId;
         const pending = cur.pendingJoinRequest;
-        if (!pending || data?.requestId !== pending.requestId || data?.requesterId !== myClientId) {
-            return;
-        }
-        if (ctx.pendingJoinTimerRef.current) {
-            clearTimeout(ctx.pendingJoinTimerRef.current);
-            ctx.pendingJoinTimerRef.current = null;
-        }
-        ctx.setPendingJoinRequest(null);
-        ctx.stateRef.current.pendingJoinRequest = null;
-
+        if (!pending || data?.requestId !== pending.requestId || data?.requesterId !== myClientId) return;
+        const completed = ctx.joinRequests.finish(data.requestId);
+        if (!completed) return;
         if (data.accepted) {
-            ctx.joinActionsRef.current.approveJoin(pending);
+            ctx.joinActionsRef.current.approveJoin(completed);
         } else {
-            ctx.joinActionsRef.current.rejectJoin(pending, data.reason || 'declined');
+            ctx.joinActionsRef.current.rejectJoin(completed, data.reason || 'declined');
         }
     };
 
