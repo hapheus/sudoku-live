@@ -9,6 +9,7 @@ export function GamePlayView({
     mainClassName,
     mainAriaLabel,
     topBar,
+    guide = null,
     connectionStatus,
     mode,
     isSpectating,
@@ -50,7 +51,7 @@ export function GamePlayView({
             {topBar}
 
             <div className="gameplay-stage">
-                <StatusBanner
+                {!guide && <StatusBanner
                     connectionStatus={connectionStatus}
                     mode={mode}
                     isSpectating={isSpectating}
@@ -62,7 +63,7 @@ export function GamePlayView({
                     onReconnect={onReconnect}
                     onContinueSolo={onContinueSolo}
                     messages={messages}
-                />
+                />}
 
                 <div className="gameplay-stage__board">
                     {ticTacToeGame && ticTacToeGame.phase !== 'transition' ? (
@@ -103,7 +104,7 @@ export function GamePlayView({
                     )}
                 </div>
 
-                <div className="gameplay-stage__side">
+                {guide ? <div className="gameplay-stage__guide">{guide}</div> : <div className="gameplay-stage__side">
                     {actionFeedback && (
                         <div id="action-feedback" className="action-feedback" role="status">
                             {actionFeedback}
@@ -136,7 +137,7 @@ export function GamePlayView({
                             {bottomControls}
                         </>
                     )}
-                </div>
+                </div>}
             </div>
         </main>
     );

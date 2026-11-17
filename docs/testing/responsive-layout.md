@@ -1,18 +1,22 @@
 # Responsive region contract
 
-Landscape gameplay uses two equal grid tracks at compact landscape heights (up to 540 CSS px) and at widths of at least 900 CSS px with heights of at least 540 CSS px. Each track is `minmax(0, 1fr)`: content cannot determine its width. The measurement excludes the shared gutter and the body padding, which includes safe-area insets. A difference of at most one CSS pixel is allowed for rounding. Split layouts use the larger left/right safe-area inset on **both** outer edges, so an asymmetric notch inset cannot shift the column boundary away from the physical display midpoint. On reported dual segments, the segment-coordinate padding below takes precedence.
+Gameplay uses two equal grid tracks in landscape, with reported horizontal segments, and at widths of at least 900 CSS px with heights of at least 540 CSS px. Each track is `minmax(0, 1fr)`: content cannot determine its width. The measurement excludes the shared gutter and the body padding, which includes safe-area insets. A difference of at most one CSS pixel is allowed for rounding. Split layouts use the larger left/right safe-area inset on **both** outer edges, so an asymmetric notch inset cannot shift the column boundary away from the physical display midpoint. On reported dual segments, the segment-coordinate padding below takes precedence.
 
-Compact landscape and browsers reporting two horizontal viewport segments also split the other screens explicitly:
+Landscape screens and browsers reporting two horizontal viewport segments use two equal regions. The existing wide-screen gameplay split also remains available at widths of at least 900 CSS px and heights of at least 540 CSS px.
 
-| Screen | Primary region | Secondary region |
+| Screen | Left region | Right region |
 | --- | --- | --- |
-| Start / setup | Title and introduction | Variant, difficulty, music, Play/Resume, web footer |
-| Settings | Title, player identity, appearance and language | Join policy, audio, guide |
-| Watch directory | Connection, pending join, search and filters | Room list or empty state |
-| Privacy / legal notice | Back and page-switch navigation | Article |
-| Gameplay / spectator / solved | Board or Tic Tac Toe | Status, player/spectator controls, hints or solve summary |
+| Start / setup | Title, variant, difficulty, music, Play/Resume and footer | Decorative landscape artwork |
+| Settings | All identity, appearance, language, joins, audio and guide controls | Decorative landscape artwork |
+| Watch directory | Connection, pending join, filters and complete room list | Decorative landscape artwork |
+| Privacy / legal notice | Navigation and complete article | Decorative landscape artwork |
+| Gameplay / spectator / solved | Board or Tic Tac Toe | Status, controls, hints or solve summary; opening the guide replaces this region |
 
-On two horizontal viewport segments, the smaller segment defines the equal usable widths. Extra width on an asymmetric display remains outside the content. Segment coordinates define the central unavailable gap; both sides use the same padding, including the larger horizontal safe-area inset. Navigation and help dialogs stay in the second segment. Confirmation banners use the second region. These rules use reported display geometry rather than a device-name heuristic.
+Navigation remains within the left content region on non-game screens. Landscape artwork is discovered from [`src/assets/landscape/`](../../src/assets/landscape/README.md), independently of board images, and selected once per app mount. The reserved panel remains empty until the owner adds images. Images are not mounted in portrait, and returning to landscape retains the selection.
+
+The in-game guide is a non-modal dialog in the right grid column, not a fixed overlay. It replaces status and controls, keeps the board visible and retains the puzzle. Close/Escape restores controls and focus. Rotating to portrait uses the normal modal dialog; rotating back uses the right pane without creating duplicate guides. Settings retains its existing guide dialog.
+
+On two horizontal viewport segments, the smaller segment defines the equal usable widths. Extra width on an asymmetric display remains outside the content. Segment coordinates define the central unavailable gap; both sides use the same padding, including the larger horizontal safe-area inset. Non-game navigation stays in the first segment; guide dialogs stay in the second segment. Confirmation banners use the second region. These rules use reported display geometry rather than a device-name heuristic.
 
 Ordinary portrait screens retain their existing single-column flow. Controls can scroll vertically at compact heights; touch targets are not reduced to force everything above the fold.
 

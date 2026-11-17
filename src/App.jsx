@@ -1,3 +1,6 @@
+import { LANDSCAPE_LAYOUT_QUERY, useSplitLayout } from './hooks/useSplitLayout.js';
+import { LandscapeArtwork } from './components/LandscapeArtwork.jsx';
+import { selectLandscapeArtwork } from './services/landscape-artwork.js';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createCoopFistBumpTracker } from './domain/coop-fist-bump.js';
 import { advanceKonamiState, createKonamiState } from './domain/konami-code.js';
@@ -57,6 +60,10 @@ function getRestartState(messages, isCoopSession, partnerOnline, gameState, rema
 
 export function App() {
     const isNativeApp = isNativeCapacitorApp();
+    const splitLayout = useSplitLayout();
+    const landscapeLayout = useSplitLayout(LANDSCAPE_LAYOUT_QUERY);
+    const [landscapeArtwork] = useState(() => selectLandscapeArtwork());
+    const closeGuide = useCallback(() => setIsHelpOpen(false), []);
     const initialRoute = useMemo(() => parseInitialRoute(), []);
 
     const [legalPage, setLegalPage] = useState(() => (
@@ -600,7 +607,9 @@ export function App() {
     const showBottomNav = showLegalPage || !((navTab === 'play' && isPlayingGame) || (navTab === 'watch' && isSpectating));
     const showGlobalRetroBar = isRetroMode && (showLegalPage || navTab !== 'play' || !isPlayingGame);
 
+    const inlineGuide = splitLayout && !showBottomNav && isHelpOpen;
     const sharedGameViewProps = {
+        guide: inlineGuide ? <HelpDialog isOpen panel onClose={closeGuide} messages={messages} /> : null,
         connectionStatus: connectionStatus,
         mode: mode,
         myRole: myRole,
@@ -637,7 +646,8 @@ export function App() {
 
     return (
         <>
-            <div id="sudoku-app" className={`app-container ${showBottomNav ? 'app-container--with-nav' : 'app-container--gameplay'}`}>
+            <div id="sudoku-app" className={`app-container ${showBottomNav ? 'app-container--with-nav landscape-screen' : 'app-container--gameplay'}`}>
+                <div className="landscape-screen__content">
                 <div id="game-announcements" className="sr-only" aria-live="polite" aria-atomic="true">
                     {announcement}
                 </div>
@@ -955,9 +965,11 @@ export function App() {
                     />
                 )}
 
+                </div>
+                {showBottomNav && <LandscapeArtwork artwork={landscapeArtwork} active={landscapeLayout} />}
                 <HelpDialog
-                    isOpen={isHelpOpen}
-                    onClose={() => setIsHelpOpen(false)}
+                    isOpen={isHelpOpen && !inlineGuide}
+                    onClose={closeGuide}
                     messages={messages}
                 />
             </div>

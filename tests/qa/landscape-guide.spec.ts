@@ -1,0 +1,70 @@
+import { test, expect } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+
+for (const variant of ['3x3', '2x3']) {
+    for (const [width, height] of [[844, 390], [844, 600], [951, 669], [1280, 800]]) {
+        test(`guide replaces the right gameplay pane ${variant} ${width}x${height}`, async ({ page }, testInfo) => {
+            await page.setViewportSize({ width, height });
+            await page.addInitScript(() => localStorage.setItem('sudoku_lang', 'en'));
+            await page.routeWebSocket(/.*/, socket => socket.close());
+            await page.goto('/');
+            await page.getByText(variant === '2x3' ? '2×3 (6×6)' : '3×3 (9×9)', { exact: true }).click();
+            await page.locator('#start-game-btn').click();
+            const board = await page.getByRole('grid').innerText();
+            const opener = page.locator('#game-help-btn');
+            await opener.click();
+            const guide = page.getByRole('dialog');
+            await expect(guide).toBeVisible();
+            await expect(guide).not.toHaveAttribute('aria-modal', 'true');
+            await expect(page.locator('.dialog-backdrop')).toHaveCount(0);
+            await expect(page.locator('.gameplay-stage__side')).toHaveCount(0);
+            await expect(page.locator('.gameplay-stage > .status-banner')).toHaveCount(0);
+            const left = (await page.locator('.gameplay-stage__board').boundingBox())!;
+            const right = (await page.locator('.gameplay-stage__guide').boundingBox())!;
+            expect(Math.abs(left.width - right.width)).toBeLessThanOrEqual(1);
+            expect(left.x + left.width).toBeLessThanOrEqual(width / 2);
+            expect(right.x).toBeGreaterThanOrEqual(width / 2);
+            expect(await page.getByRole('grid').innerText()).toBe(board);
+            expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()).violations).toEqual([]);
+            await testInfo.attach('landscape-guide', { body: await page.screenshot(), contentType: 'image/png' });
+            await page.keyboard.press('Escape');
+            await expect(guide).toHaveCount(0);
+            await expect(opener).toBeFocused();
+            await expect(page.locator('.player-controls')).toBeVisible();
+            expect(await page.getByRole('grid').innerText()).toBe(board);
+            await opener.click();
+            await page.setViewportSize({ width: 390, height: 844 });
+            await expect(page.getByRole('dialog')).toHaveAttribute('aria-modal', 'true');
+            await expect(page.locator('.dialog-backdrop')).toBeVisible();
+            await page.setViewportSize({ width, height });
+            await expect(page.locator('.dialog-backdrop')).toHaveCount(0);
+            await expect(page.getByRole('dialog')).toHaveCount(1);
+            await page.getByRole('button', { name: 'Close', exact: true }).click();
+            await expect(page.locator('.player-controls')).toBeVisible();
+            expect(await page.getByRole('grid').innerText()).toBe(board);
+        });
+    }
+}
+
+test('landscape navigation stays left and artwork selection survives navigation and rotation', async ({ page }) => {
+    await page.setViewportSize({ width: 951, height: 669 });
+    await page.routeWebSocket(/.*/, socket => socket.close());
+    await page.goto('/');
+    const images = await page.locator('.landscape-artwork img').evaluateAll(elements => elements.map(element => element.getAttribute('src')));
+    for (const tab of ['#nav-settings', '#nav-watch', '#nav-play']) {
+        await page.locator(tab).click();
+        const navigation = (await page.locator('.bottom-nav').boundingBox())!;
+        expect(navigation.x + navigation.width).toBeLessThanOrEqual(951 / 2);
+        const content = (await page.locator('.landscape-screen__content').boundingBox())!;
+        expect(content.x + content.width).toBeLessThanOrEqual(951 / 2);
+        expect(await page.locator('.landscape-screen__content').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+        expect(await page.locator('.landscape-artwork img').evaluateAll(elements => elements.map(element => element.getAttribute('src')))).toEqual(images);
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.locator('.landscape-artwork')).toBeHidden();
+    await page.setViewportSize({ width: 1000, height: 1200 });
+    await expect(page.locator('.landscape-artwork')).toBeHidden();
+    await page.setViewportSize({ width: 951, height: 669 });
+    await expect(page.locator('.landscape-artwork')).toBeVisible();
+    expect(await page.locator('.landscape-artwork img').evaluateAll(elements => elements.map(element => element.getAttribute('src')))).toEqual(images);
+});

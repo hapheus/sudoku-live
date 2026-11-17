@@ -47,19 +47,19 @@ for (const variant of ['3x3', '2x3']) {
     }
 }
 
-test('setup, settings, watch and legal screens have explicit equal regions', async ({ page }) => {
+test('setup, settings, watch and legal keep all content left and artwork right', async ({ page }) => {
     await page.setViewportSize({ width: 812, height: 375 });
     await page.addInitScript(() => localStorage.setItem('sudoku_lang', 'en'));
     await page.routeWebSocket(/.*/, socket => socket.close());
     await page.goto('/');
-    await assertRegions(page, '#play-setup .split-region--primary', '#play-setup .split-region--secondary');
+    await assertRegions(page, '.landscape-screen__content', '.landscape-artwork');
     await page.locator('#nav-settings').click();
-    await assertRegions(page, '#settings-panel .split-region--primary', '#settings-panel .split-region--secondary');
+    await assertRegions(page, '.landscape-screen__content', '.landscape-artwork');
     await page.locator('#nav-watch').click();
-    await assertRegions(page, '#watch-directory .split-region--primary', '#watch-directory .split-region--secondary');
+    await assertRegions(page, '.landscape-screen__content', '.landscape-artwork');
     await page.locator('#nav-play').click();
     await page.locator('#privacy-link').click();
-    await assertRegions(page, '.legal-page__top-bar', '.legal-card');
+    await assertRegions(page, '.landscape-screen__content', '.landscape-artwork');
 });
 
 test('emulated unequal display segments keep all screens and dialogs clear of the hinge', async ({ page, context }) => {
@@ -73,18 +73,18 @@ test('emulated unequal display segments keep all screens and dialogs clear of th
     await page.routeWebSocket(/.*/, socket => socket.close());
     await page.goto('/');
     expect(await page.evaluate(() => matchMedia('(horizontal-viewport-segments: 2)').matches)).toBe(true);
-    await assertRegions(page, '#play-setup .split-region--primary', '#play-setup .split-region--secondary');
+    await assertRegions(page, '.landscape-screen__content', '.landscape-artwork');
     await page.locator('#nav-settings').click();
-    await assertRegions(page, '#settings-panel .split-region--primary', '#settings-panel .split-region--secondary');
+    await assertRegions(page, '.landscape-screen__content', '.landscape-artwork');
     await page.locator('#settings-guide-btn').click();
     const dialog = (await page.getByRole('dialog').boundingBox())!;
     expect(dialog.x).toBeGreaterThanOrEqual(580);
     await page.keyboard.press('Escape');
     await page.locator('#nav-watch').click();
-    await assertRegions(page, '#watch-directory .split-region--primary', '#watch-directory .split-region--secondary');
+    await assertRegions(page, '.landscape-screen__content', '.landscape-artwork');
     await page.locator('#nav-play').click();
     await page.locator('#privacy-link').click();
-    await assertRegions(page, '.legal-page__top-bar', '.legal-card');
+    await assertRegions(page, '.landscape-screen__content', '.landscape-artwork');
     await page.locator('#legal-back-btn').click();
     await page.locator('#start-game-btn').click();
     await page.keyboard.press('Escape');
