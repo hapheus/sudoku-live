@@ -50,6 +50,7 @@ test('landscape navigation stays right and artwork selection survives navigation
     await page.setViewportSize({ width: 951, height: 669 });
     await page.routeWebSocket(/.*/, socket => socket.close());
     await page.goto('/');
+    await expect(page.locator('.landscape-artwork img')).toBeVisible();
     const images = await page.locator('.landscape-artwork img').evaluateAll(elements => elements.map(element => element.getAttribute('src')));
     for (const tab of ['#nav-settings', '#nav-watch', '#nav-play']) {
         await page.locator(tab).click();
@@ -58,15 +59,16 @@ test('landscape navigation stays right and artwork selection survives navigation
         const content = (await page.locator('.landscape-screen__content').boundingBox())!;
         expect(content.x).toBeGreaterThanOrEqual(951 / 2);
         expect(await page.locator('.landscape-screen__content').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
-        expect(await page.locator('.landscape-artwork img').evaluateAll(elements => elements.map(element => element.getAttribute('src')))).toEqual(images);
+        await expect.poll(() => page.locator('.landscape-artwork img').evaluateAll(elements => elements.map(element => element.getAttribute('src')))).toEqual(images);
     }
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page.locator('.landscape-artwork')).toBeHidden();
     await page.setViewportSize({ width: 1000, height: 1200 });
     await expect(page.locator('.landscape-artwork')).toBeHidden();
     await page.setViewportSize({ width: 951, height: 669 });
-    await expect(page.locator('.landscape-artwork')).toBeVisible();
-    expect(await page.locator('.landscape-artwork img').evaluateAll(elements => elements.map(element => element.getAttribute('src')))).toEqual(images);
+    await expect(page.locator('.landscape-artwork img')).toBeVisible();
+    await expect.poll(() => page.locator('.landscape-artwork img').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
+    await expect.poll(() => page.locator('.landscape-artwork img').evaluateAll(elements => elements.map(element => element.getAttribute('src')))).toEqual(images);
 });
 
 for (const [width, height] of [[844, 390], [951, 669], [1280, 800]]) {
