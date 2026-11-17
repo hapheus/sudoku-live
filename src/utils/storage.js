@@ -3,10 +3,12 @@
  */
 
 export function getDefaultStorage(kind = 'local') {
-    if (kind === 'session') {
-        return typeof sessionStorage !== 'undefined' ? sessionStorage : null;
+    try {
+        return (kind === 'session' ? globalThis.sessionStorage : globalThis.localStorage) ?? null;
+    } catch {
+        // Browsers may deny the property getter before any storage method runs.
+        return null;
     }
-    return typeof localStorage !== 'undefined' ? localStorage : null;
 }
 
 export function getStorageItem(key, fallback = null, storage = getDefaultStorage('local')) {

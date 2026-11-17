@@ -265,7 +265,7 @@ export function LegalPage({
     const isPrivacy = page === 'privacy';
 
     return (
-        <main id={`legal-${page}`} className="legal-page" aria-labelledby="legal-page-title">
+        <main id={`legal-${page}`} className="legal-page split-layout" aria-labelledby="legal-page-title">
             <div className="legal-page__top-bar">
                 <button
                     type="button"

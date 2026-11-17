@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
+import { createBackgroundMusicPlayer } from '../src/services/background-music.js';
+import { createSoundEffectsPlayer } from '../src/services/sound-effects.js';
+import { loadSoloGameSnapshot, loadOnlineGameSnapshot } from '../src/services/online-state-storage.js';
 import {
     getDefaultStorage,
     getStorageItem,
@@ -13,6 +16,21 @@ import {
 } from '../src/utils/storage.js';
 
 describe('storage utilities', () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it.each(['localStorage', 'sessionStorage'])('survives a denied %s property getter', (property) => {
+        vi.spyOn(globalThis, property, 'get').mockImplementation(() => {
+            throw new DOMException('Access denied', 'SecurityError');
+        });
+        expect(getDefaultStorage(property === 'localStorage' ? 'local' : 'session')).toBeNull();
+        expect(loadSoloGameSnapshot()).toBeNull();
+        expect(loadOnlineGameSnapshot('room')).toBeNull();
+        expect(loadBooleanPref('sound', true)).toBe(true);
+        expect(() => saveBooleanPref('sound', false)).not.toThrow();
+        expect(() => createBackgroundMusicPlayer().destroy()).not.toThrow();
+        expect(() => createSoundEffectsPlayer().destroy()).not.toThrow();
+    });
+
     it('safely reads, writes, and removes items even when storage throws', () => {
         const throwingStorage = {
             getItem: () => { throw new Error('blocked'); },

@@ -1,6 +1,6 @@
 # itch.io HTML5 ZIP Packaging Showcase
 
-Sudoku Live supports building a self-contained, verified **itch.io HTML5 ZIP** (`sudoku-live-itch.zip`) ready for browser embed upload or `butler push`.
+Sudoku Live supports building a self-contained, verified **itch.io HTML5 ZIP** (`sudoku-shift-itch.zip`) ready for browser embed upload or `butler push`.
 
 ---
 
@@ -23,17 +23,17 @@ itch.io serves HTML5 games inside sandboxed CDN iframes under a nested path (not
 ## Build & Verify
 
 ```bash
-# Build dist-itch/, package sudoku-live-itch.zip, and run automated checks
+# Build dist-itch/, package sudoku-shift-itch.zip, and run automated checks
 npm run build:itch
 
-# Verify an existing sudoku-live-itch.zip without rebuilding
+# Verify an existing sudoku-shift-itch.zip without rebuilding
 npm run verify:itch
 ```
 
 [`scripts/package-itch.mjs`](../../scripts/package-itch.mjs) automatically:
 - Builds with `vite build --mode itch` and `VITE_ITCH_BUILD=true`.
 - Strips `.DS_Store` and `.map` files from `dist-itch/`.
-- Packages `sudoku-live-itch.zip` with `index.html` at the archive root.
+- Packages `sudoku-shift-itch.zip` with `index.html` at the archive root.
 - Verifies relative asset paths, root `index.html`, zero junk files, and itch.io's 1,000-file archive limit.
 
 ---
@@ -42,7 +42,7 @@ npm run verify:itch
 
 ### Option A: Web Dashboard
 1. Create or open your HTML5 project on itch.io.
-2. Upload `sudoku-live-itch.zip` and check **This file will be played in the browser**.
+2. Upload `sudoku-shift-itch.zip` and check **This file will be played in the browser**.
 3. Recommended embed settings:
    - **Viewport dimensions**: `480 × 820` (portrait) or `960 × 720` (responsive)
    - **Mobile friendly**: Enabled
@@ -50,5 +50,5 @@ npm run verify:itch
 
 ### Option B: `butler` CLI
 ```bash
-butler push sudoku-live-itch.zip <your-username>/sudoku-live:html5
+butler push sudoku-shift-itch.zip <your-username>/sudoku-live:html5
 ```

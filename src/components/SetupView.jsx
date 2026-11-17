@@ -21,136 +21,139 @@ export function SetupView({
     messages,
 }) {
     return (
-        <section id="play-setup" className="play-setup" aria-label={messages.setupTitle}>
-            <header className="play-setup__header">
-                <h1 className="play-setup__title">{messages.gameTitle}</h1>
-                <p className="play-setup__subtitle">{messages.setupSubtitle}</p>
-            </header>
-
-            <div className="setup-controls">
-                <VariantSelector
-                    variant={variant}
-                    onChange={onVariantChange}
-                    messages={messages}
-                />
-                <DifficultySelector
-                    difficulty={difficulty}
-                    onChange={onDifficultyChange}
-                    messages={messages}
-                />
-                <div id="setup-music-control" className="setup-music-row">
-                    <div className="setup-music-row__label-wrap">
-                        <IconMusic className={`setup-music-row__icon ${musicEnabled ? 'setup-music-row__icon--active' : ''}`} />
-                        <span id="setup-music-label" className="setup-music-row__label">
-                            {messages.settingsMusic || 'Background Music'}
-                        </span>
-                    </div>
-                    <div
-                        className="segmented-options segmented-options--2 setup-music-row__options"
-                        role="radiogroup"
-                        aria-labelledby="setup-music-label"
-                    >
-                        <label className={`segmented-label setup-music-row__option ${musicEnabled ? 'segmented-label--active' : ''}`}>
-                            <input
-                                type="radio"
-                                name="sudoku-setup-music"
-                                value="true"
-                                checked={Boolean(musicEnabled)}
-                                onChange={() => onMusicEnabledChange(true)}
-                            />
-                            <IconVolume2 className="settings-icon settings-icon--option" />
-                            <span>{messages.musicOn || 'On'}</span>
-                        </label>
-                        <label className={`segmented-label setup-music-row__option ${!musicEnabled ? 'segmented-label--active' : ''}`}>
-                            <input
-                                type="radio"
-                                name="sudoku-setup-music"
-                                value="false"
-                                checked={!musicEnabled}
-                                onChange={() => onMusicEnabledChange(false)}
-                            />
-                            <IconVolumeX className="settings-icon settings-icon--option" />
-                            <span>{messages.musicOff || 'Off'}</span>
-                        </label>
+        <section id="play-setup" className="play-setup split-layout" aria-label={messages.setupTitle}>
+            <div className="split-region split-region--primary">
+                <header className="play-setup__header">
+                    <h1 className="play-setup__title">{messages.gameTitle}</h1>
+                    <p className="play-setup__subtitle">{messages.setupSubtitle}</p>
+                </header>
+            </div>
+            <div className="split-region split-region--secondary">
+                <div className="setup-controls">
+                    <VariantSelector
+                        variant={variant}
+                        onChange={onVariantChange}
+                        messages={messages}
+                    />
+                    <DifficultySelector
+                        difficulty={difficulty}
+                        onChange={onDifficultyChange}
+                        messages={messages}
+                    />
+                    <div id="setup-music-control" className="setup-music-row">
+                        <div className="setup-music-row__label-wrap">
+                            <IconMusic className={`setup-music-row__icon ${musicEnabled ? 'setup-music-row__icon--active' : ''}`} />
+                            <span id="setup-music-label" className="setup-music-row__label">
+                                {messages.settingsMusic || 'Background Music'}
+                            </span>
+                        </div>
+                        <div
+                            className="segmented-options segmented-options--2 setup-music-row__options"
+                            role="radiogroup"
+                            aria-labelledby="setup-music-label"
+                        >
+                            <label className={`segmented-label setup-music-row__option ${musicEnabled ? 'segmented-label--active' : ''}`}>
+                                <input
+                                    type="radio"
+                                    name="sudoku-setup-music"
+                                    value="true"
+                                    checked={Boolean(musicEnabled)}
+                                    onChange={() => onMusicEnabledChange(true)}
+                                />
+                                <IconVolume2 className="settings-icon settings-icon--option" />
+                                <span>{messages.musicOn || 'On'}</span>
+                            </label>
+                            <label className={`segmented-label setup-music-row__option ${!musicEnabled ? 'segmented-label--active' : ''}`}>
+                                <input
+                                    type="radio"
+                                    name="sudoku-setup-music"
+                                    value="false"
+                                    checked={!musicEnabled}
+                                    onChange={() => onMusicEnabledChange(false)}
+                                />
+                                <IconVolumeX className="settings-icon settings-icon--option" />
+                                <span>{messages.musicOff || 'Off'}</span>
+                            </label>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div className="play-setup__actions">
-                <button
-                    type="button"
-                    id="start-game-btn"
-                    className="btn-primary play-setup__cta"
-                    onClick={onPlay}
-                >
-                    {messages.startPuzzle}
-                </button>
-                {canResumeGame && (
+                <div className="play-setup__actions">
                     <button
                         type="button"
-                        id="resume-game-btn"
-                        className="btn-secondary play-setup__resume"
-                        onClick={onResume}
+                        id="start-game-btn"
+                        className="btn-primary play-setup__cta"
+                        onClick={onPlay}
                     >
-                        {messages.resumePuzzle}
+                        {messages.startPuzzle}
                     </button>
+                    {canResumeGame && (
+                        <button
+                            type="button"
+                            id="resume-game-btn"
+                            className="btn-secondary play-setup__resume"
+                            onClick={onResume}
+                        >
+                            {messages.resumePuzzle}
+                        </button>
+                    )}
+                </div>
+
+                {!isNativeApp && (
+                    <footer id="web-start-footer" className="play-setup__web-footer" aria-label={messages.webFooterLabel}>
+                        {APP_STORE_COMING_SOON ? (
+                            <div
+                                id="app-store-link"
+                                className="app-store-link app-store-link--coming-soon"
+                            >
+                                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                    <path d={APPLE_LOGO_PATH} />
+                                </svg>
+                                <span>{messages.appStoreComingSoonLabel || 'App Store'}</span>
+                                <span className="app-store-link__badge">{messages.appStoreComingSoonBadge || 'Coming Soon'}</span>
+                            </div>
+                        ) : (
+                            <a
+                                id="app-store-link"
+                                className="app-store-link"
+                                href={APP_STORE_URL}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                    <path d={APPLE_LOGO_PATH} />
+                                </svg>
+                                <span>{messages.appStoreLinkLabel}</span>
+                            </a>
+                        )}
+                        <nav className="web-legal-links" aria-label={messages.legalLinksLabel}>
+                            <a
+                                id="privacy-link"
+                                href="/privacy"
+                                className="web-legal-link"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    onOpenLegalPage('privacy');
+                                }}
+                            >
+                                {messages.privacyTitle}
+                            </a>
+                            <span className="web-legal-links__sep" aria-hidden="true">·</span>
+                            <a
+                                id="impressum-link"
+                                href="/impressum"
+                                className="web-legal-link"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    onOpenLegalPage('impressum');
+                                }}
+                            >
+                                {messages.impressumTitle}
+                            </a>
+                        </nav>
+                    </footer>
                 )}
             </div>
-
-            {!isNativeApp && (
-                <footer id="web-start-footer" className="play-setup__web-footer" aria-label={messages.webFooterLabel}>
-                    {APP_STORE_COMING_SOON ? (
-                        <div
-                            id="app-store-link"
-                            className="app-store-link app-store-link--coming-soon"
-                        >
-                            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                                <path d={APPLE_LOGO_PATH} />
-                            </svg>
-                            <span>{messages.appStoreComingSoonLabel || 'App Store'}</span>
-                            <span className="app-store-link__badge">{messages.appStoreComingSoonBadge || 'Coming Soon'}</span>
-                        </div>
-                    ) : (
-                        <a
-                            id="app-store-link"
-                            className="app-store-link"
-                            href={APP_STORE_URL}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                        >
-                            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                                <path d={APPLE_LOGO_PATH} />
-                            </svg>
-                            <span>{messages.appStoreLinkLabel}</span>
-                        </a>
-                    )}
-                    <nav className="web-legal-links" aria-label={messages.legalLinksLabel}>
-                        <a
-                            id="privacy-link"
-                            href="/privacy"
-                            className="web-legal-link"
-                            onClick={(e) => {
-                                e.preventDefault();
-                                onOpenLegalPage('privacy');
-                            }}
-                        >
-                            {messages.privacyTitle}
-                        </a>
-                        <span className="web-legal-links__sep" aria-hidden="true">·</span>
-                        <a
-                            id="impressum-link"
-                            href="/impressum"
-                            className="web-legal-link"
-                            onClick={(e) => {
-                                e.preventDefault();
-                                onOpenLegalPage('impressum');
-                            }}
-                        >
-                            {messages.impressumTitle}
-                        </a>
-                    </nav>
-                </footer>
-            )}
         </section>
     );
 }

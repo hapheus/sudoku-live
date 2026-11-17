@@ -45,8 +45,9 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: sudoku-live-itch-zip
-          path: sudoku-live-itch.zip
+          name: sudoku-shift-itch-zip
+          path: sudoku-shift-itch.zip
+          if-no-files-found: error
           retention-days: 7
 
   docker-smoke:
