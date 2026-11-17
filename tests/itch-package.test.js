@@ -1,10 +1,20 @@
 import { describe, it, expect } from 'vitest';
+import fs from 'node:fs';
 import {
     validateItchIndexHtml,
     validateItchZipEntries,
 } from '../scripts/package-itch.mjs';
 
 describe('itch.io package verification', () => {
+    it('collects the generated archive in CI and fails on missing output', () => {
+        const script = fs.readFileSync('scripts/package-itch.mjs', 'utf8');
+        const archive = script.match(/const ZIP_PATH = path.join\(REPO_ROOT, '([^']+)'\)/)[1];
+        const workflow = fs.readFileSync('.github/workflows/ci.yml', 'utf8');
+        const upload = workflow.match(/uses: actions\/upload-artifact@[^\n]+\n\s+with:([\s\S]*?)retention-days/)[1];
+        expect(upload).toContain(`path: ${archive}`);
+        expect(upload).toContain('if-no-files-found: error');
+    });
+
     it('accepts valid index.html with relative asset paths', () => {
         const html = `
             <!DOCTYPE html>
