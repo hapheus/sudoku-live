@@ -1,3 +1,4 @@
+import { rateSudokuDifficulty } from './sudoku-rating.ts';
 /**
  * Sudoku Generator & Uniqueness-Guaranteed Solver
  *
@@ -120,6 +121,25 @@ export function isSolvable(board, { requireUnique = false, variant = null } = {}
     return solveBoard(board, resolvedVariant) !== null;
 }
 
+function findLeastCandidates(board, { rows, cols, boxes, spec }) {
+    let index = -1;
+    let mask = 0;
+    let count = spec.maxDigit + 1;
+    for (let i = 0; i < spec.totalCells; i++) {
+        if (board[i] !== 0) continue;
+        const { row, col, box } = getCellCoords(i, spec.id);
+        const candidates = spec.allDigitsMask & ~(rows[row] | cols[col] | boxes[box]);
+        const size = countBits(candidates);
+        if (size === 0) return { index: i, mask: 0 };
+        if (size >= count) continue;
+        index = i;
+        mask = candidates;
+        count = size;
+        if (size === 1) break;
+    }
+    return { index, mask };
+}
+
 /**
  * Counts valid solutions up to `limit` using bitmask MRV backtracking.
  */
@@ -134,24 +154,8 @@ export function countSolutions(board, limit = 2, variant = null) {
     function search() {
         if (solutions >= limit) return;
 
-        let bestIdx = -1;
-        let bestMask = 0;
-        let bestCount = spec.maxDigit + 1;
-
-        for (let i = 0; i < spec.totalCells; i++) {
-            if (work[i] !== 0) continue;
-            const { row, col, box } = getCellCoords(i, spec.id);
-            const used = rows[row] | cols[col] | boxes[box];
-            const candidates = spec.allDigitsMask & ~used;
-            const cCount = countBits(candidates);
-            if (cCount === 0) return; // Dead end
-            if (cCount < bestCount) {
-                bestCount = cCount;
-                bestMask = candidates;
-                bestIdx = i;
-                if (cCount === 1) break;
-            }
-        }
+        const { index: bestIdx, mask: bestMask } = findLeastCandidates(work, masks);
+        if (bestIdx !== -1 && bestMask === 0) return;
 
         if (bestIdx === -1) {
             solutions++;
@@ -194,23 +198,8 @@ export function solveBoard(board, variant = null) {
     const { rows, cols, boxes, spec } = masks;
 
     function search() {
-        let bestIdx = -1;
-        let bestMask = 0;
-        let bestCount = spec.maxDigit + 1;
-
-        for (let i = 0; i < spec.totalCells; i++) {
-            if (work[i] !== 0) continue;
-            const { row, col, box } = getCellCoords(i, spec.id);
-            const candidates = spec.allDigitsMask & ~(rows[row] | cols[col] | boxes[box]);
-            const cCount = countBits(candidates);
-            if (cCount === 0) return false;
-            if (cCount < bestCount) {
-                bestCount = cCount;
-                bestMask = candidates;
-                bestIdx = i;
-                if (cCount === 1) break;
-            }
-        }
+        const { index: bestIdx, mask: bestMask } = findLeastCandidates(work, masks);
+        if (bestIdx !== -1 && bestMask === 0) return false;
 
         if (bestIdx === -1) return true;
 
@@ -266,23 +255,8 @@ export function generateSolvedBoard(rng = Math.random, variant = '3x3') {
         const { rows, cols, boxes } = masks;
 
         function fill() {
-            let bestIdx = -1;
-            let bestMask = 0;
-            let bestCount = spec.maxDigit + 1;
-
-            for (let i = 0; i < spec.totalCells; i++) {
-                if (board[i] !== 0) continue;
-                const { row, col, box } = getCellCoords(i, spec.id);
-                const candidates = spec.allDigitsMask & ~(rows[row] | cols[col] | boxes[box]);
-                const cCount = countBits(candidates);
-                if (cCount === 0) return false;
-                if (cCount < bestCount) {
-                    bestCount = cCount;
-                    bestMask = candidates;
-                    bestIdx = i;
-                    if (cCount === 1) break;
-                }
-            }
+            const { index: bestIdx, mask: bestMask } = findLeastCandidates(board, masks);
+            if (bestIdx !== -1 && bestMask === 0) return false;
 
             if (bestIdx === -1) return true;
 
@@ -319,97 +293,14 @@ export function generateSolvedBoard(rng = Math.random, variant = '3x3') {
  * Evaluates whether a puzzle can be solved purely by Naked Singles (+ optionally Hidden Singles).
  */
 export function analyzeLogicDifficulty(board, { allowHiddenSingles = false, variant = null } = {}) {
-    const work = [...board];
-    const masks = buildMasks(work, variant);
-    if (!masks) return { solved: false, hiddenSinglesUsed: 0 };
-
-    const { rows, cols, boxes, spec } = masks;
-    let hiddenSinglesUsed = 0;
-
-    while (true) {
-        let progressed = false;
-
-        // Pass 1: Naked Singles
-        for (let i = 0; i < spec.totalCells; i++) {
-            if (work[i] !== 0) continue;
-            const { row, col, box } = getCellCoords(i, spec.id);
-            const candidates = spec.allDigitsMask & ~(rows[row] | cols[col] | boxes[box]);
-            if (countBits(candidates) === 1) {
-                const digit = maskToDigits(candidates, spec.maxDigit)[0];
-                const bit = 1 << digit;
-                work[i] = digit;
-                rows[row] |= bit;
-                cols[col] |= bit;
-                boxes[box] |= bit;
-                progressed = true;
-            }
-        }
-
-        if (progressed) continue;
-        if (!allowHiddenSingles) break;
-
-        // Pass 2: Hidden Singles across rows, columns, and boxes
-        const findHiddenInUnit = (indices) => {
-            for (let d = 1; d <= spec.maxDigit; d++) {
-                const bit = 1 << d;
-                let candidateIdx = -1;
-                let count = 0;
-                let alreadyPlaced = false;
-
-                for (const idx of indices) {
-                    if (work[idx] === d) {
-                        alreadyPlaced = true;
-                        break;
-                    }
-                    if (work[idx] !== 0) continue;
-                    const { row, col, box } = getCellCoords(idx, spec.id);
-                    if (!((rows[row] | cols[col] | boxes[box]) & bit)) {
-                        candidateIdx = idx;
-                        count++;
-                        if (count > 1) break;
-                    }
-                }
-
-                if (!alreadyPlaced && count === 1 && candidateIdx !== -1) {
-                    const { row, col, box } = getCellCoords(candidateIdx, spec.id);
-                    work[candidateIdx] = d;
-                    rows[row] |= bit;
-                    cols[col] |= bit;
-                    boxes[box] |= bit;
-                    hiddenSinglesUsed++;
-                    return true;
-                }
-            }
-            return false;
-        };
-
-        for (let r = 0; r < spec.gridSize && !progressed; r++) {
-            const rowIndices = Array.from({ length: spec.gridSize }, (_, c) => r * spec.gridSize + c);
-            progressed = findHiddenInUnit(rowIndices);
-        }
-        for (let c = 0; c < spec.gridSize && !progressed; c++) {
-            const colIndices = Array.from({ length: spec.gridSize }, (_, r) => r * spec.gridSize + c);
-            progressed = findHiddenInUnit(colIndices);
-        }
-        for (let b = 0; b < spec.gridSize && !progressed; b++) {
-            const br = Math.floor(b / spec.boxesPerRow) * spec.boxRows;
-            const bc = (b % spec.boxesPerRow) * spec.boxCols;
-            const boxIndices = [];
-            for (let r = 0; r < spec.boxRows; r++) {
-                for (let c = 0; c < spec.boxCols; c++) {
-                    boxIndices.push((br + r) * spec.gridSize + (bc + c));
-                }
-            }
-            progressed = findHiddenInUnit(boxIndices);
-        }
-
-        if (!progressed) break;
+    try {
+        const result = rateSudokuDifficulty(board, variant || inferVariantFromBoardLength(board?.length), {
+            maxTechnique: allowHiddenSingles ? 'hiddenSingles' : 'nakedSingles',
+        });
+        return { solved: result.solved, hiddenSinglesUsed: result.techniques.hiddenSingles };
+    } catch {
+        return { solved: false, hiddenSinglesUsed: 0 };
     }
-
-    return {
-        solved: work.every((v) => v !== 0),
-        hiddenSinglesUsed,
-    };
 }
 
 /**
@@ -446,6 +337,14 @@ export function verifyGeneratedPuzzle(puzzle, solution, variant = null) {
     return true;
 }
 
+function removeUniqueClues(puzzle, indices, variant) {
+    const saved = indices.map(index => puzzle[index]);
+    for (const index of indices) puzzle[index] = 0;
+    if (countSolutions(puzzle, 2, variant) === 1) return true;
+    indices.forEach((index, offset) => { puzzle[index] = saved[offset]; });
+    return false;
+}
+
 function digPuzzleFromSolution(solution, targetClues, rng, variant = '3x3') {
     const spec = getVariantSpec(variant);
     if (!isValidSolvedBoard(solution, spec.id)) {
@@ -464,35 +363,17 @@ function digPuzzleFromSolution(solution, targetClues, rng, variant = '3x3') {
         const stepCost = i === mirror ? 1 : 2;
         if (clues - stepCost < targetClues) continue;
 
-        const savedA = puzzle[i];
-        const savedB = puzzle[mirror];
-        puzzle[i] = 0;
-        puzzle[mirror] = 0;
-
-        if (countSolutions(puzzle, 2, spec.id) === 1) {
-            clues -= stepCost;
-        } else {
-            puzzle[i] = savedA;
-            puzzle[mirror] = savedB;
-        }
+        if (removeUniqueClues(puzzle, [...new Set([i, mirror])], spec.id)) clues -= stepCost;
     }
 
     // Second pass: single-cell removal if symmetric pairs couldn't reach low clue counts
-    if (clues > targetClues) {
-        const allIndices = shuffleArray(Array.from({ length: spec.totalCells }, (_, i) => i), rng);
-        for (const i of allIndices) {
-            if (clues <= targetClues) break;
-            if (puzzle[i] === 0) continue;
+    if (clues <= targetClues) return { puzzle, clues };
+    const allIndices = shuffleArray(Array.from({ length: spec.totalCells }, (_, i) => i), rng);
+    for (const i of allIndices) {
+        if (clues <= targetClues) break;
+        if (puzzle[i] === 0) continue;
 
-            const saved = puzzle[i];
-            puzzle[i] = 0;
-
-            if (countSolutions(puzzle, 2, spec.id) === 1) {
-                clues--;
-            } else {
-                puzzle[i] = saved;
-            }
-        }
+        if (removeUniqueClues(puzzle, [i], spec.id)) clues--;
     }
 
     return { puzzle, clues };
@@ -505,7 +386,8 @@ function digPuzzleFromSolution(solution, targetClues, rng, variant = '3x3') {
  * @param {'easy'|'medium'|'hard'|'expert'} difficulty
  * @param {() => number} rng
  * @param {'3x3'|'2x3'} variant
- * @returns {{ puzzle: number[], solution: number[], difficulty: string, variant: '3x3'|'2x3', clues: number }}
+ * Bounded retries prefer the requested logic tier; fallback reports its actual tier, never a clue-count label.
+ * @returns {{ puzzle: number[], solution: number[], difficulty: string, requestedDifficulty: string, variant: '3x3'|'2x3', clues: number }}
  */
 export function generateSudoku(difficulty = 'medium', rng = Math.random, variant = '3x3') {
     const spec = getVariantSpec(variant);
@@ -514,9 +396,11 @@ export function generateSudoku(difficulty = 'medium', rng = Math.random, variant
     const targetClues = preset.minClues + Math.floor(rng() * (preset.maxClues - preset.minClues + 1));
 
     let bestCandidate = null;
+    let bestDistance = Infinity;
+    const tiers = ['easy', 'medium', 'hard', 'expert'];
     const maxAttempts = normalizedDifficulty === 'expert' ? 10 : 6;
 
-    for (let attempt = 0; attempt < maxAttempts + 4; attempt++) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
         const solution = generateSolvedBoard(rng, spec.id);
         const { puzzle, clues } = digPuzzleFromSolution(solution, targetClues, rng, spec.id);
 
@@ -527,39 +411,22 @@ export function generateSudoku(difficulty = 'medium', rng = Math.random, variant
         const candidate = {
             puzzle,
             solution,
-            difficulty: normalizedDifficulty,
+            difficulty: rateSudokuDifficulty(puzzle, spec.id).difficulty,
+            requestedDifficulty: normalizedDifficulty,
             variant: spec.id,
             clues,
         };
 
-        if (attempt < maxAttempts) {
-            const nakedOnly = analyzeLogicDifficulty(puzzle, { allowHiddenSingles: false, variant: spec.id });
-            const withHidden = analyzeLogicDifficulty(puzzle, { allowHiddenSingles: true, variant: spec.id });
-
-            if (normalizedDifficulty === 'easy' && nakedOnly.solved) {
-                return candidate;
-            }
-
-            if (normalizedDifficulty === 'medium' && clues <= preset.maxClues && withHidden.solved && !nakedOnly.solved) {
-                return candidate;
-            }
-
-            if (normalizedDifficulty === 'hard' && clues <= preset.maxClues && !nakedOnly.solved) {
-                return candidate;
-            }
-
-            if (normalizedDifficulty === 'expert' && clues <= preset.maxClues && !withHidden.solved) {
-                return candidate;
-            }
+        if (candidate.difficulty === normalizedDifficulty && clues <= preset.maxClues) {
+            return candidate;
         }
 
-        if (!bestCandidate || Math.abs(clues - targetClues) < Math.abs(bestCandidate.clues - targetClues)) {
+        const distance = Math.abs(tiers.indexOf(candidate.difficulty) - tiers.indexOf(normalizedDifficulty));
+        if (distance < bestDistance || (distance === bestDistance && (!bestCandidate || Math.abs(clues - targetClues) < Math.abs(bestCandidate.clues - targetClues)))) {
             bestCandidate = candidate;
+            bestDistance = distance;
         }
 
-        if (attempt >= maxAttempts - 1 && bestCandidate) {
-            return bestCandidate;
-        }
     }
 
     if (!bestCandidate || !verifyGeneratedPuzzle(bestCandidate.puzzle, bestCandidate.solution, spec.id)) {

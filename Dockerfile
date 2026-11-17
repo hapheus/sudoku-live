@@ -1,7 +1,7 @@
 # ==============================================================================
 # Stage 1: Build React + Vite Frontend Assets
 # ==============================================================================
-FROM node:26-alpine AS frontend-builder
+FROM node:26-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS frontend-builder
 
 WORKDIR /app
 
@@ -17,7 +17,7 @@ RUN npm run build
 # ==============================================================================
 # Stage 2: Lightweight Nginx Static Web Runtime
 # ==============================================================================
-FROM nginx:1.29-alpine
+FROM nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
 
 LABEL org.opencontainers.image.title="Sudoku Shift" \
       org.opencontainers.image.description="Runnable Sudoku Shift SPA container (Game Off 2026) with real-time Centrifugo WebSocket co-op and spectator mode" \

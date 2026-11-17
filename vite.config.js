@@ -56,7 +56,7 @@ export default defineConfig(({ mode }) => {
             include: ['tests/**/*.test.{js,jsx}'],
             coverage: {
                 provider: 'v8',
-                include: ['src/**/*.{js,jsx}'],
+                include: ['src/**/*.{js,jsx,ts}'],
                 reporter: ['text', 'lcov', 'json-summary'],
                 reportsDirectory: './coverage',
             },

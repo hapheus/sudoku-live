@@ -39,3 +39,11 @@ Sudoku Live is a **100% serverless, zero-database** application. All puzzle gene
 - **Zero Backend**: Clients connect directly to Centrifugo (`sudoku` namespace with `presence`, `join_leave`, `history_size: 25`, `history_ttl: "300s"`, `force_recovery: true`, and anonymous client permissions in [`docker/centrifugo/config.json`](../../docker/centrifugo/config.json)).
 - **Multi-App WebSocket Ready**: Centrifugo isolates channel namespaces (`sudoku` and extensible `app`), ready to serve web browsers, itch.io embeds, and Capacitor iOS apps concurrently.
 - **Room Presence & Deduplication**: Participants announce `{ role, game_mode }` via `presence-announce` on subscribe/join, hosts publish room progress to `sudoku:lobby`, and all moves carry unique `eventId` tokens (`MAX_SEEN_EVENT_IDS = 200`).
+
+## Logic rating and bounded generation (#50)
+
+Clue-count presets are search targets, not difficulty definitions or hard upper bounds (uniqueness may require extra clues). `sudoku-rating.ts` deterministically applies naked singles (Easy), hidden singles (Medium), and locked candidates / naked pairs (Hard). A verified unique puzzle that stalls beyond these techniques is Expert; this does not claim that guessing is the only possible human technique.
+
+Generation verifies every candidate's unique solution, prefers an exact requested logic tier, and limits retries to avoid blocking the client indefinitely. If none matches, it selects the closest measured tier, using clue distance only as a tie-breaker, and reports the **actual** difficulty. This matters especially for 6×6, where advanced tiers may not be found within the retry budget. Requested and actual difficulty are retained separately so Setup/resume does not discard an honestly downgraded puzzle; old snapshots fall back compatibly. Gameplay and lobby show actual difficulty.
+
+Row/column swaps stay within a box band/stack; whole-band/stack swaps are Sudoku automorphisms. Applying the same bijection to clues, board and solution preserves the number of clue solutions. Tests cover all four shift operations in both variants, plus seeded generation across every requested tier.

@@ -2,6 +2,7 @@ import React from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { App } from '../src/App.jsx';
+import { rateSudokuDifficulty } from '../src/domain/sudoku-rating.ts';
 import { createSudokuGame, serializeGameState, setCellValue, toggleCellNote } from '../src/domain/sudoku-engine.js';
 import { OnlineGameClient } from '../src/services/online-game-client.js';
 import { saveSoloGameSnapshot } from '../src/services/online-state-storage.js';
@@ -36,7 +37,9 @@ it('renders classic BottomNav and flows cleanly from Play Setup (3x3/2x3 + diffi
     // Clean active game screen without Variant/Difficulty clutter
     expect(screen.getByRole('grid')).toBeVisible();
     expect(screen.queryByRole('radio', { name: '2×3 (6×6)' })).not.toBeInTheDocument();
-    expect(document.getElementById('game-status-text')).toHaveTextContent('2×3 Hard • Solo');
+    const saved = JSON.parse(localStorage.getItem('sudoku_solo_snapshot_v1')).gameState;
+    const rated = rateSudokuDifficulty(saved.board, '2x3').difficulty;
+    expect(document.getElementById('game-status-text')).toHaveTextContent(`2×3 ${rated[0].toUpperCase() + rated.slice(1)} • Solo`);
     expect(screen.getByRole('button', { name: 'Hint' })).toBeVisible();
     expect(document.getElementById('back-to-setup-btn')).toBeVisible();
 
@@ -172,7 +175,7 @@ it('does not publish a game to the live lobby during Setup selection, only once 
     expect(joinLobbySpy.mock.calls[1][0]).toMatchObject({
         status: 'in_progress',
         gameMode: 'solo',
-        difficulty: 'hard',
+        difficulty: rateSudokuDifficulty(JSON.parse(localStorage.getItem('sudoku_solo_snapshot_v1')).gameState.board, '2x3').difficulty,
         variant: '2x3',
     });
 

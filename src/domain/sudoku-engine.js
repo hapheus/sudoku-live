@@ -140,6 +140,7 @@ export function createSudokuGame({ difficulty = 'medium', variant = null, puzzle
         boxCols: spec.boxCols,
         maxDigit: spec.maxDigit,
         difficulty: generated.difficulty,
+        requestedDifficulty: generated.requestedDifficulty || difficulty,
         board,
         givens,
         solution: [...generated.solution],
@@ -150,6 +151,36 @@ export function createSudokuGame({ difficulty = 'medium', variant = null, puzzle
         status: isSolved(board, spec.id) ? 'solved' : 'in_progress',
         history: [],
         elapsedSeconds: 0,
+    };
+}
+
+function recordBoardHistory(state, recordHistory = true) {
+    if (!recordHistory) return state.history;
+    const spec = getVariantSpec(resolveVariantForState(state));
+    return [
+        ...state.history.slice(-49),
+        {
+            board: [...state.board],
+            notes: cloneNotes(state.notes),
+            cellOwners: cloneOwners(state.cellOwners, spec.totalCells),
+        },
+    ];
+}
+
+function finalizeBoardChange(state, nextBoard, nextNotes, nextOwners) {
+    const spec = getVariantSpec(resolveVariantForState(state));
+    const conflicts = findConflicts(nextBoard, spec.id);
+    const filledCount = countFilledCells(nextBoard, spec.id);
+    const solved = filledCount === spec.totalCells && conflicts.length === 0;
+
+    return {
+        ...state,
+        board: nextBoard,
+        notes: nextNotes,
+        cellOwners: nextOwners,
+        conflicts,
+        filledCount,
+        status: solved ? 'solved' : 'in_progress',
     };
 }
 
@@ -175,16 +206,7 @@ export function setCellValue(state, index, value, { recordHistory = true, owner 
     const nextBoard = [...state.board];
     const nextNotes = cloneNotes(state.notes);
     const nextOwners = cloneOwners(state.cellOwners, spec.totalCells);
-    const nextHistory = recordHistory
-        ? [
-            ...state.history.slice(-49),
-            {
-                board: [...state.board],
-                notes: cloneNotes(state.notes),
-                cellOwners: cloneOwners(state.cellOwners, spec.totalCells),
-            },
-        ]
-        : state.history;
+    const nextHistory = recordBoardHistory(state, recordHistory);
 
     nextBoard[index] = value;
     nextOwners[index] = value === 0 ? null : owner;
@@ -199,20 +221,7 @@ export function setCellValue(state, index, value, { recordHistory = true, owner 
         }
     }
 
-    const conflicts = findConflicts(nextBoard, spec.id);
-    const filledCount = countFilledCells(nextBoard, spec.id);
-    const solved = filledCount === spec.totalCells && conflicts.length === 0;
-
-    return {
-        ...state,
-        board: nextBoard,
-        notes: nextNotes,
-        cellOwners: nextOwners,
-        conflicts,
-        filledCount,
-        status: solved ? 'solved' : 'in_progress',
-        history: nextHistory,
-    };
+    return { ...finalizeBoardChange(state, nextBoard, nextNotes, nextOwners), history: nextHistory };
 }
 
 export function toggleCellNote(state, index, digit, { recordHistory = true } = {}) {
@@ -234,16 +243,7 @@ export function toggleCellNote(state, index, digit, { recordHistory = true } = {
     }
 
     const nextNotes = cloneNotes(state.notes);
-    const nextHistory = recordHistory
-        ? [
-            ...state.history.slice(-49),
-            {
-                board: [...state.board],
-                notes: cloneNotes(state.notes),
-                cellOwners: cloneOwners(state.cellOwners, spec.totalCells),
-            },
-        ]
-        : state.history;
+    const nextHistory = recordBoardHistory(state, recordHistory);
 
     const current = nextNotes[index];
     if (current.includes(digit)) {
@@ -274,14 +274,7 @@ export function fillCandidateNotes(state) {
     return {
         ...state,
         notes: nextNotes,
-        history: [
-            ...state.history.slice(-49),
-            {
-                board: [...state.board],
-                notes: cloneNotes(state.notes),
-                cellOwners: cloneOwners(state.cellOwners, spec.totalCells),
-            },
-        ],
+        history: recordBoardHistory(state),
     };
 }
 
@@ -294,14 +287,7 @@ export function clearAllNotes(state) {
     return {
         ...state,
         notes: Array.from({ length: spec.totalCells }, () => []),
-        history: [
-            ...state.history.slice(-49),
-            {
-                board: [...state.board],
-                notes: cloneNotes(state.notes),
-                cellOwners: cloneOwners(state.cellOwners, spec.totalCells),
-            },
-        ],
+        history: recordBoardHistory(state),
     };
 }
 
@@ -336,19 +322,7 @@ export function applyRemoteCellPatch(state, { index, value, notes = null, owner 
             .sort((a, b) => a - b);
     }
 
-    const conflicts = findConflicts(nextBoard, spec.id);
-    const filledCount = countFilledCells(nextBoard, spec.id);
-    const solved = filledCount === spec.totalCells && conflicts.length === 0;
-
-    return {
-        ...state,
-        board: nextBoard,
-        notes: nextNotes,
-        cellOwners: nextOwners,
-        conflicts,
-        filledCount,
-        status: solved ? 'solved' : 'in_progress',
-    };
+    return finalizeBoardChange(state, nextBoard, nextNotes, nextOwners);
 }
 
 export function undoLastMove(state) {
@@ -381,6 +355,7 @@ export function serializeGameState(state) {
     return {
         variant: spec.id,
         difficulty: state.difficulty,
+        requestedDifficulty: state.requestedDifficulty || state.difficulty,
         board: state.board,
         givens: state.givens,
         solution: state.solution,
@@ -429,6 +404,7 @@ export function hydrateGameState(raw) {
         boxCols: spec.boxCols,
         maxDigit: spec.maxDigit,
         difficulty: raw.difficulty || 'medium',
+        requestedDifficulty: Object.hasOwn(spec.presets, raw.requestedDifficulty) ? raw.requestedDifficulty : (raw.difficulty || 'medium'),
         board,
         givens,
         solution,

@@ -37,6 +37,24 @@ import { BottomNav } from './components/BottomNav.jsx';
 import { SettingsPanel } from './components/SettingsPanel.jsx';
 import { LegalPage } from './components/LegalPage.jsx';
 
+function getRestartState(messages, isCoopSession, partnerOnline, gameState, rematchRequestedBy, myRole) {
+    let restartLabel = messages.newPuzzle;
+    let restartDisabled = false;
+    const isWaitingForRematch = isCoopSession && Boolean(rematchRequestedBy && rematchRequestedBy === myRole);
+    if (isCoopSession) {
+        if (!partnerOnline && gameState.status !== 'solved') {
+            restartLabel = messages.newPuzzle;
+        } else if (isWaitingForRematch) {
+            restartLabel = messages.waitingPartner;
+            restartDisabled = true;
+        } else if (rematchRequestedBy) {
+            restartLabel = messages.acceptNewPuzzle;
+        }
+    }
+
+    return { restartLabel, restartDisabled, isWaitingForRematch };
+}
+
 export function App() {
     const isNativeApp = isNativeCapacitorApp();
     const initialRoute = useMemo(() => parseInitialRoute(), []);
@@ -152,32 +170,7 @@ export function App() {
     });
 
     // Live refs to avoid stale closures inside WebSocket event handlers
-    const stateRef = useRef({
-        navTab,
-        isPlayingGame,
-        mode,
-        difficulty,
-        variant,
-        isSpectating,
-        onlineGameId,
-        myRole,
-        playerName,
-        joinPolicy,
-        gameState,
-        boardBackground,
-        rematchRequestedBy,
-        currentMembers,
-        hintsMap,
-        selectedIndex,
-        activeDigit,
-        isHelpOpen,
-        pendingConfirm,
-        incomingJoinRequests,
-        pendingJoinRequest,
-        pendingHint,
-        activeLobbyRooms,
-        messages,
-    });
+    const stateRef = useRef({});
     stateRef.current = {
         navTab,
         isPlayingGame,
@@ -237,7 +230,7 @@ export function App() {
         } else {
             sfx.playCorrectDigit();
         }
-    }, []);
+    }, [soundEffectsRef]);
 
     useEffect(() => {
         soundEffectsRef.current?.setRetroMode?.(effectiveRetroMode);
@@ -322,7 +315,7 @@ export function App() {
         setTimeout(() => {
             setFloatingReactions((prev) => prev.filter((item) => item.id !== id));
         }, 1850);
-    }, []);
+    }, [soundEffectsRef]);
 
     const {
         persistSnapshotIfNeeded,
@@ -466,9 +459,9 @@ export function App() {
 
     const handleShiftWithKonami = useCallback((axis, dir) => {
         if (isRetroMode) return;
-        const directionKey = axis === 'row'
-            ? (dir < 0 ? 'up' : 'down')
-            : (dir < 0 ? 'left' : 'right');
+        const rowDirection = dir < 0 ? 'up' : 'down';
+        const colDirection = dir < 0 ? 'left' : 'right';
+        const directionKey = axis === 'row' ? rowDirection : colDirection;
         handleShift(axis, dir);
         handleKonamiInput(directionKey);
     }, [handleKonamiInput, handleShift, isRetroMode]);
@@ -599,23 +592,48 @@ export function App() {
 
     const activeBoardVariant = gameState.variant || inferVariantFromBoardLength(gameState.board?.length);
 
-    let restartLabel = messages.newPuzzle;
-    let restartDisabled = false;
-    const isWaitingForRematch = isCoopSession && Boolean(rematchRequestedBy && rematchRequestedBy === myRole);
-    if (isCoopSession) {
-        if (!partnerOnline && gameState.status !== 'solved') {
-            restartLabel = messages.newPuzzle;
-        } else if (isWaitingForRematch) {
-            restartLabel = messages.waitingPartner;
-            restartDisabled = true;
-        } else if (rematchRequestedBy) {
-            restartLabel = messages.acceptNewPuzzle;
-        }
-    }
+    const { restartLabel, restartDisabled, isWaitingForRematch } = getRestartState(
+        messages, isCoopSession, partnerOnline, gameState, rematchRequestedBy, myRole,
+    );
 
     const showLegalPage = !isNativeApp && Boolean(legalPage);
     const showBottomNav = showLegalPage || !((navTab === 'play' && isPlayingGame) || (navTab === 'watch' && isSpectating));
     const showGlobalRetroBar = isRetroMode && (showLegalPage || navTab !== 'play' || !isPlayingGame);
+
+    const sharedGameViewProps = {
+        connectionStatus: connectionStatus,
+        mode: mode,
+        myRole: myRole,
+        myClientId: onlineClientRef.current?.clientId || null,
+        currentMembers: currentMembers,
+        spectatedGameMode: spectatedGameMode,
+        gameState: gameState,
+        ticTacToeGame: ticTacToe.challenge.game,
+        onTicTacToeMove: ticTacToe.onMove,
+        onReconnect: handleReconnect,
+        onContinueSolo: handleContinueSolo,
+        selectedIndex: selectedIndex,
+        hintsByCell: hintsByCell,
+        floatingReactions: floatingReactions,
+        cellRefs: cellRefs,
+        onCellSelect: handleCellSelect,
+        unitCelebration: unitCelebration,
+        hintHighlight: hintHighlight,
+        fistBump: fistBump,
+        boardBackground: boardBackground,
+        actionFeedback: actionFeedback,
+        isCoopSession: isCoopSession,
+        restartLabel: restartLabel,
+        restartDisabled: restartDisabled,
+        onPlayAgain: handleNewPuzzleAction,
+        onBackToSetup: handleBackToSetup,
+        activeBoardVariant: activeBoardVariant,
+        onSelectHint: (idx) => {
+                            focusCell(idx);
+                            cellRefs.current[idx]?.focus();
+                        },
+        messages: messages,
+    };
 
     return (
         <>
@@ -777,41 +795,15 @@ export function App() {
                                 </div>
                             </div>
                         )}
-                        connectionStatus={connectionStatus}
-                        mode={mode}
+                        {...sharedGameViewProps}
+
                         isSpectating={false}
-                        myRole={myRole}
-                        myClientId={onlineClientRef.current?.clientId || null}
-                        currentMembers={currentMembers}
-                        spectatedGameMode={spectatedGameMode}
-                        gameState={gameState}
-                        ticTacToeGame={ticTacToe.challenge.game}
-                        onTicTacToeMove={ticTacToe.onMove}
-                        onReconnect={handleReconnect}
-                        onContinueSolo={handleContinueSolo}
-                        selectedIndex={selectedIndex}
+
                         activeDigit={activeDigit}
-                        hintsByCell={hintsByCell}
-                        floatingReactions={floatingReactions}
-                        cellRefs={cellRefs}
-                        onCellSelect={handleCellSelect}
+
                         playerCursorIndex={null}
                         partnerCursorIndices={playPartnerCursorIndices}
-                        unitCelebration={unitCelebration}
-                        hintHighlight={hintHighlight}
-                        fistBump={fistBump}
-                        boardBackground={boardBackground}
-                        actionFeedback={actionFeedback}
-                        isCoopSession={isCoopSession}
-                        restartLabel={restartLabel}
-                        restartDisabled={restartDisabled}
-                        onPlayAgain={handleNewPuzzleAction}
-                        onBackToSetup={handleBackToSetup}
-                        activeBoardVariant={activeBoardVariant}
-                        onSelectHint={(idx) => {
-                            focusCell(idx);
-                            cellRefs.current[idx]?.focus();
-                        }}
+
                         onApplyHint={applySpectatorHint}
                         bottomControls={(
                             <PlayerControls
@@ -841,7 +833,7 @@ export function App() {
                                 messages={messages}
                             />
                         )}
-                        messages={messages}
+
                     />
                 )}
 
@@ -904,41 +896,15 @@ export function App() {
                                 </div>
                             </div>
                         )}
-                        connectionStatus={connectionStatus}
-                        mode={mode}
+                        {...sharedGameViewProps}
+
                         isSpectating
-                        myRole={myRole}
-                        myClientId={onlineClientRef.current?.clientId || null}
-                        currentMembers={currentMembers}
-                        spectatedGameMode={spectatedGameMode}
-                        gameState={gameState}
-                        ticTacToeGame={ticTacToe.challenge.game}
-                        onTicTacToeMove={ticTacToe.onMove}
-                        onReconnect={handleReconnect}
-                        onContinueSolo={handleContinueSolo}
-                        selectedIndex={selectedIndex}
+
                         activeDigit={selectedIndex === null ? remoteActiveDigit : activeDigit}
-                        hintsByCell={hintsByCell}
-                        floatingReactions={floatingReactions}
-                        cellRefs={cellRefs}
-                        onCellSelect={handleCellSelect}
+
                         playerCursorIndex={hostCursorIndex}
                         partnerCursorIndices={watchPartnerCursorIndices}
-                        unitCelebration={unitCelebration}
-                        hintHighlight={hintHighlight}
-                        fistBump={fistBump}
-                        boardBackground={boardBackground}
-                        actionFeedback={actionFeedback}
-                        isCoopSession={isCoopSession}
-                        restartLabel={restartLabel}
-                        restartDisabled={restartDisabled}
-                        onPlayAgain={handleNewPuzzleAction}
-                        onBackToSetup={handleBackToSetup}
-                        activeBoardVariant={activeBoardVariant}
-                        onSelectHint={(idx) => {
-                            focusCell(idx);
-                            cellRefs.current[idx]?.focus();
-                        }}
+
                         onApplyHint={() => {}}
                         bottomControls={(
                             <WatcherInteractions
@@ -958,7 +924,7 @@ export function App() {
                                 messages={messages}
                             />
                         )}
-                        messages={messages}
+
                     />
                 )}
 
