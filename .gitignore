@@ -30,3 +30,6 @@ Thumbs.db
 /test-results/
 /playwright-report/
 /coverage/
+
+/tools/local-bot/node_modules/
+/tools/local-bot/.build/

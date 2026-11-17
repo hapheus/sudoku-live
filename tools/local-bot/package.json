@@ -1,0 +1,14 @@
+{
+  "name": "sudoku-shift-local-bot",
+  "private": true,
+  "type": "module",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "tsx --test tests/*.test.ts",
+    "test:integration": "tsx --test --test-concurrency=1 tests/integration/*.test.ts"
+  },
+  "dependencies": { "centrifuge": "5.8.0" },
+  "devDependencies": { "esbuild": "^0.28.1", "playwright": "^1.65.0", "tsx": "^4.21.0" }
+}

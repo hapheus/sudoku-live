@@ -94,3 +94,7 @@ npm run e2e             # Playwright headless Chromium + axe-core E2E suite
 
 - See [CONTRIBUTING.md](CONTRIBUTING.md) for development conventions and commit guidelines.
 - Licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE) (`PolyForm-Noncommercial-1.0.0`).
+
+## Local bots
+
+Run separately built bots with `npm run bot`; see the [local bot guide](tools/local-bot/README.md) for setup, headed mode, counts and production WebSocket configuration. The tool is excluded from app release artifacts.

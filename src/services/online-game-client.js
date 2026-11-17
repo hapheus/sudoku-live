@@ -167,7 +167,9 @@ export class OnlineGameClient {
         const hist = await sub.history({ limit: 25 });
         if (this.gameChannel !== sub || !Array.isArray(hist?.publications)) return;
         if (this.gameRole === 'host' && this.gameMode === 'solo') return;
+        const historicalClients = new Set();
         for (const pub of replayPublications(hist.publications)) {
+            if (pub?.info?.client) historicalClients.add(pub.info.client);
             const payload = pub?.data;
             if (!payload || !payload.type || payload.type === PRESENCE_ANNOUNCE) {
                 continue;
@@ -187,7 +189,15 @@ export class OnlineGameClient {
             if (RECOVERABLE_EVENTS.has(payload.type)) {
                 onEvent(payload.type, payload.data || {});
             }
-        }    }
+        }
+        // History may contain a previous transport for a still-running player.
+        // Keep live bindings; retired transports must not block that player's reconnect.
+        for (const serverClientId of historicalClients) {
+            if (!this.activeServerClients.has(serverClientId)) {
+                this.senderIdentityGuard.releaseServerClient(serverClientId);
+            }
+        }
+    }
 
     handlePresenceAnnouncement(ctx, payload, { onIncompatibleClient, onPresenceChange, onMemberJoin, finalizeInitialPresence }) {
         const sc = ctx?.info?.client || payload.data?.serverClientId || payload.data?.id;
@@ -354,6 +364,7 @@ export class OnlineGameClient {
 
             this.clearPresenceSettleTimer();
             this.gameMembersByServerClient.clear();
+            this.senderIdentityGuard.clear();
             this.gamePresenceReady = false;
 
             let expectedRemoteCount = 0;
@@ -565,6 +576,8 @@ export class OnlineGameClient {
 
         sub.on('subscribed', async () => {
             if (this.lobbyChannel !== sub) return;
+            // Rebuild from current presence/history after an outage; leave events may have been missed.
+            this.lobbyRoomsByGameId.clear();
 
             try {
                 const res = await sub.presence();
