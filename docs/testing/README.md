@@ -61,6 +61,13 @@ Notes:
 
 See [the responsive region contract](responsive-layout.md) for screen placement, geometry assertions, safe-area and hinge handling, and outstanding device acceptance.
 
+## Board artwork
+
+See [the artwork optimization report](board-artwork/README.md) for the 100-image catalog,
+retired-ID migration, byte budgets, reproducible preparation, theme comparisons and
+outstanding physical-device checks. Run `npx playwright test tests/qa/board-artwork.spec.ts`
+for headless image, persistence, accessibility and visual regression checks.
+
 ## Local broker regression checks
 
 With an isolated Centrifugo using `docker/centrifugo/config.json` bound to local

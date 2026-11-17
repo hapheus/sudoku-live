@@ -1,8 +1,26 @@
 import { describe, expect, it, vi } from 'vitest';
 import { hydrateGameState } from '../src/domain/sudoku-engine.js';
+import boardCatalog from '../src/services/board-background-catalog.json';
 import { createRemoteEventRouter } from '../src/services/remote-event-router.js';
 
 describe('remote-event-router', () => {
+    it.each(['init', 'sync'])('migrates retired artwork in %s and avoids resetting it on every heartbeat', (type) => {
+        const raw = { variant: '3x3', board: Array(81).fill(0), givens: Array(81).fill(false), status: 'in_progress' };
+        const stateRef = { current: { gameState: hydrateGameState(raw), myRole: 'spectator', isSpectating: true } };
+        const setBoardBackground = vi.fn();
+        const persistSnapshotIfNeeded = vi.fn();
+        const router = createRemoteEventRouter({
+            stateRef, setBoardBackground, persistSnapshotIfNeeded, setGameState: vi.fn(), setSelectedIndex: vi.fn(),
+        });
+        const payload = { gameState: raw, boardBackgroundId: boardCatalog.retired[0] };
+        router(type, payload);
+        const replacement = stateRef.current.boardBackground;
+        expect(boardCatalog.selected).toContain(replacement.id);
+        expect(persistSnapshotIfNeeded).toHaveBeenCalledWith(expect.any(Object), undefined, replacement.id);
+        router('ping', payload);
+        expect(setBoardBackground).toHaveBeenCalledTimes(1);
+    });
+
     it('routes join-policy and reaction events cleanly', () => {
         const setHostJoinPolicy = vi.fn();
         const triggerFloatingReaction = vi.fn();

@@ -2631,11 +2631,14 @@ body {
     height: 100%;
     object-fit: cover;
     object-position: center;
+    /* Blend into the theme's board surface; digits, notes and highlights stay opaque. */
+    opacity: 0.12;
     transform: scale(1.03);
-    transition: transform 1100ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: opacity 650ms ease, transform 1100ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .sudoku-board--has-artwork.sudoku-board--solved .sudoku-board__artwork-img {
+    opacity: 1;
     transform: scale(1);
 }
 

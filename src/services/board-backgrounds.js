@@ -1,3 +1,7 @@
+import boardCatalog from './board-background-catalog.json';
+
+const retiredBackgroundIds = new Set(boardCatalog.retired);
+
 const discoveredBoardModules = import.meta.glob(
     [
         '../assets/boards/*.webp',
@@ -123,7 +127,12 @@ export function getBoardBackgrounds(
 
 export function getBoardBackgroundById(id, backgrounds = getBoardBackgrounds()) {
     if (!id || !Array.isArray(backgrounds) || backgrounds.length === 0) return null;
-    return backgrounds.find((bg) => bg.id === id) || null;
+    const existing = backgrounds.find((bg) => bg.id === id);
+    if (existing) return existing;
+    if (!retiredBackgroundIds.has(id)) return null;
+    // Freeze replacement targets in the catalog so appending new artwork cannot remap old saves.
+    const replacementId = boardCatalog.selected[hashSeed(id) % boardCatalog.selected.length];
+    return backgrounds.find((bg) => bg.id === replacementId) || null;
 }
 
 export function selectBoardBackground({

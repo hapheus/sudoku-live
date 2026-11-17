@@ -1,0 +1,130 @@
+[
+  {
+    "kind": "detailed",
+    "id": "ce245fd4-17da-49e2-a79b-300bbac2b82d.webp",
+    "maxEdge": null,
+    "width": 816,
+    "quality": null,
+    "bytes": 249238
+  },
+  {
+    "kind": "detailed",
+    "id": "ce245fd4-17da-49e2-a79b-300bbac2b82d.webp",
+    "maxEdge": 640,
+    "width": 640,
+    "quality": 75,
+    "bytes": 154626
+  },
+  {
+    "kind": "detailed",
+    "id": "ce245fd4-17da-49e2-a79b-300bbac2b82d.webp",
+    "maxEdge": 1024,
+    "width": 816,
+    "quality": 65,
+    "bytes": 218944
+  },
+  {
+    "kind": "detailed",
+    "id": "ce245fd4-17da-49e2-a79b-300bbac2b82d.webp",
+    "maxEdge": 1024,
+    "width": 816,
+    "quality": 80,
+    "bytes": 258910
+  },
+  {
+    "kind": "dark",
+    "id": "b624e913-189e-47e2-a08d-b27cfaf80eb8.webp",
+    "maxEdge": null,
+    "width": 816,
+    "quality": null,
+    "bytes": 209798
+  },
+  {
+    "kind": "dark",
+    "id": "b624e913-189e-47e2-a08d-b27cfaf80eb8.webp",
+    "maxEdge": 640,
+    "width": 640,
+    "quality": 75,
+    "bytes": 129426
+  },
+  {
+    "kind": "dark",
+    "id": "b624e913-189e-47e2-a08d-b27cfaf80eb8.webp",
+    "maxEdge": 1024,
+    "width": 816,
+    "quality": 65,
+    "bytes": 190220
+  },
+  {
+    "kind": "dark",
+    "id": "b624e913-189e-47e2-a08d-b27cfaf80eb8.webp",
+    "maxEdge": 1024,
+    "width": 816,
+    "quality": 80,
+    "bytes": 220616
+  },
+  {
+    "kind": "gradient",
+    "id": "04774224-baba-4d8f-8017-7d7546715320.webp",
+    "maxEdge": null,
+    "width": 816,
+    "quality": null,
+    "bytes": 125440
+  },
+  {
+    "kind": "gradient",
+    "id": "04774224-baba-4d8f-8017-7d7546715320.webp",
+    "maxEdge": 640,
+    "width": 640,
+    "quality": 75,
+    "bytes": 69568
+  },
+  {
+    "kind": "gradient",
+    "id": "04774224-baba-4d8f-8017-7d7546715320.webp",
+    "maxEdge": 1024,
+    "width": 816,
+    "quality": 65,
+    "bytes": 106796
+  },
+  {
+    "kind": "gradient",
+    "id": "04774224-baba-4d8f-8017-7d7546715320.webp",
+    "maxEdge": 1024,
+    "width": 816,
+    "quality": 80,
+    "bytes": 127850
+  },
+  {
+    "kind": "featured",
+    "id": "alpenpanorama_mit_see_im_sonnenuntergang.webp",
+    "maxEdge": null,
+    "width": 1080,
+    "quality": null,
+    "bytes": 406706
+  },
+  {
+    "kind": "featured",
+    "id": "alpenpanorama_mit_see_im_sonnenuntergang.webp",
+    "maxEdge": 640,
+    "width": 640,
+    "quality": 75,
+    "bytes": 128810
+  },
+  {
+    "kind": "featured",
+    "id": "alpenpanorama_mit_see_im_sonnenuntergang.webp",
+    "maxEdge": 1024,
+    "width": 1024,
+    "quality": 65,
+    "bytes": 232024
+  },
+  {
+    "kind": "featured",
+    "id": "alpenpanorama_mit_see_im_sonnenuntergang.webp",
+    "maxEdge": 1024,
+    "width": 1024,
+    "quality": 80,
+    "bytes": 309310
+  }
+]

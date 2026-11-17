@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { readdirSync, statSync } from 'node:fs';
+import path from 'node:path';
+import boardCatalog from '../src/services/board-background-catalog.json';
 import {
     BOARD_SELECTION_STRATEGIES,
     DEFAULT_BOARD_SELECTION_STRATEGY,
@@ -33,14 +36,39 @@ const SAMPLE_BACKGROUNDS = [
 ];
 
 describe('board-backgrounds service', () => {
+    it('keeps the shipped artwork within its measured byte budgets', () => {
+        const directory = path.resolve('src/assets/boards');
+        const files = readdirSync(directory);
+        expect(files.sort()).toEqual([...boardCatalog.selected].sort());
+        const sizes = files.map((name) => statSync(path.join(directory, name)).size);
+        expect(Math.max(...sizes)).toBeLessThanOrEqual(280 * 1024);
+        expect(sizes.reduce((total, size) => total + size, 0)).toBeLessThanOrEqual(24 * 1024 * 1024);
+    });
+
     it('discovers optimized board artwork bundled under src/assets/boards', () => {
         const discovered = getBoardBackgrounds();
-        expect(discovered.length).toBeGreaterThanOrEqual(1);
+        expect(discovered.map((bg) => bg.id).sort()).toEqual([...boardCatalog.selected].sort());
+        expect(discovered).toHaveLength(100);
         const alpine = discovered.find((bg) => bg.id === 'alpenpanorama_mit_see_im_sonnenuntergang.webp');
         expect(alpine).toBeDefined();
         expect(alpine.title).toBe('Alpenpanorama mit See im Sonnenuntergang');
         expect(typeof alpine.src).toBe('string');
         expect(alpine.src.length).toBeGreaterThan(0);
+    });
+
+    it('resolves every retired selection to a fixed shipped image without depending on discovery order', () => {
+        const backgrounds = getBoardBackgrounds();
+        expect(boardCatalog.retired).toHaveLength(1150);
+        const extra = { id: 'future.webp', src: '/future.webp' };
+        for (const id of boardCatalog.retired) {
+            const replacement = getBoardBackgroundById(id, backgrounds);
+            expect(replacement).not.toBeNull();
+            expect(boardCatalog.selected).toContain(replacement.id);
+            expect(getBoardBackgroundById(id, [extra, ...backgrounds].reverse()).id).toBe(replacement.id);
+        }
+        expect(getBoardBackgroundById('unknown.webp', backgrounds)).toBeNull();
+        expect(getBoardBackgroundById(boardCatalog.retired[0], [])).toBeNull();
+        expect(getBoardBackgroundById(boardCatalog.retired[0], [extra])).toBeNull();
     });
 
     it('normalizes and sorts discovered modules by metadata order and filename', () => {

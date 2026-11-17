@@ -1,0 +1,243 @@
+{
+  "baselineCommit": "fde0dd5a2a6ab0fef2b34a6b69b6b684dbb3925b",
+  "before": {
+    "src/assets/boards": {
+      "files": 1250,
+      "bytes": 282650072,
+      "webpFiles": 1250,
+      "webpBytes": 282650072
+    },
+    "dist": {
+      "files": 1266,
+      "bytes": 306040991,
+      "webpFiles": 1250,
+      "webpBytes": 282650072
+    },
+    "ios/App/App/public": {
+      "files": 1268,
+      "bytes": 306040991,
+      "webpFiles": 1250,
+      "webpBytes": 282650072
+    }
+  },
+  "after": {
+    "src/assets/boards": {
+      "files": 100,
+      "bytes": 20372950,
+      "webpFiles": 100,
+      "webpBytes": 20372950
+    },
+    "dist": {
+      "files": 116,
+      "bytes": 43676938,
+      "webpFiles": 100,
+      "webpBytes": 20372950
+    },
+    "ios/App/App/public": {
+      "files": 118,
+      "bytes": 43676938,
+      "webpFiles": 100,
+      "webpBytes": 20372950
+    },
+    "dist-itch": {
+      "files": 116,
+      "bytes": 43679421,
+      "webpFiles": 100,
+      "webpBytes": 20372950
+    },
+    "itchZipBytes": 43117924
+  },
+  "geometry": [
+    {
+      "viewport": [
+        390,
+        844
+      ],
+      "width": 348.1400146484375,
+      "height": 348.1400146484375,
+      "dpr": 3,
+      "naturalWidth": 816
+    },
+    {
+      "viewport": [
+        844,
+        390
+      ],
+      "width": 311.05999755859375,
+      "height": 311.05999755859375,
+      "dpr": 3,
+      "naturalWidth": 816
+    },
+    {
+      "viewport": [
+        768,
+        1024
+      ],
+      "width": 469.6799621582031,
+      "height": 469.6799621582031,
+      "dpr": 2,
+      "naturalWidth": 816
+    },
+    {
+      "viewport": [
+        1024,
+        1366
+      ],
+      "width": 455.260009765625,
+      "height": 455.260009765625,
+      "dpr": 2,
+      "naturalWidth": 816
+    },
+    {
+      "viewport": [
+        1366,
+        1024
+      ],
+      "width": 455.260009765625,
+      "height": 455.260009765625,
+      "dpr": 2,
+      "naturalWidth": 816
+    },
+    {
+      "viewport": [
+        1440,
+        900
+      ],
+      "width": 455.260009765625,
+      "height": 455.260009765625,
+      "dpr": 1,
+      "naturalWidth": 816
+    },
+    {
+      "viewport": [
+        2560,
+        1440
+      ],
+      "width": 455.260009765625,
+      "height": 455.260009765625,
+      "dpr": 2,
+      "naturalWidth": 816
+    },
+    {
+      "viewport": [
+        899,
+        1400
+      ],
+      "width": 469.6799621582031,
+      "height": 469.6799621582031,
+      "dpr": 3,
+      "naturalWidth": 816
+    },
+    {
+      "viewport": [
+        1200,
+        800
+      ],
+      "width": 455.260009765625,
+      "height": 455.260009765625,
+      "dpr": 2,
+      "naturalWidth": 816
+    }
+  ],
+  "afterGeometry": [
+    {
+      "viewport": [
+        390,
+        844
+      ],
+      "duoEmulation": false,
+      "width": 348.1400146484375,
+      "height": 348.1400146484375,
+      "dpr": 3,
+      "naturalWidth": 816
+    },
+    {
+      "viewport": [
+        844,
+        390
+      ],
+      "duoEmulation": false,
+      "width": 311.05999755859375,
+      "height": 311.05999755859375,
+      "dpr": 3,
+      "naturalWidth": 816
+    },
+    {
+      "viewport": [
+        768,
+        1024
+      ],
+      "duoEmulation": false,
+      "width": 469.6799621582031,
+      "height": 469.6799621582031,
+      "dpr": 2,
+      "naturalWidth": 816
+    },
+    {
+      "viewport": [
+        1024,
+        1366
+      ],
+      "duoEmulation": false,
+      "width": 455.260009765625,
+      "height": 455.260009765625,
+      "dpr": 2,
+      "naturalWidth": 816
+    },
+    {
+      "viewport": [
+        1366,
+        1024
+      ],
+      "duoEmulation": false,
+      "width": 455.260009765625,
+      "height": 455.260009765625,
+      "dpr": 2,
+      "naturalWidth": 816
+    },
+    {
+      "viewport": [
+        1440,
+        900
+      ],
+      "duoEmulation": false,
+      "width": 455.260009765625,
+      "height": 455.260009765625,
+      "dpr": 1,
+      "naturalWidth": 816
+    },
+    {
+      "viewport": [
+        2560,
+        1440
+      ],
+      "duoEmulation": false,
+      "width": 455.260009765625,
+      "height": 455.260009765625,
+      "dpr": 2,
+      "naturalWidth": 816
+    },
+    {
+      "viewport": [
+        899,
+        1400
+      ],
+      "duoEmulation": false,
+      "width": 469.6799621582031,
+      "height": 469.6799621582031,
+      "dpr": 3,
+      "naturalWidth": 816
+    },
+    {
+      "viewport": [
+        1200,
+        800
+      ],
+      "duoEmulation": true,
+      "width": 512.93994140625,
+      "height": 512.93994140625,
+      "dpr": 2,
+      "naturalWidth": 816
+    }
+  ]
+}

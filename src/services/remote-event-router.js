@@ -32,7 +32,7 @@ function resolveSyncedBackground(ctx, cur, boardBackgroundId) {
         return cur.boardBackground;
     }
     const resolvedBg = getBoardBackgroundById(boardBackgroundId);
-    if (!resolvedBg) return cur.boardBackground;
+    if (!resolvedBg || resolvedBg.id === cur.boardBackground?.id) return cur.boardBackground;
     ctx.setBoardBackground(resolvedBg);
     ctx.stateRef.current.boardBackground = resolvedBg;
     return resolvedBg;
