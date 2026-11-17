@@ -6,7 +6,7 @@ import { OnlineGameClient } from '../../../../src/services/online-game-client.js
 
 test('real co-op handshake, human edits and notes, guest departure, shifts and completion', { timeout: 30_000 }, async () => {
   const wsUrl = 'ws://127.0.0.1:18081/connection/websocket';
-  const manager = new BotManager({ wsUrl, slots: ['hard'], variant: '3x3', notesPolicy: 'always', random: () => 0.5,
+  const manager = new BotManager({ wsUrl, slots: ['hard'], joinPolicy: 'auto', variant: '3x3', notesPolicy: 'always', random: () => 0.5,
     durationRanges: { hard: [1_000, 1_000], expert: [1_000, 1_000] } });
   const guest = new OnlineGameClient({ wsConfig: { wsUrl } });
   const watcher = new OnlineGameClient({ wsConfig: { wsUrl } });

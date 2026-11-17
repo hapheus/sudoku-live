@@ -4,6 +4,7 @@ import { OnlineGameClient } from '../../../src/services/online-game-client.js';
 import { generateRandomPlayerName } from '../../../src/services/player-name.js';
 import { buildProtocolMetadata } from '../../../src/services/multiplayer-protocol.js';
 import type { GameSession } from './game-session.ts';
+import type { BotJoinPolicy } from './player-profile.ts';
 
 export interface HintPreviewPayload {
   mode: 'preview';
@@ -35,6 +36,7 @@ export class CentrifugoAdapter {
   private hostActiveDigit: number | null = null;
   private hostHintPreview: HintPreviewPayload | null = null;
   private events: { type: string; data: Record<string, unknown> }[] = [];
+  private readonly joinPolicy: BotJoinPolicy;
   private guestCount = 0;
   private joinReservedUntil = 0;
 
@@ -60,12 +62,15 @@ export class CentrifugoAdapter {
       && this.online.lobbyChannel?.state === 'subscribed';
   }
 
-  constructor(wsUrl: string) {
+  get playerName() { return this.online.playerName; }
+
+  constructor(wsUrl: string, joinPolicy: BotJoinPolicy = 'auto', previousName?: string) {
+    this.joinPolicy = joinPolicy;
     this.online = new OnlineGameClient({ wsConfig: { wsUrl } });
     // Browser session storage is shared across clients in one Node process.
     // Each bot is a separate player, not three tabs with the same sender ID.
     this.online.clientId = randomUUID();
-    this.online.playerName = generateRandomPlayerName();
+    do { this.online.playerName = generateRandomPlayerName(); } while (this.online.playerName === previousName);
   }
 
   private publish(channel: { publish(data: unknown): Promise<unknown> }, payload: { type: string; data: Record<string, unknown> }) {
@@ -78,14 +83,15 @@ export class CentrifugoAdapter {
     this.hostHintPreview = null;
     if (!this.online.client) this.online.ensureClient().on('error', () => {});
     const updateGuests = () => {
-      const count = (this.online.getGameMembers() || []).filter(member => member.role === 'guest').length;
+      const count = this.joinPolicy === 'auto'
+        ? (this.online.getGameMembers() || []).filter(member => member.role === 'guest').length : 0;
       if (count === this.guestCount) return;
       this.guestCount = count;
       this.online.gameMode = count ? 'online' : 'solo';
-      this.online.updateGameJoinPolicy('auto');
+      this.online.updateGameJoinPolicy(this.joinPolicy);
       this.revision++;
     };
-    const room = this.online.joinGameChannel(session.id, { role: 'host', gameMode: 'solo', joinPolicy: 'auto',
+    const room = this.online.joinGameChannel(session.id, { role: 'host', gameMode: 'solo', joinPolicy: this.joinPolicy,
       onPresenceChange: updateGuests, onMemberJoin: updateGuests, onMemberLeave: updateGuests,
       onEvent: (type, data) => {
         if ((type === 'join-request' || type === 'cell-update') && this.events.length < 256) this.events.push({ type, data });
@@ -95,7 +101,7 @@ export class CentrifugoAdapter {
     room.on('join', () => { this.revision++; });
     const lobby = this.online.joinLobby({ gameId: session.id, status: session.solved ? 'solved' : 'in_progress',
       gameMode: 'solo', difficulty: session.difficulty, variant: session.variant,
-      totalCells: session.snapshot().board.length, filledCount: session.filledCount, joinPolicy: 'auto' });
+      totalCells: session.snapshot().board.length, filledCount: session.filledCount, joinPolicy: this.joinPolicy });
     lobby.on('subscribed', () => { this.revision++; });
     await this.sync(session);
   }
@@ -105,7 +111,7 @@ export class CentrifugoAdapter {
       game_id: session.id, status, game_mode: this.hasGuests ? 'online' : 'solo', difficulty: session.difficulty,
       variant: session.variant, total_cells: session.snapshot().board.length,
       ...buildProtocolMetadata(), host_name: this.online.playerName, elapsed_seconds: session.snapshot().elapsedSeconds,
-      filled_count: session.filledCount, has_guest: this.hasGuests, join_policy: 'auto', updated_at: Date.now() };
+      filled_count: session.filledCount, has_guest: this.hasGuests, join_policy: this.joinPolicy, updated_at: Date.now() };
   }
 
   async receive(session: GameSession): Promise<Set<number>> {
@@ -120,12 +126,12 @@ export class CentrifugoAdapter {
         && data.requesterId !== this.online.clientId) {
         const room = this.online.gameChannel;
         if (!room) throw new Error('Room not initialized');
-        const accepted = !session.solved;
+        const accepted = !session.solved && this.joinPolicy === 'auto';
         if (accepted) this.joinReservedUntil = Date.now() + 15_000;
         await room.ready(5_000);
         await this.publish(room, { type: 'join-response', data: {
           requestId: data.requestId, requesterId: data.requesterId, accepted,
-          ...(accepted ? {} : { reason: 'solved' }), eventId: randomUUID(),
+          ...(accepted ? {} : { reason: session.solved ? 'solved' : 'disabled' }), eventId: randomUUID(),
         } });
         this.revision++;
       }
@@ -133,7 +139,7 @@ export class CentrifugoAdapter {
     // Apply patches only after every awaited response has succeeded. A failed
     // response must not drop earlier edits or hide them from pending-move logic.
     for (const { type, data } of batch) {
-      if (type === 'cell-update' && (this.hasGuests || Date.now() < this.joinReservedUntil)
+      if (type === 'cell-update' && this.joinPolicy === 'auto' && (this.hasGuests || Date.now() < this.joinReservedUntil)
         && session.applyGuestPatch(data)) {
         changed.add(Number(data.index));
         this.revision++;

@@ -5,6 +5,8 @@ import type { ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
+import { BotRunner } from '../../src/bot-runner.ts';
+import { createHeadedView } from '../../src/headed.mjs';
 import { OnlineGameClient } from '../../../../src/services/online-game-client.js';
 
 async function stop(child: ChildProcess) {
@@ -56,7 +58,7 @@ test('default, count, headed and combined CLI publish exactly N independent sess
         for (const line of lines) {
           try {
             const message = JSON.parse(line);
-            if (message.event === (args.includes('--headed' as never) ? 'headed-ready' : 'sessions')) {
+            if (!ready && message.event === (args.includes('--headed' as never) ? 'headed-ready' : 'sessions')) {
               assert.equal(message.games.length, expected);
               assert.equal(new Set(message.games.map(game => game.id)).size, expected);
               gameIds = message.games.map(game => game.id);
@@ -91,12 +93,14 @@ test('default, count, headed and combined CLI publish exactly N independent sess
                 } catch { /* SDK control frames do not carry publications. */ }
               });
             });
-            await page.goto(`http://127.0.0.1:15373/?game=${gameIds[0]}&watch=1`);
+            await page.goto(`http://127.0.0.1:15373/?game=${[...rooms][0] ?? gameIds[0]}&watch=1`);
             await page.locator('.sudoku-board').waitFor();
             // The app briefly renders a local placeholder before the host snapshot arrives.
             await waitFor(async () => receivedState !== null
               && await page.locator('.sudoku-cell').count() === receivedState.board.length
               && await page.locator('.sudoku-cell__digit').count() >= receivedState.board.filter(Boolean).length, 'authoritative Watch snapshot');
+            const cursor = page.locator('.sudoku-cell--partner-cursor, .sudoku-cell--player-cursor');
+            await waitFor(async () => await cursor.count() > 0, 'visible host cursor');
             const before = await page.locator('.sudoku-cell__digit').count();
             try {
               await waitFor(async () => await page.locator('.sudoku-cell__digit').count() > before, 'real bot placement rendered in Watch');
@@ -105,8 +109,6 @@ test('default, count, headed and combined CLI publish exactly N independent sess
               console.log(JSON.stringify({ before, after: await page.locator('.sudoku-cell__digit').count(), traffic, stderr }));
               throw error;
             }
-            const cursor = page.locator('.sudoku-cell--partner-cursor, .sudoku-cell--player-cursor');
-            await waitFor(async () => await cursor.count() > 0, 'visible host cursor');
             assert.equal(await page.locator('.sudoku-cell--conflict').count(), 0);
             await page.screenshot({ path: new URL('../../../../test-results/local-bot-watch.png', import.meta.url).pathname });
           } finally { await browser.close(); }
@@ -114,6 +116,28 @@ test('default, count, headed and combined CLI publish exactly N independent sess
       } finally { await stop(child); }
       await waitFor(() => rooms.size === 0, 'all sessions cleaned up');
     }
+    // Keeping the browser alive with zero game tabs is necessary during player gaps.
+    const runner = new BotRunner('easy', { wsUrl, variant: '2x3', notesPolicy: 'never', random: () => 0,
+      durationRanges: { easy: [1_000, 1_000], medium: [1_000, 1_000], hard: [1_000, 1_000], expert: [1_000, 1_000] } });
+    const view = await createHeadedView({ wsUrl, appUrl: 'http://127.0.0.1:15373' });
+    let closed = false;
+    view.onClose(() => { closed = true; });
+    try {
+      let now = 0;
+      await runner.step(now);
+      const first = runner.session()!;
+      await view.update([first]);
+      for (let tick = 0; tick < 1_000 && !first.solved; tick++) { now += 250; await runner.step(now); }
+      assert.equal(first.solved, true);
+      assert.equal(runner.session(), null);
+      await view.update([]);
+      await delay(200);
+      assert.equal(closed, false, 'a player gap must not terminate headed operation');
+      await runner.step(now + 10_000);
+      assert.notEqual(runner.session()?.id, first.id);
+      await view.update([runner.session()!]);
+      assert.equal(closed, false);
+    } finally { await view.close(); await runner.stop(); }
   } finally {
     observer.disconnect();
     vite.kill('SIGTERM');

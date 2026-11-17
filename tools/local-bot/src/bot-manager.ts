@@ -13,7 +13,7 @@ export class BotManager {
   private readonly runners: BotRunner[];
 
   constructor(options: RunnerOptions & { slots?: (Difficulty | 'random')[] }) {
-    const slots = options.slots ?? (['easy', 'medium', 'hard'] as Difficulty[]);
+    const slots = options.slots ?? Array<Difficulty | 'random'>(3).fill('random');
     this.runners = slots.map(difficulty => new BotRunner(difficulty, {
       ...options,
       notesPolicy: options.notesPolicy ?? (difficulty === 'random' ? 'random' : DEFAULT_NOTES_POLICY[difficulty]),

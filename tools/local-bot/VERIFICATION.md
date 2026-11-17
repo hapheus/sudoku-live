@@ -68,3 +68,31 @@ bot feature, independently of application release/device QA in #59 and #60.
   for the authoritative host snapshot before measuring new placements.
 - These timing and gesture rules simulate human play; no human indistinguishability
   benchmark is claimed. Production games were not created during this follow-up.
+
+## Player lifetime and randomized settings — 2026-11-17
+
+- Each slot now chooses a player profile once: 6x6/9x9, requested Easy/Medium/
+  Hard/Expert difficulty, Auto Accept Joins/No Joins Allowed, notes style, tempo
+  and a quota of 1–3 puzzles. Name, identity and settings stay stable over that
+  player's puzzles; each puzzle still has its own game ID.
+- Intermediate completions keep the board for five seconds. After the final
+  completion the player disconnects; the next player starts after a random
+  10–30-second gap with a new identity and a different ordinary generated name.
+  Slots pause independently, so the active-game count may temporarily be lower
+  than `--count`. Stop during a gap prevents subsequent starts.
+- Disabled joins are enforced in the wire handshake and guest-patch processing,
+  not just advertised. Presence and lobby metadata agree; spectators still work.
+- 42 bot unit tests passed, including actual completion of exactly 1, 2 and 3
+  puzzles with one identity, the gap boundary, subsequent profile resampling,
+  stopping while idle, and disabled-join rejection/edit protection.
+- All five isolated-backend integration cases passed together with Docker outage
+  recovery enabled. The new case accelerated only puzzle scheduling, then waited
+  a real 10-second gap while checking the old connection had left presence. A
+  replacement identity advertised a different variant and disabled joins, and
+  an actual join request was rejected over WebSocket.
+- The enhanced headed CLI cases passed separately as well: the real browser
+  stays alive after its last game tab is removed and opens the replacement game.
+  Real Watch placement/cursor checks and startup-failure cleanup still passed.
+- Local bot build, app production build and bot-exclusion scan passed. All QA
+  processes and the isolated backend were stopped afterward. No production games
+  were started; native SDK/packaging limitations noted above remain unchanged.

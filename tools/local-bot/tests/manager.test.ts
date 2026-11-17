@@ -4,11 +4,16 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { BotManager } from '../src/bot-manager.ts';
 import { memoryWebSocket } from './support/memory-websocket.ts';
 
+// Focused protocol/timing cases use explicit profiles; production defaults are random.
+function createManager(options: ConstructorParameters<typeof BotManager>[0]) {
+  return new BotManager({ slots: ['easy', 'medium', 'hard'], variant: '3x3', joinPolicy: 'auto', ...options });
+}
+
 test('three fixed solo slots publish compatible snapshots and valid moves independently', async () => {
   const network = memoryWebSocket();
   const previous = globalThis.WebSocket;
   globalThis.WebSocket = network.Socket as unknown as typeof WebSocket;
-  const manager = new BotManager({ wsUrl: 'ws://memory.test/connection/websocket', random: () => 0.5 });
+  const manager = createManager({ wsUrl: 'ws://memory.test/connection/websocket', random: () => 0.5 });
   try {
     await manager.step(0);
     const rooms = manager.sessions();
@@ -32,32 +37,11 @@ test('three fixed solo slots publish compatible snapshots and valid moves indepe
   assert.equal(network.sockets.size, 0);
 });
 
-test('completed games finish and are replaced with fresh IDs after a short pause', async () => {
-  const network = memoryWebSocket();
-  const previous = globalThis.WebSocket;
-  globalThis.WebSocket = network.Socket as unknown as typeof WebSocket;
-  const manager = new BotManager({ wsUrl: 'ws://memory.test', random: () => 0.5 });
-  try {
-    await manager.step(0);
-    const initial = manager.sessions().map(s => s.id);
-    for (let move = 1; move <= 82; move++) await manager.step(move * 200_000);
-    for (const id of initial) {
-      assert.ok(network.publications.some(p => p.channel === 'sudoku:lobby'
-        && p.data.data.game_id === id && p.data.data.status === 'finished'));
-    }
-    assert.equal(manager.sessions().some(s => initial.includes(s.id)), false);
-    assert.equal(manager.sessions().length, 3);
-  } finally {
-    await manager.stop();
-    globalThis.WebSocket = previous;
-  }
-});
-
 test('heartbeats republish current snapshots and lobby presence without making extra moves', async () => {
   const network = memoryWebSocket();
   const previous = globalThis.WebSocket;
   globalThis.WebSocket = network.Socket as unknown as typeof WebSocket;
-  const manager = new BotManager({ wsUrl: 'ws://memory.test', random: () => 0.5 });
+  const manager = createManager({ wsUrl: 'ws://memory.test', random: () => 0.5 });
   try {
     await manager.step(0);
     // Pause placements on a partner's mistake, isolating heartbeat from move timing.
@@ -79,7 +63,7 @@ test('overlapping ticks cannot duplicate moves and a failed slot retries the sam
   const network = memoryWebSocket();
   const previous = globalThis.WebSocket;
   globalThis.WebSocket = network.Socket as unknown as typeof WebSocket;
-  const manager = new BotManager({ wsUrl: 'ws://memory.test', random: () => 0.5 });
+  const manager = createManager({ wsUrl: 'ws://memory.test', random: () => 0.5 });
   try {
     await manager.step(0);
     const initial = manager.sessions().map(s => s.filledCount);
@@ -102,7 +86,7 @@ test('reconnected subscriptions resynchronize the same RAM games before the next
   const network = memoryWebSocket();
   const previous = globalThis.WebSocket;
   globalThis.WebSocket = network.Socket as unknown as typeof WebSocket;
-  const manager = new BotManager({ wsUrl: 'ws://memory.test', random: () => 0.5 });
+  const manager = createManager({ wsUrl: 'ws://memory.test', random: () => 0.5 });
   try {
     await manager.step(0);
     await manager.step(200_000);
@@ -127,7 +111,7 @@ test('custom target durations are used and a stopped worker cannot restart its s
   const network = memoryWebSocket();
   const previous = globalThis.WebSocket;
   globalThis.WebSocket = network.Socket as unknown as typeof WebSocket;
-  const manager = new BotManager({ wsUrl: 'ws://memory.test', random: () => 0.5,
+  const manager = createManager({ wsUrl: 'ws://memory.test', random: () => 0.5,
     durationRanges: { easy: [1_000, 1_000], medium: [1_000, 1_000], hard: [1_000, 1_000], expert: [1_000, 1_000] } });
   try {
     await manager.step(0);
@@ -138,7 +122,7 @@ test('custom target durations are used and a stopped worker cannot restart its s
     const count = network.publications.length;
     await manager.step(1_000_000);
     assert.equal(network.publications.length, count);
-    const fresh = new BotManager({ wsUrl: 'ws://memory.test' });
+    const fresh = createManager({ wsUrl: 'ws://memory.test' });
     try {
       await fresh.step(0);
       assert.equal(fresh.sessions().some(s => ids.includes(s.id)), false);
@@ -150,7 +134,7 @@ test('managed games are not reported ready until publication acknowledgements su
   const network = memoryWebSocket();
   const previous = globalThis.WebSocket;
   globalThis.WebSocket = network.Socket as unknown as typeof WebSocket;
-  const manager = new BotManager({ wsUrl: 'ws://memory.test', random: () => 0.5 });
+  const manager = createManager({ wsUrl: 'ws://memory.test', random: () => 0.5 });
   try {
     network.fail(true);
     await manager.step(0);
@@ -169,7 +153,7 @@ test('retry diagnostics expose safe SDK codes and connection states without serv
   const previous = globalThis.WebSocket;
   globalThis.WebSocket = network.Socket as unknown as typeof WebSocket;
   const failures: unknown[] = [];
-  const manager = new BotManager({ wsUrl: 'ws://memory.test',
+  const manager = createManager({ wsUrl: 'ws://memory.test',
     onError: (difficulty, diagnostic) => failures.push({ difficulty, ...diagnostic }) });
   try {
     network.fail(true);
@@ -186,7 +170,7 @@ test('slots occasionally shift and retry the same shifted snapshot without a sec
   const network = memoryWebSocket();
   const previous = globalThis.WebSocket;
   globalThis.WebSocket = network.Socket as unknown as typeof WebSocket;
-  const manager = new BotManager({ wsUrl: 'ws://memory.test', random: () => 0.5,
+  const manager = createManager({ wsUrl: 'ws://memory.test', random: () => 0.5,
     durationRanges: { easy: [1_000, 1_000], medium: [1_000, 1_000], hard: [1_000, 1_000], expert: [1_000, 1_000] } });
   try {
     await manager.step(0);
@@ -216,7 +200,7 @@ test('host cursors are visible before moves, hesitate occasionally and survive h
   const network = memoryWebSocket();
   const previous = globalThis.WebSocket;
   globalThis.WebSocket = network.Socket as unknown as typeof WebSocket;
-  const manager = new BotManager({ wsUrl: 'ws://memory.test', random: () => 0.1 });
+  const manager = createManager({ wsUrl: 'ws://memory.test', random: () => 0.1 });
   try {
     await manager.step(0);
     const room = `sudoku:game.${manager.sessions()[0].id}`;
@@ -250,7 +234,7 @@ test('all three bots automatically accept joins and preserve co-op placements wi
   const network = memoryWebSocket();
   const previous = globalThis.WebSocket;
   globalThis.WebSocket = network.Socket as unknown as typeof WebSocket;
-  const manager = new BotManager({ wsUrl: 'ws://memory.test', random: () => 0.5,
+  const manager = createManager({ wsUrl: 'ws://memory.test', random: () => 0.5,
     durationRanges: { easy: [1_000, 1_000], medium: [1_000, 1_000], hard: [1_000, 1_000], expert: [1_000, 1_000] } });
   const guests: InstanceType<typeof OnlineGameClient>[] = [];
   try {
@@ -301,7 +285,7 @@ test('a solved bot takes one little victory lap without changing the completed b
   const network = memoryWebSocket();
   const previous = globalThis.WebSocket;
   globalThis.WebSocket = network.Socket as unknown as typeof WebSocket;
-  const manager = new BotManager({ wsUrl: 'ws://memory.test', variant: '2x3', random: () => 0.5 });
+  const manager = createManager({ wsUrl: 'ws://memory.test', variant: '2x3', random: () => 0.5 });
   try {
     let now = 0;
     await manager.step(now);
@@ -327,7 +311,7 @@ test('a human edit wins over a failed bot publication and survives a failed join
   const network = memoryWebSocket();
   const previous = globalThis.WebSocket;
   globalThis.WebSocket = network.Socket as unknown as typeof WebSocket;
-  const manager = new BotManager({ wsUrl: 'ws://memory.test', random: () => 0.5 });
+  const manager = createManager({ wsUrl: 'ws://memory.test', random: () => 0.5 });
   const guest = new OnlineGameClient({ wsConfig: { wsUrl: 'ws://memory.test' } });
   try {
     await manager.step(0);
@@ -371,7 +355,7 @@ test('bots emit real hint-highlight preview/solve events, sync hintPreview, and 
   const network = memoryWebSocket();
   const previous = globalThis.WebSocket;
   globalThis.WebSocket = network.Socket as unknown as typeof WebSocket;
-  const manager = new BotManager({ wsUrl: 'ws://memory.test', slots: ['expert'], notesPolicy: 'never', random: () => 0.04 });
+  const manager = createManager({ wsUrl: 'ws://memory.test', slots: ['expert'], notesPolicy: 'never', random: () => 0.04 });
   const guest = new OnlineGameClient({ wsConfig: { wsUrl: 'ws://memory.test' } });
   const watcher = new OnlineGameClient({ wsConfig: { wsUrl: 'ws://memory.test' } });
   try {
@@ -445,7 +429,7 @@ test('guest Fill Candidates note updates (value: null, no owner) persist across 
   const network = memoryWebSocket();
   const previous = globalThis.WebSocket;
   globalThis.WebSocket = network.Socket as unknown as typeof WebSocket;
-  const manager = new BotManager({ wsUrl: 'ws://memory.test', random: () => 0.5,
+  const manager = createManager({ wsUrl: 'ws://memory.test', random: () => 0.5,
     durationRanges: { easy: [2_000, 2_000], medium: [2_000, 2_000], hard: [2_000, 2_000], expert: [2_000, 2_000] } });
   const guest = new OnlineGameClient({ wsConfig: { wsUrl: 'ws://memory.test' } });
   try {
@@ -489,7 +473,7 @@ test('three slots follow distinct notes policies: easy never, medium later, hard
   const network = memoryWebSocket();
   const previous = globalThis.WebSocket;
   globalThis.WebSocket = network.Socket as unknown as typeof WebSocket;
-  const manager = new BotManager({ wsUrl: 'ws://memory.test', random: () => 0.25 });
+  const manager = createManager({ wsUrl: 'ws://memory.test', random: () => 0.25 });
   try {
     await manager.step(0);
     const [easy, medium, hard] = manager.sessions();
@@ -519,7 +503,7 @@ test('randomized bot pool spawns 2..10 bots with mixed difficulties, 9x9/6x6 var
   let step = 0;
   const values = [0.05, 0.45, 0.85, 0.2, 0.65, 0.95];
   const random = () => values[step++ % values.length];
-  const manager = new BotManager({
+  const manager = createManager({
     wsUrl: 'ws://memory.test',
     slots: Array.from({ length: 6 }, () => 'random' as const),
     variant: 'random',
@@ -545,7 +529,7 @@ test('the normal scheduler plays a complete game with visible thinking, varied d
   globalThis.WebSocket = network.Socket as unknown as typeof WebSocket;
   let seed = 42;
   const random = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
-  const manager = new BotManager({ wsUrl: 'ws://memory.test', slots: ['expert'], variant: '2x3', notesPolicy: 'never', random });
+  const manager = createManager({ wsUrl: 'ws://memory.test', slots: ['expert'], variant: '2x3', notesPolicy: 'never', random });
   try {
     await manager.step(0);
     const session = manager.sessions()[0];

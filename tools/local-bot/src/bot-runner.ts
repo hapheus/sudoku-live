@@ -4,6 +4,9 @@ import { CentrifugoAdapter } from './centrifugo-adapter.ts';
 import { GameSession } from './game-session.ts';
 import type { Difficulty, Variant } from './game-session.ts';
 import { nextMovePause, pickTargetDuration } from './move-scheduler.ts';
+import { choosePlayerProfile, replacementDelay } from './player-profile.ts';
+import type { NotesPolicy, BotJoinPolicy } from './player-profile.ts';
+export type { NotesPolicy } from './player-profile.ts';
 
 const HINT_CHANCE: Record<string, number> = {
   full_house: 0.05,
@@ -15,26 +18,23 @@ const HINT_CHANCE: Record<string, number> = {
   fallback: 0.95,
 };
 
-export type NotesPolicy = 'always' | 'later' | 'never';
-
-const DIFFICULTIES: readonly Difficulty[] = ['easy', 'medium', 'hard'];
-const VARIANTS: readonly Variant[] = ['3x3', '2x3'];
-const NOTES_POLICIES: readonly NotesPolicy[] = ['always', 'later', 'never'];
-
 export interface RunnerOptions {
   wsUrl: string;
   variant?: Variant | 'random';
   random?: () => number;
   notesPolicy?: NotesPolicy | 'random';
+  joinPolicy?: BotJoinPolicy | 'random';
   onError?: (difficulty: Difficulty, diagnostic: ReturnType<CentrifugoAdapter['retryDiagnostic']>) => void;
   durationRanges?: Partial<Record<Difficulty, readonly [number, number]>>;
 }
 
 export class BotRunner {
-  private readonly adapter: CentrifugoAdapter;
+  private adapter: CentrifugoAdapter;
+  private profile: ReturnType<typeof choosePlayerProfile>;
+  private puzzlesLeft: number;
+  private nextPlayerAt: number | null = null;
   private readonly difficultySetting: Difficulty | 'random';
   private activeDifficulty: Difficulty;
-  private activeNotesPolicy: NotesPolicy = 'later';
   private readonly options: RunnerOptions;
   private current: GameSession | null = null;
   private started = false;
@@ -47,7 +47,6 @@ export class BotRunner {
   private failures = 0;
   private targetDurationMs = 0;
   private totalMoves = 0;
-  private readonly tempo: number;
   private flowStreak = 0;
   private pendingFluentMove = false;
   private pendingMove: ReturnType<GameSession['advance']> = null;
@@ -62,10 +61,11 @@ export class BotRunner {
 
   constructor(difficulty: Difficulty | 'random', options: RunnerOptions) {
     this.difficultySetting = difficulty;
-    this.activeDifficulty = difficulty === 'random' ? 'easy' : difficulty;
     this.options = options;
-    this.tempo = 0.85 + (options.random || Math.random)() * 0.3;
-    this.adapter = new CentrifugoAdapter(options.wsUrl);
+    this.profile = choosePlayerProfile({ ...options, difficulty }, options.random);
+    this.activeDifficulty = this.profile.difficulty;
+    this.puzzlesLeft = this.profile.puzzles;
+    this.adapter = new CentrifugoAdapter(options.wsUrl, this.profile.joinPolicy);
   }
 
   session() { return this.current; }
@@ -84,31 +84,20 @@ export class BotRunner {
 
   private async tick(now: number) {
     const random = this.options.random || Math.random;
-    if (this.current?.solved && now >= this.rotateAt) {
-      await this.adapter.finish(this.current);
-      this.adapter.close();
-      this.current = null;
-      this.started = false;
-      this.rotateAt = Infinity;
-      this.cursorSteps = [];
-      this.pendingHintStep = null;
+    if (this.current?.solved && now >= this.rotateAt) await this.finishGame(now, random);
+    if (this.nextPlayerAt !== null) {
+      if (now < this.nextPlayerAt) return;
+      const previousName = this.adapter.playerName;
+      this.profile = choosePlayerProfile({ ...this.options, difficulty: this.difficultySetting }, random);
+      this.activeDifficulty = this.profile.difficulty;
+      this.puzzlesLeft = this.profile.puzzles;
+      this.adapter = new CentrifugoAdapter(this.options.wsUrl, this.profile.joinPolicy, previousName);
+      this.nextPlayerAt = null;
     }
-    if (!this.current) {
-      this.activeDifficulty = this.difficultySetting === 'random'
-        ? DIFFICULTIES[Math.floor(random() * DIFFICULTIES.length)]
-        : this.difficultySetting;
-      const variant = !this.options.variant || this.options.variant === 'random'
-        ? (this.options.variant === 'random' ? VARIANTS[Math.floor(random() * VARIANTS.length)] : '3x3')
-        : this.options.variant;
-      const policySetting = this.options.notesPolicy ?? 'later';
-      this.activeNotesPolicy = policySetting === 'random'
-        ? NOTES_POLICIES[Math.floor(random() * NOTES_POLICIES.length)]
-        : policySetting;
-      this.current = new GameSession(this.activeDifficulty, variant, random);
-    }
+    if (!this.current) this.current = new GameSession(this.profile.difficulty, this.profile.variant, random);
     const session = this.current;
     if (!this.started) {
-      if (this.activeNotesPolicy === 'always') session.fillCandidates();
+      if (this.profile.notesPolicy === 'always') session.fillCandidates();
       await this.adapter.open(session);
       this.flowStreak = 0;
       this.targetDurationMs = pickTargetDuration(session.difficulty, session.variant, random,
@@ -137,7 +126,7 @@ export class BotRunner {
         await this.planCursor(session, now, Math.max(500, this.due - now));
       }
       else await this.adapter.cursor(null);
-      if (session.solved && this.rotateAt === Infinity) this.rotateAt = now + 20_000;
+      if (session.solved && this.rotateAt === Infinity) this.rotateAt = now + (this.puzzlesLeft === 1 ? 0 : 5_000);
     }
     if (!this.pendingShift) session.updateElapsed(now - this.startedAt);
     if (this.adapter.needsSync || now >= this.heartbeatAt) {
@@ -145,13 +134,14 @@ export class BotRunner {
       this.heartbeatAt = now + 10_000;
     }
     await this.flushCursor(now);
+    if (session.solved && now >= this.rotateAt) { await this.finishGame(now, random); return; }
     if (!session.canAutoplay) return;
     if (!this.pendingMove && !this.pendingShift && (now < this.due || session.solved)) return;
     if (!this.pendingMove && !this.pendingShift && this.adapter.shiftsAllowed && this.movesSinceShift >= this.nextShift && session.remaining > 3) {
       const shift = session.shift();
       if (shift) this.pendingShift = { ...shift, snapshot: session.snapshot() };
     }
-    if (this.activeNotesPolicy === 'later'
+    if (this.profile.notesPolicy === 'later'
       && !this.pendingMove && !this.pendingShift && !session.hasNotes && session.remaining > 4
       && this.targetDurationMs >= 15_000
       && (this.movesSinceNotes >= this.nextNotes
@@ -203,14 +193,29 @@ export class BotRunner {
     this.movesSinceNotes++;
     this.due = now + (session.solved ? 0 : this.computePause(session, now, random));
     if (session.solved) {
-      this.rotateAt = now + 10_000 + random() * 20_000;
+      this.rotateAt = now + (this.puzzlesLeft === 1 ? 0 : 5_000);
       const size = session.variant === '2x3' ? 6 : 9;
       // One restrained victory lap, then park in the centre until rotation.
       this.cursorSteps = [0, size - 1, size * size - 1, size * (size - 1), Math.floor(size * size / 2)]
         .map((index, step) => ({ at: now + step * 900, index, digit: null }));
       await this.flushCursor(now);
       await this.adapter.sync(session);
+      if (this.puzzlesLeft === 1) await this.finishGame(now, random);
     } else await this.planCursor(session, now, this.due - now, true);
+  }
+
+  private async finishGame(now: number, random: () => number) {
+    await this.adapter.finish(this.current!);
+    this.adapter.close();
+    this.current = null;
+    this.started = false;
+    this.rotateAt = Infinity;
+    this.cursorSteps = [];
+    this.pendingHintStep = null;
+    this.pendingMove = null;
+    this.pendingShift = null;
+    this.puzzlesLeft--;
+    if (this.puzzlesLeft === 0) this.nextPlayerAt = now + replacementDelay(random);
   }
 
   private computePause(session: GameSession, now: number, random: () => number): number {
@@ -227,7 +232,7 @@ export class BotRunner {
       averageCandidates: next.averageCandidates,
       nearFocus: next.nearFocus,
       flowStreak: this.flowStreak,
-      tempo: this.tempo,
+      tempo: this.profile.tempo,
     }, remainingBudget, this.targetDurationMs, random);
   }
 

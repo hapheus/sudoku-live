@@ -18,7 +18,9 @@ Start the app and Centrifugo separately. The default backend is
 `ws://127.0.0.1:8081/connection/websocket`. Headless operation only needs Node;
 it does not launch Chromium or require an app server. `npm run build:bot` builds
 explicitly without starting sessions. `npm run bot -- --help` prints options.
-The count is an integer from 1 to 10; invalid or repeated flags fail before build
+The count is an integer from 1 to 10 and sets independent player slots. Slots
+pause during player replacement, so fewer games can be active temporarily.
+Invalid or repeated flags fail before build
 or connection. CLI options take precedence over environment variables.
 
 ## Production WebSocket
@@ -61,10 +63,25 @@ page loading has its own bounded timeout.
 
 ## Behavior and recovery
 
-Each bot gets a unique player identity, ordinary generated player name (for example `CalmOtter`) and game ID.
-Difficulty, 9x9/6x6 variant and notes policy vary between games. Puzzles and actual
-difficulty metadata come from the current app generator, including its rating
-fallbacks. Autoplay prefers logical opportunities and uses the stored solution
+Each player gets a unique identity and ordinary generated name (for example
+`CalmOtter`). At the start, the player randomly chooses 6x6 (the app's `2x3` box
+layout) or 9x9 (`3x3`), Easy/Medium/Hard/Expert difficulty, and either Auto Accept
+Joins (`auto`) or No Joins Allowed (`disabled`). Notes style and personal tempo
+are also chosen once. This profile stays the same for a randomly chosen 1–3
+completed puzzles. Each puzzle gets a fresh game ID; the player keeps their name
+and identity across those puzzles. Intermediate puzzles show the completed board
+for five seconds before the same player continues.
+
+After the last puzzle the player disconnects. The slot stays offline for a random
+10–30 seconds, then a new player starts with a fresh identity, a different ordinary
+name and a newly sampled profile. Each slot does this independently. Stopping the
+worker during a gap cancels future starts. Headed tabs close for departed games
+and reopen for new games; a gap with no active game tabs keeps the browser alive.
+
+Disabled joins are advertised in both presence and Watch and actually reject
+join requests and guest edits. Spectating still works. Auto-accept players use
+the ordinary co-op handshake. Puzzles and actual difficulty metadata come from
+the current app generator, including its honest rating fallbacks. Autoplay prefers logical opportunities and uses the stored solution
 when needed. Move timing is recalculated from the current technique, number of logical
 opportunities, average candidate count, proximity to the previous move and recent
 fluent moves. Obvious nearby placements come faster; difficult searches take
@@ -73,10 +90,9 @@ pauses and short runs of faster moves. The actual generated difficulty (includin
 an Expert rating) sets the initial pace. These are soft pace targets, so the last
 cell never waits out an arbitrary whole-game duration. Search cursors, hesitation,
 digit selection, notes, shifts and placements are actual protocol events visible
-in Watch. Partner edits and shifts trigger fresh analysis. Hints and automatic
-co-op joins reuse the source worker. Human edits protect givens; mistakes pause the bot
-until corrected. Shifts pause while a partner is present. Solved sessions rotate
-after a short cooldown.
+in Watch. Partner edits and shifts trigger fresh analysis. Hints and supported
+co-op interactions reuse the source worker. Human edits protect givens; mistakes pause the bot
+until corrected. Shifts pause while a partner is present.
 
 Connection loss retains the board and IDs in RAM. Reconnect publishes current
 snapshots; there is no offline catch-up burst. Restarting the process creates

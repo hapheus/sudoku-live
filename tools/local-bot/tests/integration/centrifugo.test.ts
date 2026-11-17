@@ -73,7 +73,7 @@ test('real Centrifugo exposes three worker games, late-watch snapshots, moves an
       assert.ok([...rooms.values()].every(room => ['easy', 'medium', 'hard', 'expert'].includes(room.difficulty)));
       for (const room of rooms.values()) {
         assert.equal(room.game_mode, 'solo');
-        assert.equal(room.join_policy, 'auto');
+        assert.ok(['auto', 'disabled'].includes(room.join_policy));
       }
       const ids = [...rooms.keys()].sort();
       const room = watcher.joinGameChannel(ids[0], { role: 'spectator', gameMode: 'solo', joinPolicy: 'auto',
