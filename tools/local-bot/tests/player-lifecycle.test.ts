@@ -70,8 +70,8 @@ test('No Joins Allowed rejects the handshake and ignores guest edits while spect
     await room.ready(1_000);
     await delay(10);
     const index = before.board.indexOf(0);
-    await room.publish({ type: 'join-request', data: { requestId: 'blocked', requesterId: visitor.clientId } });
-    await room.publish({ type: 'cell-update', data: { index, value: before.solution[index], owner: 'guest' } });
+    await room.publish({ type: 'join-request', data: visitor.buildOutgoingEnvelope({ requestId: 'blocked', requesterId: visitor.clientId }) });
+    await room.publish({ type: 'cell-update', data: visitor.buildOutgoingEnvelope({ index, value: before.solution[index], owner: 'guest' }) });
     await runner.step(1);
     const response = network.publications.findLast(p => p.data.type === 'join-response')!.data.data;
     assert.equal(response.accepted, false);

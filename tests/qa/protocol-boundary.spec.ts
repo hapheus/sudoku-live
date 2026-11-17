@@ -47,9 +47,14 @@ test.describe('isolated broker publication contracts', () => {
                 });
                 await expect.poll(() => viewer.evaluate(() => (window as any).__protocol.events.some((e: any) => e.data.eventId === 'valid-after-invalid'))).toBe(true);
                 expect(await viewer.evaluate(() => (window as any).__protocol.events.filter((e: any) => e.data.eventId?.startsWith('invalid-')))).toEqual([]);
+                await host.evaluate(() => {
+                    const client = (window as any).__protocol.client;
+                    return client.broadcastGameEvent(client.currentGameId, 'cell-update', { index: 1, value: null, notes: [1, 2], eventId: 'valid-note-only' });
+                });
+                await expect.poll(() => viewer.evaluate(() => (window as any).__protocol.events.find((e: any) => e.data.eventId === 'valid-note-only')?.data.notes)).toEqual([1, 2]);
                 await connect(late, 'spectator');
                 await expect.poll(() => late.evaluate(() => (window as any).__protocol.events.map((e: any) => e.data.eventId))).toContain('valid-after-invalid');
-                expect(await late.evaluate(() => (window as any).__protocol.events.map((e: any) => e.data.eventId))).toEqual(['valid-snapshot', 'valid-after-invalid']);
+                expect(await late.evaluate(() => (window as any).__protocol.events.map((e: any) => e.data.eventId))).toEqual(['valid-snapshot', 'valid-after-invalid', 'valid-note-only']);
             } finally {
                 await Promise.all(contexts.map((context) => context.close()));
             }

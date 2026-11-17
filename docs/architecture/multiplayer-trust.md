@@ -140,3 +140,11 @@ than being renewed on resume. A non-cached browser-history return mounts normall
 and restores supported saved state. Native suspension, lock/unlock, network changes
 and extended suspension require device-specific evidence in #59/#72; browser
 page-transition tests do not establish iOS/Android lifecycle acceptance.
+
+## Note-only cell patches (#76)
+
+`cell-update` retains the existing `value: null` sentinel used by app and bot note
+editing. It means no numeric board edit; valid notes still apply to an empty,
+editable cell. Numeric values, notes, indexes and ownership continue through the
+same validation. Null does not mean erase (numeric zero does), and this delivery
+compatibility does not replace heartbeat/revision work in #68.
