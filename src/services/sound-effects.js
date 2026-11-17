@@ -81,7 +81,7 @@ function scheduleTone(ctx, destination, {
 
 export function createSoundEffectsPlayer({
     contextFactory = null,
-    storage = typeof localStorage !== 'undefined' ? localStorage : null,
+    storage = getDefaultStorage('local'),
     win = typeof window !== 'undefined' ? window : null,
     masterVolume = null,
 } = {}) {

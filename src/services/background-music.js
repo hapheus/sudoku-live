@@ -80,7 +80,7 @@ export function createBackgroundMusicPlayer({
     random = Math.random,
     audioFactory = null,
     contextFactory = null,
-    storage = typeof localStorage !== 'undefined' ? localStorage : null,
+    storage = getDefaultStorage('local'),
     win = typeof window !== 'undefined' ? window : null,
     doc = typeof document !== 'undefined' ? document : null,
     defaultVolume = null,
