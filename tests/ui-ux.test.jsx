@@ -115,6 +115,8 @@ describe('UI/UX components & Solo persistence', () => {
             />,
         );
 
+        fireEvent.click(screen.getByRole('radio', { name: 'System' }));
+        expect(onChangeTheme).toHaveBeenCalledWith('system');
         fireEvent.click(screen.getByRole('radio', { name: 'Light' }));
         expect(onChangeTheme).toHaveBeenCalledWith('light');
 
@@ -184,7 +186,7 @@ describe('UI/UX components & Solo persistence', () => {
         expect(document.querySelectorAll('#settings-panel svg.settings-icon--volume')).toHaveLength(2);
         expect(document.querySelectorAll('#settings-panel svg.settings-icon--title')).toHaveLength(1);
         expect(document.querySelectorAll('#settings-panel svg.settings-icon--btn')).toHaveLength(1);
-        expect(document.querySelectorAll('#settings-panel svg.settings-icon--option')).toHaveLength(10);
+        expect(document.querySelectorAll('#settings-panel svg.settings-icon--option')).toHaveLength(11);
 
         fireEvent.click(screen.getByRole('button', { name: 'Open Guide' }));
         expect(onOpenGuide).toHaveBeenCalledTimes(1);

@@ -54,6 +54,7 @@ export function SettingsPanel({
 
     const isPlayerNameInvalid = draftPlayerName.length > 0 && !isValidPlayerName(draftPlayerName);
     const themeOptions = [
+        { value: 'system', label: messages.themeSystem, Icon: IconContrast },
         { value: 'dark', label: messages.themeDark, Icon: IconMoon },
         { value: 'light', label: messages.themeLight, Icon: IconSun },
     ];
@@ -155,7 +156,7 @@ export function SettingsPanel({
                 </div>
             </div>
 
-            <div className="settings-group settings-group--2col">
+            <div className="settings-group settings-group--2col settings-group--preferences">
                 <fieldset className="settings-fieldset">
                     <legend className="settings-fieldset__legend">
                         <span className="settings-fieldset__legend-inner">
@@ -163,7 +164,7 @@ export function SettingsPanel({
                             <span>{messages.settingsTheme}</span>
                         </span>
                     </legend>
-                    <div className="segmented-options segmented-options--2" role="radiogroup" aria-label={messages.settingsTheme}>
+                    <div className="segmented-options segmented-options--3" role="radiogroup" aria-label={messages.settingsTheme}>
                         {themeOptions.map((opt) => {
                             const active = theme === opt.value;
                             const OptionIcon = opt.Icon;
