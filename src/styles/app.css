@@ -4193,32 +4193,37 @@ body:has([data-stacked-layout])::before {
     grid-area: 2 / 1;
     display: grid;
     grid-template-rows: minmax(0, 1fr);
-    align-items: center;
+    align-items: end;
     min-width: 0;
     overflow: clip;
 }
 
 [data-stacked-layout] .gameplay-stage__lower-content {
     display: grid;
-    grid-template-columns: max-content minmax(0, 1fr);
-    grid-auto-rows: max-content;
-    align-content: center;
-    align-items: center;
-    gap: 0.25rem 0.5rem;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.25rem;
     min-width: 0;
-    padding: var(--pane-padding);
+    padding: var(--pane-padding) var(--pane-padding) 0;
     justify-self: center;
     width: calc(100% / var(--controls-scale, 1));
     transform: scale(var(--controls-scale, 1));
+    transform-origin: center bottom;
     transition-property: none;
 }
 
-[data-stacked-layout] .gameplay-stage__lower-content > :not(.game-top-bar, .spectator-bar, .gameplay-stage__status) {
-    grid-column: 1 / -1;
+[data-stacked-layout] .gameplay-stage__toolbar {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: center;
+    gap: 0.5rem;
+    margin-inline: calc(-1 * var(--pane-padding));
+    padding: var(--pane-padding);
+    background: var(--color-nav-bg);
+    border-top: 1px solid var(--color-border);
 }
 
 [data-stacked-layout] :is(.gameplay-stage__side, .gameplay-stage__guide) {
-    grid-area: auto / 1 / auto / -1;
+    grid-area: auto;
     max-width: none;
     gap: 0.25rem;
 }

@@ -171,8 +171,6 @@ export function GamePlayView({
 
                 <div className="gameplay-stage__lower" ref={lowerPaneRef}>
                     <div className="gameplay-stage__lower-content">
-                        {stackedLayout && topBar}
-                        {stackedLayout && status}
                         {stackedLayout && notifications}
                         {guide ? <div className="gameplay-stage__guide">{!stackedLayout && notifications}{guide}</div> : <div className="gameplay-stage__side">
 
@@ -203,6 +201,12 @@ export function GamePlayView({
                                 </>
                             )}
                         </div>}
+                        {stackedLayout && (
+                            <div className="gameplay-stage__toolbar">
+                                {topBar}
+                                {status}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

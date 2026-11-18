@@ -70,7 +70,12 @@ async function assertGameplayFits(page: Page, hinge: boolean) {
         const padding = parseFloat(style.paddingTop);
         const axes = document.querySelector('.board-col-axes')!.getBoundingClientRect().height;
         const root = document.documentElement;
+        const toolbar = lower.querySelector('.gameplay-stage__toolbar')?.getBoundingClientRect();
+        const content = lower.querySelector('.gameplay-stage__side, .gameplay-stage__guide')!.getBoundingClientRect();
         return {
+            toolbarAtBottom: Boolean(toolbar && toolbar.height > 0 &&
+                Math.abs(toolbar.bottom - lower.getBoundingClientRect().bottom) < 1 &&
+                content.bottom <= toolbar.top + 1),
             overflow, square: Math.abs(grid.height - grid.width),
             unusedHeight: board.clientHeight - 2 * padding - axes - parseFloat(style.fontSize) * 0.2 - grid.height,
             pageScroll: [root.scrollWidth - innerWidth, root.scrollHeight - innerHeight],
@@ -78,6 +83,7 @@ async function assertGameplayFits(page: Page, hinge: boolean) {
     }, [boardPane, lowerPane]);
     await expect.poll(async () => (await readGeometry()).overflow).toEqual([]);
     const geometry = await readGeometry();
+    expect(geometry.toolbarAtBottom).toBe(true);
     expect(geometry.square).toBeLessThan(1);
     expect(Math.abs(geometry.unusedHeight)).toBeLessThan(1);
     expect(geometry.pageScroll).toEqual([0, 0]);
