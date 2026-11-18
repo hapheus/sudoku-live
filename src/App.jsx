@@ -1,4 +1,4 @@
-import { LANDSCAPE_LAYOUT_QUERY, useSplitLayout } from './hooks/useSplitLayout.js';
+import { LANDSCAPE_LAYOUT_QUERY, useSplitLayout, useStackedLayout } from './hooks/useSplitLayout.js';
 import { ScreenArtwork } from './components/LandscapeArtwork.jsx';
 import { selectLandscapeArtwork } from './services/landscape-artwork.js';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -63,6 +63,7 @@ export function App() {
     const isNativeApp = isNativeCapacitorApp();
     const splitLayout = useSplitLayout();
     const landscapeLayout = useSplitLayout(LANDSCAPE_LAYOUT_QUERY);
+    const stackedLayout = useStackedLayout();
     const [landscapeArtwork] = useState(() => selectLandscapeArtwork());
     const settingsGuideOpenerRef = useRef(null);
     const closeGuide = useCallback(() => setIsHelpOpen(false), []);
@@ -649,6 +650,7 @@ export function App() {
         />
     );
     const sharedGameViewProps = {
+        stackedLayout,
         notices: sessionNotices,
         guide: inlineGuide ? <HelpDialog isOpen panel onClose={closeGuide} messages={messages} /> : null,
         connectionStatus: connectionStatus,
@@ -689,7 +691,8 @@ export function App() {
 
     return (
         <>
-            <div id="sudoku-app" className={`app-container ${showBottomNav ? 'app-container--with-nav landscape-screen' : 'app-container--gameplay'}`}>
+            <div id="sudoku-app" data-stacked-layout={stackedLayout || undefined} className={`app-container ${showBottomNav ? 'app-container--with-nav landscape-screen' : 'app-container--gameplay'}`}>
+                <div className="landscape-screen__pane">
                 <div className="landscape-screen__content">
                 <div id="game-announcements" className="sr-only" aria-live="polite" aria-atomic="true">
                     {announcement}
@@ -982,6 +985,18 @@ export function App() {
                 )}
 
                 </div>
+                {showBottomNav && (
+                    <BottomNav
+                        activeTab={showLegalPage ? null : navTab}
+                        isWatchActive={mode === 'watch' || isSpectating}
+                        onSelectTab={(tab) => {
+                            closeGuide();
+                            handleSelectNavTab(tab);
+                        }}
+                        messages={messages}
+                    />
+                )}
+                </div>
                 <HelpDialog
                     isOpen={isHelpOpen && !inlineGuide && !settingsGuide}
                     returnFocusRef={settingsGuideOpenerRef}
@@ -996,17 +1011,6 @@ export function App() {
                 active={landscapeLayout}
                 nightGhost={nightGhost}
             />
-            {showBottomNav && (
-                <BottomNav
-                    activeTab={showLegalPage ? null : navTab}
-                    isWatchActive={mode === 'watch' || isSpectating}
-                    onSelectTab={(tab) => {
-                        closeGuide();
-                        handleSelectNavTab(tab);
-                    }}
-                    messages={messages}
-                />
-            )}
         </>
     );
 }

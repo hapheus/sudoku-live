@@ -4047,3 +4047,315 @@ body {
         max-height: calc(100dvh - 7rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
     }
 }
+
+.landscape-screen__pane,
+.gameplay-stage__lower,
+.gameplay-stage__lower-content {
+    display: contents;
+}
+
+/* Keep equal usable heights around the physical center, including asymmetric
+   outer safe areas or a hinge whose reported bounds straddle it unevenly. */
+body:has([data-stacked-layout]) {
+    --pane-inset-top: max(env(safe-area-inset-top, 0px), env(safe-area-inset-bottom, 0px));
+    --hinge-clearance: 1px;
+    --pane-gap: calc(2 * var(--hinge-clearance));
+    --pane-height: calc(50dvh - var(--pane-inset-top) - var(--hinge-clearance));
+    --lower-pane-top: calc(50dvh + var(--hinge-clearance));
+    --pane-left: env(safe-area-inset-left, 0px);
+    --pane-right: env(safe-area-inset-right, 0px);
+    --pane-padding: 0.375rem;
+    padding: 0 var(--pane-right) 0 var(--pane-left);
+}
+
+@media (vertical-viewport-segments: 2) {
+    body:has([data-stacked-layout]) {
+        --hinge-clearance: max(
+            1px,
+            calc(50dvh - env(viewport-segment-bottom 0 0)),
+            calc(env(viewport-segment-top 0 1) - 50dvh)
+        );
+    }
+}
+
+body:has([data-stacked-layout]) #root {
+    display: flow-root;
+}
+
+body:has([data-stacked-layout])::before {
+    content: "";
+    position: fixed;
+    inset: calc(50dvh - 0.5px) 0 auto;
+    height: 1px;
+    background: var(--color-border);
+    pointer-events: none;
+}
+
+[data-stacked-layout].app-container {
+    max-width: none;
+    margin-top: var(--pane-inset-top);
+    padding: 0;
+    animation: none;
+}
+
+[data-stacked-layout].landscape-screen,
+[data-stacked-layout] .gameplay-stage {
+    display: grid;
+    grid-template: repeat(2, var(--pane-height)) / minmax(0, 1fr);
+    gap: var(--pane-gap);
+    align-items: stretch;
+}
+
+[data-stacked-layout] + .landscape-artwork {
+    inset: var(--pane-inset-top) var(--pane-right) auto var(--pane-left);
+    width: auto;
+    height: var(--pane-height);
+}
+
+[data-stacked-layout] + .landscape-artwork--right {
+    top: var(--lower-pane-top);
+}
+
+[data-stacked-layout].landscape-screen .landscape-screen__pane {
+    grid-area: 2 / 1;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+}
+
+[data-stacked-layout].landscape-screen .landscape-screen__content {
+    grid-area: 1 / 1;
+    display: flex;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: var(--pane-padding);
+}
+
+[data-stacked-layout].landscape-screen .landscape-screen__content > * {
+    flex-shrink: 0;
+}
+
+[data-stacked-layout].landscape-screen .dialog-card--panel {
+    max-height: none;
+    overflow: visible;
+}
+
+[data-stacked-layout] :is(.play-setup, .legal-page) {
+    min-height: 0;
+}
+
+[data-stacked-layout] .bottom-nav {
+    grid-area: 2 / 1;
+    position: static;
+    width: 100%;
+    padding-bottom: 0.45rem;
+}
+
+[data-stacked-layout] .dialog-backdrop {
+    inset: var(--lower-pane-top) var(--pane-right) auto var(--pane-left);
+    width: auto;
+    height: var(--pane-height);
+    padding: var(--pane-padding);
+}
+
+[data-stacked-layout] .dialog-backdrop .dialog-card {
+    max-height: 100%;
+}
+
+[data-stacked-layout] .gameplay-stage__board {
+    grid-area: 1 / 1;
+    justify-content: center;
+    padding: var(--pane-padding);
+}
+
+[data-stacked-layout] .gameplay-stage__board .board-wrapper {
+    width: 100%;
+    max-width: none;
+}
+
+[data-stacked-layout] .gameplay-stage__board .board-frame {
+    --axis-height: 1rem;
+    width: min(100%, calc(var(--pane-height) - 2 * var(--pane-padding) - var(--axis-height) - 0.2rem + 1.5rem));
+    max-width: none;
+}
+
+[data-stacked-layout] .board-col-axes {
+    height: var(--axis-height);
+}
+
+[data-stacked-layout] .gameplay-stage__board .tic-tac-toe {
+    width: min(100%, calc(var(--pane-height) - 5rem));
+    margin-inline: auto;
+}
+
+[data-stacked-layout] .gameplay-stage__lower {
+    grid-area: 2 / 1;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr);
+    align-items: center;
+    min-width: 0;
+    overflow: clip;
+}
+
+[data-stacked-layout] .gameplay-stage__lower-content {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    grid-auto-rows: max-content;
+    align-content: center;
+    align-items: center;
+    gap: 0.25rem 0.5rem;
+    min-width: 0;
+    padding: var(--pane-padding);
+    justify-self: center;
+    width: calc(100% / var(--controls-scale, 1));
+    transform: scale(var(--controls-scale, 1));
+    transition-property: none;
+}
+
+[data-stacked-layout] .gameplay-stage__lower-content > :not(.game-top-bar, .spectator-bar, .gameplay-stage__status) {
+    grid-column: 1 / -1;
+}
+
+[data-stacked-layout] :is(.gameplay-stage__side, .gameplay-stage__guide) {
+    grid-area: auto / 1 / auto / -1;
+    max-width: none;
+    gap: 0.25rem;
+}
+
+[data-stacked-layout] :is(.game-top-bar, .spectator-bar) {
+    grid-area: 1 / 1;
+    display: flex;
+    gap: 0.25rem;
+}
+
+[data-stacked-layout] .gameplay-stage__status {
+    grid-area: 1 / 2;
+}
+
+[data-stacked-layout] :is(.status-banner, .status-meta-row) {
+    gap: 0.2rem;
+}
+
+[data-stacked-layout] :is(.status-badge, .telemetry-pill) {
+    padding-block: 0.15rem;
+}
+
+[data-stacked-layout] .gameplay-stage__lower .confirm-banner {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 0.5rem;
+    row-gap: 0;
+    padding: 0.25rem 0.5rem;
+}
+
+[data-stacked-layout] .confirm-banner__actions {
+    grid-area: 1 / 2;
+    margin: 0;
+}
+
+[data-stacked-layout] .player-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.25rem;
+}
+
+[data-stacked-layout] .gameplay-stage__side .numpad {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    grid-template-columns: repeat(9, minmax(0, 1fr));
+}
+
+[data-stacked-layout] .player-controls:has(.notes-quick-bar) {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+[data-stacked-layout] .player-controls:has(.notes-quick-bar) .tool-bar {
+    grid-column: span 3;
+}
+
+[data-stacked-layout] .player-controls:has(.notes-quick-bar) .shift-bar {
+    grid-column: 4 / -1;
+}
+
+[data-stacked-layout] .player-controls:has(.notes-quick-bar) .numpad {
+    grid-column: span 4;
+}
+
+[data-stacked-layout] .notes-quick-bar {
+    grid-area: 2 / 5 / auto / -1;
+}
+
+[data-stacked-layout] .shift-bar {
+    grid-area: 1 / 2;
+}
+
+[data-stacked-layout] .gameplay-stage__side .numpad--6x6 {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+[data-stacked-layout] :is(.shift-bar, .tool-bar, .numpad, .notes-quick-bar) {
+    gap: 0.25rem;
+}
+
+[data-stacked-layout] .shift-bar {
+    flex-wrap: nowrap;
+}
+
+[data-stacked-layout] .shift-bar__label-group {
+    flex: 1 1 auto;
+}
+
+[data-stacked-layout] .gameplay-stage__side .shift-bar__actions {
+    flex: 1 0 auto;
+    gap: 0.25rem;
+}
+
+[data-stacked-layout] .tool-btn {
+    white-space: normal;
+    line-height: 1.1;
+}
+
+[data-stacked-layout] .gameplay-stage__side .numpad-btn {
+    min-height: var(--touch-min);
+    gap: 0.1rem;
+}
+
+[data-stacked-layout] .gameplay-stage__guide .dialog-card {
+    max-height: none;
+    overflow: visible;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+}
+
+[data-stacked-layout] .gameplay-stage__guide .help-sections {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 3fr) minmax(0, 2fr);
+    gap: 0.5rem;
+}
+
+[data-stacked-layout] .gameplay-stage__guide .help-section {
+    gap: 0.15rem;
+}
+
+[data-stacked-layout] .gameplay-stage__guide .help-section__text {
+    line-height: 1.2;
+}
+
+[data-stacked-layout] .sudoku-board {
+    container-type: inline-size;
+}
+
+[data-stacked-layout] .sudoku-cell__digit {
+    font-size: min(1.65rem, 6.5cqw);
+}
+
+[data-stacked-layout] .sudoku-board--6x6 .sudoku-cell__digit {
+    font-size: min(1.9rem, 10cqw);
+}
+
+[data-stacked-layout]:has(+ .landscape-artwork--right:not([hidden])) .gameplay-stage__lower {
+    visibility: hidden;
+}
