@@ -1,8 +1,6 @@
 # Responsive region contract
 
-Gameplay uses two equal grid tracks in landscape, with reported horizontal segments, and at widths of at least 900 CSS px with heights of at least 540 CSS px. Each track is `minmax(0, 1fr)`: content cannot determine its width. The measurement excludes the shared gutter and the body padding, which includes safe-area insets. A difference of at most one CSS pixel is allowed for rounding. Split layouts use the larger left/right safe-area inset on **both** outer edges, so an asymmetric notch inset cannot shift the column boundary away from the physical display midpoint. On reported dual segments, the segment-coordinate padding below takes precedence.
-
-Landscape screens and browsers reporting two horizontal viewport segments use two equal regions. The existing wide-screen gameplay split also remains available at widths of at least 900 CSS px and heights of at least 540 CSS px.
+Gameplay uses two equal grid tracks in landscape. Portrait stacks the board above the controls and status. Each track is `minmax(0, 1fr)`: content cannot determine its width. The measurement excludes the shared gutter and the body padding, which includes safe-area insets. A difference of at most one CSS pixel is allowed for rounding. Split layouts use the larger left/right safe-area inset on **both** outer edges, so an asymmetric notch inset cannot shift the column boundary away from the physical display midpoint. On reported dual segments, the segment-coordinate padding below takes precedence.
 
 | Screen | Left region | Right region |
 | --- | --- | --- |
@@ -12,18 +10,18 @@ Landscape screens and browsers reporting two horizontal viewport segments use tw
 | Privacy / legal notice | Decorative landscape artwork | Navigation and complete article |
 | Gameplay / spectator / solved | Board or Tic Tac Toe | Status, controls, hints or solve summary; opening the guide replaces this region |
 
-Navigation remains within the right content region on non-game screens. Landscape artwork is discovered from [`src/assets/landscape/`](../../src/assets/landscape/README.md), independently of board images, and selected once per app mount. The supplied neon mosaic is bundled as an optimized 1024px WebP. It fills the physical left viewport half at full height, without a rounded panel or letterboxing; centered `cover` cropping preserves proportions. Reported dual segments bound the image to the first segment, keeping the hinge clear. The artwork is outside the animated content container so fixed positioning uses the viewport; an empty image pool still leaves a reserved blank panel. Images are not mounted in portrait, and returning to landscape retains the selection.
+Landscape primary navigation sits above the content in the right pane. Gameplay and spectator actions sit above the play area. Landscape artwork is discovered from [`src/assets/landscape/`](../../src/assets/landscape/README.md), independently of board images, and selected once per app mount. The supplied neon mosaic is bundled as an optimized 1024px WebP. It fills the physical left viewport half at full height, without a rounded panel or letterboxing; centered `cover` cropping preserves proportions. Reported dual segments bound the image to the first segment, keeping the hinge clear. The artwork is outside the animated content container so fixed positioning uses the viewport; an empty image pool still leaves a reserved blank panel. Portrait places the same selected artwork above the menu content, with primary navigation along the bottom.
 
-The in-game guide is a non-modal dialog in the right grid column, not a fixed overlay. It replaces status and controls, keeps the board visible and retains the puzzle. Close/Escape restores controls and focus. Rotating to portrait uses the normal modal dialog; rotating back uses the right pane without creating duplicate guides. In landscape Settings, Open Guide likewise replaces the right-hand Settings content with a non-modal guide while leaving the left artwork visible. Settings stays mounted but hidden so draft/preferences state is preserved; closing restores the opener focus. The guide scrolls within the available height above navigation. Portrait Settings retains the normal modal dialog.
+The in-game guide is a non-modal dialog in the right grid column, not a fixed overlay. It replaces status and controls, keeps the board visible and retains the puzzle. Close/Escape restores controls and focus. Rotating to portrait uses the normal modal dialog; rotating back uses the right pane without creating duplicate guides. In landscape Settings, Open Guide likewise replaces the right-hand Settings content with a non-modal guide while leaving the left artwork visible. Settings stays mounted but hidden so draft/preferences state is preserved; closing restores the opener focus. The guide scrolls with the pane content below navigation. Portrait Settings retains the normal modal dialog.
 
 On two horizontal viewport segments, the smaller segment defines the equal usable widths. Extra width on an asymmetric display remains outside the content. Segment coordinates define the central unavailable gap; both sides use the same padding, including the larger horizontal safe-area inset. Non-game navigation stays in the second segment; guide dialogs stay in the second segment. During gameplay, confirmations, join requests and general action feedback are rendered at the top of the right region, above status or the open guide. They never occupy a full-width row above the board. Board-local celebrations, reactions, fist bumps and mini-game effects remain on the board. These rules use reported display geometry rather than a device-name heuristic.
 
-Ordinary portrait screens retain their existing single-column flow. Controls can scroll vertically at compact heights; touch targets are not reduced to force everything above the fold.
+Portrait keeps the gameplay actions at the bottom. At compact heights, the play area scrolls independently of the toolbar so actions remain reachable.
 
 ## Regression checks
 
 ```bash
-npx playwright test tests/qa/split-layout.spec.ts tests/qa/storage-denied.spec.ts
+npx playwright test tests/qa/orientation-layout.spec.ts tests/qa/split-layout.spec.ts tests/qa/storage-denied.spec.ts
 npm run e2e -- --ignore-snapshots
 ```
 
