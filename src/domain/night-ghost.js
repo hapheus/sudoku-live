@@ -2,6 +2,13 @@ import { shiftBand, shiftStack } from './sudoku-shifts.js';
 import { resolveSpec } from './sudoku-variants.js';
 import { getDefaultStorage } from '../utils/storage.js';
 
+export const NIGHT_GHOST_DURATION = {
+    flight: 3000,
+    hover: 400,
+    swap: 620,
+    grin: 370,
+};
+
 const SLOT_FORMAT = /^\d{4}-\d{2}-\d{2}\/0[0-3]$/;
 const pad = (value) => String(value).padStart(2, '0');
 

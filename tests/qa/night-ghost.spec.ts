@@ -50,6 +50,25 @@ async function play(page: Page) {
     await expect(page.getByRole('grid')).toBeVisible();
 }
 
+test('watch the full ghost animation in real time', async ({ page }) => {
+    test.skip(process.env.GHOST_PREVIEW !== '1', 'Opt-in visual preview');
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.clock.install();
+    await seedSolo(page);
+    await page.routeWebSocket(/.*/, socket => socket.close());
+    await page.goto('/');
+
+    // Start just before midnight and leave the clock running at normal speed.
+    await page.clock.setSystemTime(new Date(minuteBefore(0).getTime() - 4000));
+    await play(page);
+    await expect(artwork(page)).toBeVisible({ timeout: 10_000 });
+    await expect(ghost(page)).toHaveCount(0, { timeout: 10_000 });
+    await expect(artwork(page)).toBeHidden();
+    // Keep the final board visible briefly before the preview browser closes.
+    await page.waitForTimeout(1250);
+});
+
 for (const hour of [0, 1, 2, 3]) {
     test(`night ghost at 0${hour}:00`, async ({ page }, testInfo) => {
         const fullMotion = hour === 0;
@@ -67,7 +86,8 @@ for (const hour of [0, 1, 2, 3]) {
         await expect(ghost(page)).toHaveAttribute('data-phase', 'enter');
         await expect(ghost(page).locator('.night-ghost__flight')).toHaveCSS('animation-name', fullMotion ? 'night-ghost-enter' : 'none');
         await expect(ghost(page).locator('.night-ghost-slab')).toHaveCount(2);
-        await page.clock.runFor(540);
+        if (fullMotion) await expect(ghost(page).locator('.night-ghost__flight')).toHaveCSS('animation-duration', '3s');
+        await page.clock.runFor(3000);
         await expect(ghost(page)).toHaveAttribute('data-phase', 'hover');
         if (hour === 1) {
             await expectRightArtwork(page);
@@ -98,7 +118,10 @@ for (const hour of [0, 1, 2, 3]) {
         await page.clock.runFor(370);
         await expect(ghost(page)).toHaveAttribute('data-phase', 'exit');
         if (hour === 1) await expectRightArtwork(page);
-        await page.clock.runFor(560);
+        if (fullMotion) await expect(ghost(page).locator('.night-ghost__flight')).toHaveCSS('animation-duration', '3s');
+        await page.clock.runFor(2999);
+        await expect(ghost(page)).toHaveAttribute('data-phase', 'exit');
+        await page.clock.runFor(1);
         await expect(ghost(page)).toHaveCount(0);
         await expect(artwork(page)).toBeHidden();
         await expect(page.locator('.gameplay-stage__side')).toBeVisible();
@@ -130,7 +153,7 @@ test('ghost art fills the right display segment up to the hinge', async ({ page,
     await page.clock.runFor(1000);
     await expect(artwork(page)).toBeVisible();
     expect(await artwork(page).boundingBox()).toEqual({ x: 580, y: 0, width: 620, height: 800 });
-    await page.clock.runFor(2490);
+    await page.clock.runFor(7390);
     await expect(artwork(page)).toBeHidden();
 });
 
@@ -156,7 +179,7 @@ test('an inactive slot is skipped and a repeated local hour stays claimed after 
     await page.reload();
     await page.clock.runFor(1000);
     await play(page);
-    await page.clock.runFor(2500);
+    await page.clock.runFor(7400);
     await expect(ghost(page)).toHaveCount(0);
     expect(await cells(page)).toEqual(after);
 });
@@ -193,9 +216,9 @@ for (const variant of ['2x3', '3x3']) {
             expect(after).not.toEqual(before);
             await expect.poll(() => cells(guest)).toEqual(after);
             await expect.poll(() => cells(spectator)).toEqual(after);
-            await host.clock.runFor(2490);
+            await host.clock.runFor(7390);
             await expect(ghost(host)).toHaveCount(0);
-            await Promise.all([host, guest, spectator].map(page => expect(artwork(page)).toBeHidden()));
+            await Promise.all([host, guest, spectator].map(page => expect(artwork(page)).toBeHidden({ timeout: 10_000 })));
             await spectator.reload();
             await expect.poll(() => cells(spectator)).toEqual(after);
             await expect(ghost(spectator)).toHaveCount(0);

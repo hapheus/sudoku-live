@@ -1,6 +1,11 @@
 import React from 'react';
-import { ghostSwapGroups } from '../domain/night-ghost.js';
+import { ghostSwapGroups, NIGHT_GHOST_DURATION } from '../domain/night-ghost.js';
 import './night-ghost.css';
+
+const animationStyle = {
+    '--night-ghost-flight-duration': `${NIGHT_GHOST_DURATION.flight}ms`,
+    '--night-ghost-swap-duration': `${NIGHT_GHOST_DURATION.swap}ms`,
+};
 
 function GhostSlab({ game, spec, axis, source, destination, size, color }) {
     const band = axis === 'band';
@@ -50,7 +55,7 @@ export function NightGhost({ appearance, spec }) {
     const { swap, game, phase } = appearance;
     const { size, from, to } = ghostSwapGroups(swap, spec);
     return (
-        <div className="night-ghost" data-phase={phase} aria-hidden="true">
+        <div className="night-ghost" data-phase={phase} style={animationStyle} aria-hidden="true">
             <GhostSlab game={game} spec={spec} axis={swap.axis} source={from} destination={to} size={size} color="mint" />
             <GhostSlab game={game} spec={spec} axis={swap.axis} source={to} destination={from} size={size} color="lilac" />
             <div className="night-ghost__flight">

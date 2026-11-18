@@ -70,7 +70,7 @@
 }
 
 .night-ghost[data-phase="swap"] .night-ghost-slab {
-    animation: night-ghost-swap 620ms cubic-bezier(.25, .7, .28, 1) both;
+    animation: night-ghost-swap var(--night-ghost-swap-duration) cubic-bezier(.25, .7, .28, 1) both;
 }
 
 @keyframes night-ghost-swap {
@@ -90,11 +90,11 @@
 }
 
 .night-ghost[data-phase="enter"] .night-ghost__flight {
-    animation: night-ghost-enter 540ms cubic-bezier(.14, .65, .24, 1) both;
+    animation: night-ghost-enter var(--night-ghost-flight-duration) cubic-bezier(.14, .65, .24, 1) both;
 }
 
 .night-ghost[data-phase="exit"] .night-ghost__flight {
-    animation: night-ghost-exit 560ms cubic-bezier(.58, .03, .95, .65) both;
+    animation: night-ghost-exit var(--night-ghost-flight-duration) cubic-bezier(.58, .03, .95, .65) both;
 }
 
 @keyframes night-ghost-enter {

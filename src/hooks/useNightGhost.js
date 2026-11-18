@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
-import { applyGhostSwap, chooseGhostSwap, claimGhostSlot, ghostSlotAt } from '../domain/night-ghost.js';
+import { applyGhostSwap, chooseGhostSwap, claimGhostSlot, ghostSlotAt, NIGHT_GHOST_DURATION } from '../domain/night-ghost.js';
 
 const MINUTE = 60_000;
 
@@ -12,11 +12,13 @@ export function isNightGhostScene({ navTab, isPlayingGame, isSpectating, gameSta
     return navTab === 'play' ? isPlayingGame : navTab === 'watch' && isSpectating;
 }
 
+const { flight, hover, swap, grin } = NIGHT_GHOST_DURATION;
+const EXIT_AT = flight + hover + swap + grin;
 const PHASES = [
-    [540, 'hover'],
-    [940, 'swap'],
-    [1560, 'grin'],
-    [1930, 'exit'],
+    [flight, 'hover'],
+    [flight + hover, 'swap'],
+    [flight + hover + swap, 'grin'],
+    [EXIT_AT, 'exit'],
 ];
 
 export function useNightGhost({ stateRef, soundEffectsRef, announce, scene, visible, solution }) {
@@ -79,7 +81,7 @@ export function useNightGhost({ stateRef, soundEffectsRef, announce, scene, visi
                 }
             }, delay));
         }
-        timers.current.push(setTimeout(dismiss, 2490));
+        timers.current.push(setTimeout(dismiss, EXIT_AT + flight));
     }, [announce, clearTimers, dismiss, soundEffectsRef, stateRef, visible]);
 
     const matchesLayout = appearance && appearance.layout === solution.join(',');
