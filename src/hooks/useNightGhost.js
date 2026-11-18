@@ -2,6 +2,7 @@ import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { applyGhostSwap, chooseGhostSwap, claimGhostSlot, ghostSlotAt } from '../domain/night-ghost.js';
 
 const MINUTE = 60_000;
+
 export function canScheduleNightGhost(visible, isSpectating, mode, role) {
     return visible && !isSpectating && (mode === 'solo' || role === 'host');
 }
@@ -63,13 +64,13 @@ export function useNightGhost({ stateRef, soundEffectsRef, announce, scene, visi
         if (seen.current.size > 32) seen.current.delete(seen.current.keys().next().value);
 
         clearTimers();
-        const event = { swap, game, phase: 'enter' };
+        const event = { swap, game, layout: game.solution.join(','), phase: 'enter' };
         active.current = event;
         setAppearance(event);
         soundEffectsRef.current?.playNightGhost?.();
         for (const [delay, phase] of PHASES) {
             timers.current.push(setTimeout(() => {
-                if (active.current !== event) return;
+                if (active.current !== event || stateRef.current.gameState.solution.join(',') !== event.layout) return;
                 setAppearance({ ...event, phase });
                 if (phase === 'swap') {
                     soundEffectsRef.current?.playNightGhostSwap?.();
@@ -81,7 +82,7 @@ export function useNightGhost({ stateRef, soundEffectsRef, announce, scene, visi
         timers.current.push(setTimeout(dismiss, 2490));
     }, [announce, clearTimers, dismiss, soundEffectsRef, stateRef, visible]);
 
-    const matchesLayout = appearance?.game.solution.join(',') === solution.join(',');
+    const matchesLayout = appearance && appearance.layout === solution.join(',');
     const effect = visible && matchesLayout ? appearance : null;
     return { nightGhost: effect, showNightGhost: show, dismissNightGhost: dismiss };
 }
@@ -123,7 +124,7 @@ export function useScheduledNightGhost({
 }) {
     useNightGhostClock(active, (slot) => {
         const cur = stateRef.current;
-        if (cur.gameState.status !== 'in_progress' || cur.ticTacToeActive || !claimGhostSlot(slot)) return;
+        if (!active || cur.gameState.status !== 'in_progress' || cur.ticTacToeActive || !claimGhostSlot(slot)) return;
         const swap = chooseGhostSwap(cur.gameState, slot);
         const next = applyGhostSwap(cur.gameState, swap);
         clearPendingHint(false);
