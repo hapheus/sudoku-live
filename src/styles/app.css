@@ -4054,6 +4054,40 @@ body {
     display: contents;
 }
 
+.gameplay-stage__toolbar {
+    padding-block: 0.375rem;
+    background: var(--color-nav-bg);
+    border-top: 1px solid var(--color-border);
+}
+
+.gameplay-stage__toolbar .game-top-bar__back-btn {
+    justify-self: start;
+}
+
+:is(.game-screen, .watch-screen):has(> .gameplay-stage__toolbar) {
+    height: calc(100dvh - 0.75rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+}
+
+:is(.game-screen, .watch-screen):has(> .gameplay-stage__toolbar) > .gameplay-stage {
+    container-type: size;
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+}
+
+:is(.game-screen, .watch-screen) > .gameplay-stage__toolbar {
+    flex: none;
+    position: relative;
+    z-index: 31;
+}
+
+@media (max-height: 540px) {
+    :is(.game-screen, .watch-screen):has(> .gameplay-stage__toolbar) .gameplay-stage__board :is(.board-wrapper, .tic-tac-toe) {
+        width: min(100%, 100cqh);
+    }
+}
+
 /* Keep equal usable heights around the physical center, including asymmetric
    outer safe areas or a hinge whose reported bounds straddle it unevenly. */
 body:has([data-stacked-layout]) {
@@ -4218,8 +4252,6 @@ body:has([data-stacked-layout])::before {
     gap: 0.5rem;
     margin-inline: calc(-1 * var(--pane-padding));
     padding: var(--pane-padding);
-    background: var(--color-nav-bg);
-    border-top: 1px solid var(--color-border);
 }
 
 [data-stacked-layout] :is(.gameplay-stage__side, .gameplay-stage__guide) {

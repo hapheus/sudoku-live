@@ -55,6 +55,7 @@ export function GamePlayView({
     mainClassName,
     mainAriaLabel,
     topBar,
+    dockToolbar = false,
     stackedLayout = false,
     guide = null,
     notices = null,
@@ -118,6 +119,12 @@ export function GamePlayView({
             />
         </div>
     );
+    const toolbar = (
+        <div className="gameplay-stage__toolbar">
+            {topBar}
+            {stackedLayout && status}
+        </div>
+    );
     return (
         <main
             className={mainClassName}
@@ -125,7 +132,7 @@ export function GamePlayView({
             onPointerDownCapture={nightGhost ? dismissNightGhost : undefined}
             onKeyDownCapture={nightGhost ? dismissNightGhost : undefined}
         >
-            {!stackedLayout && topBar}
+            {!dockToolbar && !stackedLayout && topBar}
 
             <div className="gameplay-stage">
                 {!stackedLayout && !guide && status}
@@ -201,15 +208,11 @@ export function GamePlayView({
                                 </>
                             )}
                         </div>}
-                        {stackedLayout && (
-                            <div className="gameplay-stage__toolbar">
-                                {topBar}
-                                {status}
-                            </div>
-                        )}
+                        {stackedLayout && toolbar}
                     </div>
                 </div>
             </div>
+            {dockToolbar && !stackedLayout && toolbar}
         </main>
     );
 }

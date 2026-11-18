@@ -84,7 +84,8 @@ for (const [width, height] of [[844, 390], [951, 669], [1280, 800]]) {
         await page.keyboard.press('1');
         const puzzle = await page.getByRole('grid').innerText();
         const board = (await page.locator('.gameplay-stage__board').boundingBox())!;
-        const boardDocumentY = board.y + await page.evaluate(() => scrollY);
+        const readStageScroll = () => page.locator('.gameplay-stage').evaluate(element => element.scrollTop);
+        const boardStageY = board.y + await readStageScroll();
         await page.getByRole('button', { name: 'New Puzzle', exact: true }).click();
         const notice = page.getByRole('alertdialog');
         await expect(notice).toBeVisible();
@@ -107,10 +108,10 @@ for (const [width, height] of [[844, 390], [951, 669], [1280, 800]]) {
         expect(feedbackBounds.x).toBeGreaterThanOrEqual(width / 2);
         const currentBoard = (await page.locator('.gameplay-stage__board').boundingBox())!;
         expect(feedbackBounds.y).toBeLessThanOrEqual(currentBoard.y + 1);
-        // Clicking the lower controls can scroll a compact viewport; the board's
-        // document position must remain unchanged by the feedback itself.
-        expect({ ...currentBoard, y: currentBoard.y + await page.evaluate(() => scrollY) })
-            .toEqual({ ...board, y: boardDocumentY });
+        // Clicking the lower controls can scroll the stage, while feedback
+        // should leave the board in the same position within that stage.
+        expect({ ...currentBoard, y: currentBoard.y + await readStageScroll() })
+            .toEqual({ ...board, y: boardStageY });
     });
 }
 

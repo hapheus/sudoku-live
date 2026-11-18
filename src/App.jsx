@@ -63,6 +63,7 @@ export function App() {
     const isNativeApp = isNativeCapacitorApp();
     const splitLayout = useSplitLayout();
     const landscapeLayout = useSplitLayout(LANDSCAPE_LAYOUT_QUERY);
+    const dockToolbar = useSplitLayout('(orientation: landscape)');
     const stackedLayout = useStackedLayout();
     const [landscapeArtwork] = useState(() => selectLandscapeArtwork());
     const settingsGuideOpenerRef = useRef(null);
@@ -650,6 +651,7 @@ export function App() {
         />
     );
     const sharedGameViewProps = {
+        dockToolbar,
         stackedLayout,
         notices: sessionNotices,
         guide: inlineGuide ? <HelpDialog isOpen panel onClose={closeGuide} messages={messages} /> : null,
