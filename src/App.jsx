@@ -1,4 +1,4 @@
-import { LANDSCAPE_LAYOUT_QUERY, useSplitLayout, useStackedLayout } from './hooks/useSplitLayout.js';
+import { useLandscapeLayout } from './hooks/useLandscapeLayout.js';
 import { ScreenArtwork } from './components/LandscapeArtwork.jsx';
 import { selectLandscapeArtwork } from './services/landscape-artwork.js';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -61,10 +61,7 @@ function getRestartState(messages, isCoopSession, partnerOnline, gameState, rema
 
 export function App() {
     const isNativeApp = isNativeCapacitorApp();
-    const splitLayout = useSplitLayout();
-    const landscapeLayout = useSplitLayout(LANDSCAPE_LAYOUT_QUERY);
-    const dockToolbar = useSplitLayout('(orientation: landscape)');
-    const stackedLayout = useStackedLayout();
+    const landscapeLayout = useLandscapeLayout();
     const [landscapeArtwork] = useState(() => selectLandscapeArtwork());
     const settingsGuideOpenerRef = useRef(null);
     const closeGuide = useCallback(() => setIsHelpOpen(false), []);
@@ -636,7 +633,7 @@ export function App() {
     const showBottomNav = showLegalPage || !((navTab === 'play' && isPlayingGame) || (navTab === 'watch' && isSpectating));
     const showGlobalRetroBar = isRetroMode && (showLegalPage || navTab !== 'play' || !isPlayingGame);
 
-    const inlineGuide = splitLayout && !showBottomNav && isHelpOpen;
+    const inlineGuide = landscapeLayout && !showBottomNav && isHelpOpen;
     const settingsGuide = landscapeLayout && navTab === 'settings' && !showLegalPage && isHelpOpen;
     const sessionNotices = (
         <SessionNotices
@@ -651,8 +648,7 @@ export function App() {
         />
     );
     const sharedGameViewProps = {
-        dockToolbar,
-        stackedLayout,
+        landscapeLayout,
         notices: sessionNotices,
         guide: inlineGuide ? <HelpDialog isOpen panel onClose={closeGuide} messages={messages} /> : null,
         connectionStatus: connectionStatus,
@@ -691,10 +687,23 @@ export function App() {
         messages: messages,
     };
 
+    const primaryNavigation = showBottomNav && (
+        <BottomNav
+            activeTab={showLegalPage ? null : navTab}
+            isWatchActive={mode === 'watch' || isSpectating}
+            onSelectTab={(tab) => {
+                closeGuide();
+                handleSelectNavTab(tab);
+            }}
+            messages={messages}
+        />
+    );
+
     return (
         <>
-            <div id="sudoku-app" data-stacked-layout={stackedLayout || undefined} className={`app-container ${showBottomNav ? 'app-container--with-nav landscape-screen' : 'app-container--gameplay'}`}>
+            <div id="sudoku-app" className={`app-container ${showBottomNav ? 'app-container--with-nav landscape-screen' : 'app-container--gameplay'}`}>
                 <div className="landscape-screen__pane">
+                {landscapeLayout && primaryNavigation}
                 <div className="landscape-screen__content">
                 <div id="game-announcements" className="sr-only" aria-live="polite" aria-atomic="true">
                     {announcement}
@@ -987,17 +996,7 @@ export function App() {
                 )}
 
                 </div>
-                {showBottomNav && (
-                    <BottomNav
-                        activeTab={showLegalPage ? null : navTab}
-                        isWatchActive={mode === 'watch' || isSpectating}
-                        onSelectTab={(tab) => {
-                            closeGuide();
-                            handleSelectNavTab(tab);
-                        }}
-                        messages={messages}
-                    />
-                )}
+                {!landscapeLayout && primaryNavigation}
                 </div>
                 <HelpDialog
                     isOpen={isHelpOpen && !inlineGuide && !settingsGuide}

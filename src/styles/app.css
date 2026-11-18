@@ -3751,7 +3751,7 @@ body {
     }
 }
 
-@media (min-width: 900px) and (min-height: 540px) {
+@media (orientation: landscape) and (min-width: 900px) and (min-height: 540px) {
     .app-container--with-nav {
         max-width: 680px;
     }
@@ -3803,7 +3803,7 @@ body {
 }
 
 /* Equal content regions exclude the shared gutter and outer safe-area padding. */
-@media (orientation: landscape) and (max-height: 540px), (min-width: 900px) and (min-height: 540px), (horizontal-viewport-segments: 2) {
+@media (orientation: landscape) {
     /* Unequal safe-area insets must not move the split away from the fold. */
     body {
         padding-inline: calc(0.75rem + max(env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)));
@@ -3829,7 +3829,7 @@ body {
     display: contents;
 }
 
-@media (orientation: landscape) and (max-height: 540px), (horizontal-viewport-segments: 2) {
+@media (orientation: landscape) and (max-height: 540px), (orientation: landscape) and (horizontal-viewport-segments: 2) {
     .app-container--with-nav {
         max-width: 960px;
     }
@@ -3881,7 +3881,7 @@ body {
 
 /* Segment coordinates, rather than a device name, define the unavailable gap.
    Use the smaller usable segment so unequal displays still have a 1:1 contract. */
-@media (horizontal-viewport-segments: 2) {
+@media (orientation: landscape) and (horizontal-viewport-segments: 2) {
     :root {
         --segment-padding: max(0.75rem, env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
         --segment-content: calc(min(env(viewport-segment-width 0 0), env(viewport-segment-width 1 0)) - 2 * var(--segment-padding));
@@ -3908,12 +3908,6 @@ body {
     .gameplay-stage__side { grid-area: side; }
     .gameplay-stage__status { grid-area: status; }
 
-    .bottom-nav {
-        left: calc(env(viewport-segment-left 1 0) + var(--segment-padding));
-        right: auto;
-        width: var(--segment-content);
-    }
-
     .dialog-backdrop {
         left: calc(env(viewport-segment-left 1 0) + var(--segment-padding));
         right: auto;
@@ -3938,8 +3932,8 @@ body {
 }
 .landscape-artwork, .landscape-artwork[hidden] { display: none; }
 
-/* Keep this query in sync with useSplitLayout.js. */
-@media (orientation: landscape), (min-width: 900px) and (min-height: 540px), (horizontal-viewport-segments: 2) {
+/* Keep this query in sync with useLandscapeLayout.js. */
+@media (orientation: landscape) {
     body {
         --landscape-inset: calc(0.75rem + max(env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)));
         --landscape-gap: var(--split-gap, 1.25rem);
@@ -3968,23 +3962,41 @@ body {
 
 }
 
-@media (orientation: landscape), (horizontal-viewport-segments: 2) {
+@media (orientation: landscape) {
     .app-container.landscape-screen {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         align-items: start;
         gap: var(--landscape-gap);
         max-width: var(--landscape-shell-width);
+        padding-bottom: 0;
     }
-    .landscape-screen__content {
+    .app-container.landscape-screen .landscape-screen__pane {
         grid-column: 2;
         grid-row: 1;
+        height: calc(100dvh - 0.75rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        min-width: 0;
+    }
+    .landscape-screen__pane > .bottom-nav {
+        position: static;
+        width: 100%;
+        padding-bottom: 0.45rem;
+        border-top: 0;
+        border-bottom: 1px solid var(--color-border);
+    }
+    .landscape-screen .landscape-screen__content {
         display: flex;
+        overflow: auto;
+        overscroll-behavior: contain;
+        padding-block: 0.375rem;
         flex-direction: column;
         gap: 0.75rem;
         min-width: 0;
         overflow-wrap: anywhere;
     }
+    .landscape-screen .landscape-screen__content > * { flex-shrink: 0; }
     .landscape-screen .split-layout {
         display: flex;
         flex-direction: column;
@@ -4011,15 +4023,9 @@ body {
     #sudoku-app:has(+ .landscape-artwork--right:not([hidden])) :is(.gameplay-stage__status, .gameplay-stage__side, .gameplay-stage__guide) {
         visibility: hidden;
     }
-    .landscape-artwork__image { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; }
-    .bottom-nav {
-        left: calc(var(--landscape-shell-left) + (var(--landscape-shell-width) + var(--landscape-gap)) / 2);
-        right: auto;
-        width: calc((var(--landscape-shell-width) - var(--landscape-gap)) / 2);
-    }
 }
 
-@media (horizontal-viewport-segments: 2) {
+@media (orientation: landscape) and (horizontal-viewport-segments: 2) {
     body {
         --landscape-shell-width: calc(2 * var(--segment-content) + var(--split-gap));
         --landscape-shell-left: calc(env(viewport-segment-right 0 0) - var(--segment-padding) - var(--segment-content));
@@ -4028,7 +4034,7 @@ body {
     }
 }
 
-@media (horizontal-viewport-segments: 2) {
+@media (orientation: landscape) and (horizontal-viewport-segments: 2) {
     .landscape-artwork {
         left: env(viewport-segment-left 0 0);
         width: env(viewport-segment-width 0 0);
@@ -4042,15 +4048,14 @@ body {
 
 .settings-panel[hidden] { display: none; }
 
-@media (orientation: landscape), (horizontal-viewport-segments: 2) {
+@media (orientation: landscape) {
     .landscape-screen__content > .dialog-card--panel {
-        max-height: calc(100dvh - 7rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+        max-height: none;
+        overflow: visible;
     }
 }
 
-.landscape-screen__pane,
-.gameplay-stage__lower,
-.gameplay-stage__lower-content {
+.landscape-screen__pane {
     display: contents;
 }
 
@@ -4082,317 +4087,49 @@ body {
     z-index: 31;
 }
 
-@media (max-height: 540px) {
+@media (orientation: landscape) and (max-height: 540px) {
     :is(.game-screen, .watch-screen):has(> .gameplay-stage__toolbar) .gameplay-stage__board :is(.board-wrapper, .tic-tac-toe) {
         width: min(100%, 100cqh);
     }
 }
 
-/* Keep equal usable heights around the physical center, including asymmetric
-   outer safe areas or a hinge whose reported bounds straddle it unevenly. */
-body:has([data-stacked-layout]) {
-    --pane-inset-top: max(env(safe-area-inset-top, 0px), env(safe-area-inset-bottom, 0px));
-    --hinge-clearance: 1px;
-    --pane-gap: calc(2 * var(--hinge-clearance));
-    --pane-height: calc(50dvh - var(--pane-inset-top) - var(--hinge-clearance));
-    --lower-pane-top: calc(50dvh + var(--hinge-clearance));
-    --pane-left: env(safe-area-inset-left, 0px);
-    --pane-right: env(safe-area-inset-right, 0px);
-    --pane-padding: 0.375rem;
-    padding: 0 var(--pane-right) 0 var(--pane-left);
-}
-
-@media (vertical-viewport-segments: 2) {
-    body:has([data-stacked-layout]) {
-        --hinge-clearance: max(
-            1px,
-            calc(50dvh - env(viewport-segment-bottom 0 0)),
-            calc(env(viewport-segment-top 0 1) - 50dvh)
-        );
+@media (orientation: landscape) {
+    :is(.game-screen, .watch-screen) > .gameplay-stage__toolbar {
+        border-top: 0;
+        border-bottom: 1px solid var(--color-border);
     }
 }
 
-body:has([data-stacked-layout]) #root {
-    display: flow-root;
+@media (orientation: portrait) {
+    #root:has(> .landscape-screen) {
+        display: grid;
+    }
+
+    .landscape-screen + .landscape-artwork:not([hidden]) {
+        grid-area: 1 / 1;
+        display: block;
+        width: 100%;
+        max-width: 500px;
+        height: clamp(7rem, 22dvh, 14rem);
+        margin: 0 auto 0.75rem;
+        overflow: hidden;
+        border-radius: var(--radius-md);
+        background: var(--color-surface);
+    }
+
+    .landscape-screen .play-setup {
+        min-height: 0;
+    }
+
+    .gameplay-stage__board .board-frame {
+        max-width: min(calc(var(--board-max-size) + 1.5rem), calc(100cqh + 0.5rem));
+    }
 }
 
-body:has([data-stacked-layout])::before {
-    content: "";
-    position: fixed;
-    inset: calc(50dvh - 0.5px) 0 auto;
-    height: 1px;
-    background: var(--color-border);
-    pointer-events: none;
-}
-
-[data-stacked-layout].app-container {
-    max-width: none;
-    margin-top: var(--pane-inset-top);
-    padding: 0;
-    animation: none;
-}
-
-[data-stacked-layout].landscape-screen,
-[data-stacked-layout] .gameplay-stage {
-    display: grid;
-    grid-template: repeat(2, var(--pane-height)) / minmax(0, 1fr);
-    gap: var(--pane-gap);
-    align-items: stretch;
-}
-
-[data-stacked-layout] + .landscape-artwork {
-    inset: var(--pane-inset-top) var(--pane-right) auto var(--pane-left);
-    width: auto;
-    height: var(--pane-height);
-}
-
-[data-stacked-layout] + .landscape-artwork--right {
-    top: var(--lower-pane-top);
-}
-
-[data-stacked-layout].landscape-screen .landscape-screen__pane {
-    grid-area: 2 / 1;
-    min-height: 0;
-    display: grid;
-    grid-template-rows: minmax(0, 1fr) auto;
-}
-
-[data-stacked-layout].landscape-screen .landscape-screen__content {
-    grid-area: 1 / 1;
-    display: flex;
-    min-height: 0;
-    overflow: auto;
-    overscroll-behavior: contain;
-    padding: var(--pane-padding);
-}
-
-[data-stacked-layout].landscape-screen .landscape-screen__content > * {
-    flex-shrink: 0;
-}
-
-[data-stacked-layout].landscape-screen .dialog-card--panel {
-    max-height: none;
-    overflow: visible;
-}
-
-[data-stacked-layout] :is(.play-setup, .legal-page) {
-    min-height: 0;
-}
-
-[data-stacked-layout] .bottom-nav {
-    grid-area: 2 / 1;
-    position: static;
+.landscape-artwork__image {
+    display: block;
     width: 100%;
-    padding-bottom: 0.45rem;
-}
-
-[data-stacked-layout] .dialog-backdrop {
-    inset: var(--lower-pane-top) var(--pane-right) auto var(--pane-left);
-    width: auto;
-    height: var(--pane-height);
-    padding: var(--pane-padding);
-}
-
-[data-stacked-layout] .dialog-backdrop .dialog-card {
-    max-height: 100%;
-}
-
-[data-stacked-layout] .gameplay-stage__board {
-    grid-area: 1 / 1;
-    justify-content: center;
-    padding: var(--pane-padding);
-}
-
-[data-stacked-layout] .gameplay-stage__board .board-wrapper {
-    width: 100%;
-    max-width: none;
-}
-
-[data-stacked-layout] .gameplay-stage__board .board-frame {
-    --axis-height: 1rem;
-    width: min(100%, calc(var(--pane-height) - 2 * var(--pane-padding) - var(--axis-height) - 0.2rem + 1.5rem));
-    max-width: none;
-}
-
-[data-stacked-layout] .board-col-axes {
-    height: var(--axis-height);
-}
-
-[data-stacked-layout] .gameplay-stage__board .tic-tac-toe {
-    width: min(100%, calc(var(--pane-height) - 5rem));
-    margin-inline: auto;
-}
-
-[data-stacked-layout] .gameplay-stage__lower {
-    grid-area: 2 / 1;
-    display: grid;
-    grid-template-rows: minmax(0, 1fr);
-    align-items: end;
-    min-width: 0;
-    overflow: clip;
-}
-
-[data-stacked-layout] .gameplay-stage__lower-content {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0.25rem;
-    min-width: 0;
-    padding: var(--pane-padding) var(--pane-padding) 0;
-    justify-self: center;
-    width: calc(100% / var(--controls-scale, 1));
-    transform: scale(var(--controls-scale, 1));
-    transform-origin: center bottom;
-    transition-property: none;
-}
-
-[data-stacked-layout] .gameplay-stage__toolbar {
-    display: grid;
-    grid-template-columns: max-content minmax(0, 1fr);
-    align-items: center;
-    gap: 0.5rem;
-    margin-inline: calc(-1 * var(--pane-padding));
-    padding: var(--pane-padding);
-}
-
-[data-stacked-layout] :is(.gameplay-stage__side, .gameplay-stage__guide) {
-    grid-area: auto;
-    max-width: none;
-    gap: 0.25rem;
-}
-
-[data-stacked-layout] :is(.game-top-bar, .spectator-bar) {
-    grid-area: 1 / 1;
-    display: flex;
-    gap: 0.25rem;
-}
-
-[data-stacked-layout] .gameplay-stage__status {
-    grid-area: 1 / 2;
-}
-
-[data-stacked-layout] :is(.status-banner, .status-meta-row) {
-    gap: 0.2rem;
-}
-
-[data-stacked-layout] :is(.status-badge, .telemetry-pill) {
-    padding-block: 0.15rem;
-}
-
-[data-stacked-layout] .gameplay-stage__lower .confirm-banner {
-    width: 100%;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    column-gap: 0.5rem;
-    row-gap: 0;
-    padding: 0.25rem 0.5rem;
-}
-
-[data-stacked-layout] .confirm-banner__actions {
-    grid-area: 1 / 2;
-    margin: 0;
-}
-
-[data-stacked-layout] .player-controls {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.25rem;
-}
-
-[data-stacked-layout] .gameplay-stage__side .numpad {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    grid-template-columns: repeat(9, minmax(0, 1fr));
-}
-
-[data-stacked-layout] .player-controls:has(.notes-quick-bar) {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-}
-
-[data-stacked-layout] .player-controls:has(.notes-quick-bar) .tool-bar {
-    grid-column: span 3;
-}
-
-[data-stacked-layout] .player-controls:has(.notes-quick-bar) .shift-bar {
-    grid-column: 4 / -1;
-}
-
-[data-stacked-layout] .player-controls:has(.notes-quick-bar) .numpad {
-    grid-column: span 4;
-}
-
-[data-stacked-layout] .notes-quick-bar {
-    grid-area: 2 / 5 / auto / -1;
-}
-
-[data-stacked-layout] .shift-bar {
-    grid-area: 1 / 2;
-}
-
-[data-stacked-layout] .gameplay-stage__side .numpad--6x6 {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-}
-
-[data-stacked-layout] :is(.shift-bar, .tool-bar, .numpad, .notes-quick-bar) {
-    gap: 0.25rem;
-}
-
-[data-stacked-layout] .shift-bar {
-    flex-wrap: nowrap;
-}
-
-[data-stacked-layout] .shift-bar__label-group {
-    flex: 1 1 auto;
-}
-
-[data-stacked-layout] .gameplay-stage__side .shift-bar__actions {
-    flex: 1 0 auto;
-    gap: 0.25rem;
-}
-
-[data-stacked-layout] .tool-btn {
-    white-space: normal;
-    line-height: 1.1;
-}
-
-[data-stacked-layout] .gameplay-stage__side .numpad-btn {
-    min-height: var(--touch-min);
-    gap: 0.1rem;
-}
-
-[data-stacked-layout] .gameplay-stage__guide .dialog-card {
-    max-height: none;
-    overflow: visible;
-    gap: 0.25rem;
-    padding: 0.25rem 0.5rem;
-}
-
-[data-stacked-layout] .gameplay-stage__guide .help-sections {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 3fr) minmax(0, 2fr);
-    gap: 0.5rem;
-}
-
-[data-stacked-layout] .gameplay-stage__guide .help-section {
-    gap: 0.15rem;
-}
-
-[data-stacked-layout] .gameplay-stage__guide .help-section__text {
-    line-height: 1.2;
-}
-
-[data-stacked-layout] .sudoku-board {
-    container-type: inline-size;
-}
-
-[data-stacked-layout] .sudoku-cell__digit {
-    font-size: min(1.65rem, 6.5cqw);
-}
-
-[data-stacked-layout] .sudoku-board--6x6 .sudoku-cell__digit {
-    font-size: min(1.9rem, 10cqw);
-}
-
-[data-stacked-layout]:has(+ .landscape-artwork--right:not([hidden])) .gameplay-stage__lower {
-    visibility: hidden;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
 }

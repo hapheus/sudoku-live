@@ -1,62 +1,15 @@
-import React, { useLayoutEffect, useRef } from 'react';
+import React from 'react';
 import { SolveSummary } from './SolveSummary.jsx';
 import { SpectatorHintsFeed } from './SpectatorHintsFeed.jsx';
 import { StatusBanner } from './StatusBanner.jsx';
 import { SudokuBoard } from './SudokuBoard.jsx';
 import { TicTacToeView } from './TicTacToeView.jsx';
 
-function useControlPaneFit(stackedLayout) {
-    const paneRef = useRef(null);
-
-    useLayoutEffect(() => {
-        if (!stackedLayout) return undefined;
-
-        const pane = paneRef.current;
-        const content = pane.firstElementChild;
-        let previousSize = '';
-        const fit = () => {
-            const size = () => [pane.clientWidth, pane.clientHeight, content.offsetWidth, content.offsetHeight].join(':');
-            if (size() === previousSize) return;
-
-            const available = pane.clientHeight;
-            const fitsAt = (scale) => {
-                content.style.setProperty('--controls-scale', scale);
-                return content.getBoundingClientRect().height <= available;
-            };
-
-            if (!fitsAt(1)) {
-                // Give content more room to wrap as the scale decreases.
-                // Keep the largest size that fits the whole pane.
-                let low = 0;
-                let high = 1;
-                for (let attempt = 0; attempt < 7; attempt += 1) {
-                    const scale = (low + high) / 2;
-                    if (fitsAt(scale)) low = scale;
-                    else high = scale;
-                }
-                fitsAt(low);
-            }
-            previousSize = size();
-        };
-        const observer = new window.ResizeObserver(fit);
-        observer.observe(pane);
-        observer.observe(content);
-        fit();
-        return () => {
-            observer.disconnect();
-            content.style.removeProperty('--controls-scale');
-        };
-    }, [stackedLayout]);
-
-    return paneRef;
-}
-
 export function GamePlayView({
     mainClassName,
     mainAriaLabel,
     topBar,
-    dockToolbar = false,
-    stackedLayout = false,
+    landscapeLayout = false,
     guide = null,
     notices = null,
     connectionStatus,
@@ -97,13 +50,12 @@ export function GamePlayView({
     bottomControls,
     messages,
 }) {
-    const lowerPaneRef = useControlPaneFit(stackedLayout);
     const notifications = <>{notices}{actionFeedback && (
         <div id="action-feedback" className="action-feedback" role="status">{actionFeedback}</div>
     )}</>;
     const status = (
         <div className="gameplay-stage__status">
-            {!stackedLayout && notifications}
+            {notifications}
             <StatusBanner
                 connectionStatus={connectionStatus}
                 mode={mode}
@@ -122,7 +74,6 @@ export function GamePlayView({
     const toolbar = (
         <div className="gameplay-stage__toolbar">
             {topBar}
-            {stackedLayout && status}
         </div>
     );
     return (
@@ -132,10 +83,9 @@ export function GamePlayView({
             onPointerDownCapture={nightGhost ? dismissNightGhost : undefined}
             onKeyDownCapture={nightGhost ? dismissNightGhost : undefined}
         >
-            {!dockToolbar && !stackedLayout && topBar}
+            {landscapeLayout && toolbar}
 
             <div className="gameplay-stage">
-                {!stackedLayout && !guide && status}
                 <div className="gameplay-stage__board">
                     {ticTacToeGame && ticTacToeGame.phase !== 'transition' ? (
                         <TicTacToeView
@@ -176,43 +126,38 @@ export function GamePlayView({
                     )}
                 </div>
 
-                <div className="gameplay-stage__lower" ref={lowerPaneRef}>
-                    <div className="gameplay-stage__lower-content">
-                        {stackedLayout && notifications}
-                        {guide ? <div className="gameplay-stage__guide">{!stackedLayout && notifications}{guide}</div> : <div className="gameplay-stage__side">
+                {!guide && status}
+                {guide ? <div className="gameplay-stage__guide">{notifications}{guide}</div> : <div className="gameplay-stage__side">
 
-                            {gameState.status === 'solved' ? (
-                                <SolveSummary
-                                    difficulty={gameState.difficulty}
-                                    elapsedSeconds={gameState.elapsedSeconds}
-                                    mode={isCoopSession ? 'online' : 'solo'}
-                                    isSpectating={isSpectating}
-                                    restartLabel={restartLabel}
-                                    restartDisabled={restartDisabled}
-                                    onPlayAgain={onPlayAgain}
-                                    onBackToSetup={onBackToSetup}
-                                    messages={messages}
-                                />
-                            ) : (
-                                <>
-                                    <SpectatorHintsFeed
-                                        hintsByCell={hintsByCell}
-                                        variant={activeBoardVariant}
-                                        canApply={!isSpectating}
-                                        onSelectHint={onSelectHint}
-                                        onApplyHint={onApplyHint}
-                                        messages={messages}
-                                    />
+                    {gameState.status === 'solved' ? (
+                        <SolveSummary
+                            difficulty={gameState.difficulty}
+                            elapsedSeconds={gameState.elapsedSeconds}
+                            mode={isCoopSession ? 'online' : 'solo'}
+                            isSpectating={isSpectating}
+                            restartLabel={restartLabel}
+                            restartDisabled={restartDisabled}
+                            onPlayAgain={onPlayAgain}
+                            onBackToSetup={onBackToSetup}
+                            messages={messages}
+                        />
+                    ) : (
+                        <>
+                            <SpectatorHintsFeed
+                                hintsByCell={hintsByCell}
+                                variant={activeBoardVariant}
+                                canApply={!isSpectating}
+                                onSelectHint={onSelectHint}
+                                onApplyHint={onApplyHint}
+                                messages={messages}
+                            />
 
-                                    {bottomControls}
-                                </>
-                            )}
-                        </div>}
-                        {stackedLayout && toolbar}
-                    </div>
-                </div>
+                            {bottomControls}
+                        </>
+                    )}
+                </div>}
             </div>
-            {dockToolbar && !stackedLayout && toolbar}
+            {!landscapeLayout && toolbar}
         </main>
     );
 }

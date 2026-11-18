@@ -33,13 +33,13 @@ async function assertRegions(page: Page, primary: string, secondary: string, equ
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 }
 
-async function assertDockedToolbar(page: Page, bottomInset = 0) {
+async function assertTopToolbar(page: Page) {
     const toolbar = page.locator('.gameplay-stage__toolbar');
     const stage = page.locator('.gameplay-stage');
     await expect(toolbar.getByRole('button', { name: 'Open Guide' })).toBeInViewport();
     const [bar, content] = await Promise.all([toolbar.boundingBox(), stage.boundingBox()]);
-    expect(content!.y + content!.height).toBeLessThanOrEqual(bar!.y + 1);
-    expect(bar!.y + bar!.height).toBeCloseTo(await page.evaluate(() => innerHeight) - bottomInset, 0);
+    expect(bar!.y + bar!.height).toBeLessThanOrEqual(content!.y + 1);
+    expect(bar!.y).toBeCloseTo(12, 0);
 }
 
 for (const variant of ['3x3', '2x3']) {
@@ -53,25 +53,26 @@ for (const variant of ['3x3', '2x3']) {
             await page.locator('#start-game-btn').click();
             await page.keyboard.press('Escape');
             await assertRegions(page, '.gameplay-stage__board', '.gameplay-stage__side');
-            await assertDockedToolbar(page);
+            await assertTopToolbar(page);
             await page.screenshot({ path: testInfo.outputPath('landscape-toolbar.png') });
             if (width === 667 && variant === '3x3') {
                 const stage = page.locator('.gameplay-stage');
                 await stage.evaluate(element => { element.scrollTop = element.scrollHeight; });
                 expect(await stage.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
-                await assertDockedToolbar(page);
+                await assertTopToolbar(page);
             }
             await page.locator('#game-help-btn').click();
             await expect(page.getByRole('dialog')).toBeVisible();
-            await assertDockedToolbar(page);
+            await assertTopToolbar(page);
             await page.screenshot({ path: testInfo.outputPath('landscape-guide-toolbar.png') });
             await page.keyboard.press('Escape');
             const board = await page.getByRole('grid').innerText();
             await page.setViewportSize({ width: height, height: width });
-            await expect(page.locator('.gameplay-stage__toolbar')).toHaveCount(0);
-            await expect(page.locator('main > .game-top-bar')).toBeVisible();
+            const toolbar = page.locator('.gameplay-stage__toolbar');
+            await expect(toolbar.getByRole('button', { name: 'Open Guide' })).toBeInViewport();
+            await expect.poll(async () => (await toolbar.boundingBox())!.y).toBeGreaterThan(width - 80);
             await page.setViewportSize({ width, height });
-            await assertDockedToolbar(page);
+            await assertTopToolbar(page);
             await assertRegions(page, '.gameplay-stage__board', '.gameplay-stage__side');
             expect(await page.getByRole('grid').innerText()).toBe(board);
         });
@@ -144,7 +145,7 @@ for (const variant of ['3x3', '2x3']) {
             await page.keyboard.press('Escape');
             await assertRegions(page, '.gameplay-stage__board', '.gameplay-stage__side');
             const left = (await page.locator('.gameplay-stage__board').boundingBox())!;
-            await assertDockedToolbar(page, 21);
+            await assertTopToolbar(page);
             const right = (await page.locator('.gameplay-stage__side').boundingBox())!;
             expect(left.x + left.width).toBeLessThanOrEqual(951 / 2);
             expect(right.x).toBeGreaterThanOrEqual(951 / 2);
