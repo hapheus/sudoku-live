@@ -34,6 +34,8 @@ export function GamePlayView({
     unitCelebration,
     hintHighlight,
     fistBump = null,
+    nightGhost = null,
+    dismissNightGhost,
     boardBackground,
     actionFeedback,
     isCoopSession,
@@ -51,7 +53,12 @@ export function GamePlayView({
         <div id="action-feedback" className="action-feedback" role="status">{actionFeedback}</div>
     )}</>;
     return (
-        <main className={mainClassName} aria-label={mainAriaLabel}>
+        <main
+            className={mainClassName}
+            aria-label={mainAriaLabel}
+            onPointerDownCapture={nightGhost ? dismissNightGhost : undefined}
+            onKeyDownCapture={nightGhost ? dismissNightGhost : undefined}
+        >
             {topBar}
 
             <div className="gameplay-stage">
@@ -97,6 +104,7 @@ export function GamePlayView({
                                 unitCelebration={unitCelebration}
                                 hintHighlight={hintHighlight}
                                 fistBump={fistBump}
+                                nightGhost={nightGhost}
                                 boardBackground={boardBackground}
                                 messages={messages}
                             />

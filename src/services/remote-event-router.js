@@ -44,6 +44,12 @@ export function createRemoteEventRouter(ctx) {
         const hydrated = hydrateGameState(data.gameState);
         if (!hydrated) return;
 
+        if (data.nightGhost && Date.now() - data.sentAt < 5000) {
+            ctx.clearPendingHint(false);
+            ctx.clearHintHighlight();
+            ctx.clearUnitCelebration();
+            ctx.showNightGhost?.(data.nightGhost, hydrated);
+        }
         ctx.setGameState(hydrated);
         ctx.stateRef.current.gameState = hydrated;
         ctx.setSelectedIndex((prev) => (prev !== null && prev < hydrated.board.length ? prev : null));

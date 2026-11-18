@@ -1,9 +1,17 @@
 import React from 'react';
+import nightGhostArtwork from '../assets/easter-eggs/night-ghost.webp';
 
-export function LandscapeArtwork({ artwork, active = true }) {
+const GHOST_ARTWORK = { src: nightGhostArtwork };
+
+export function LandscapeArtwork({ artwork, active = true, side = 'left', hidden = false }) {
     return (
-        <div className="landscape-artwork" aria-hidden="true">
+        <div className={`landscape-artwork landscape-artwork--${side}`} hidden={hidden} aria-hidden="true">
             {active && artwork && <img src={artwork.src} alt="" className="landscape-artwork__image" />}
         </div>
     );
+}
+
+export function ScreenArtwork({ menuVisible, menuArtwork, active, nightGhost }) {
+    if (menuVisible) return <LandscapeArtwork artwork={menuArtwork} active={active} />;
+    return <LandscapeArtwork artwork={GHOST_ARTWORK} active={active} side="right" hidden={!nightGhost} />;
 }

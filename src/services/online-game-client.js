@@ -271,7 +271,10 @@ export class OnlineGameClient {
             const projected = featureProjection && this.stateRecovery.project(type, featureProjection, pub.authoritative);
             if (projected) {
                 this.stateRecovery.observe(type, projected);
-                onEvent(type, projected);
+                // History restores the swapped board silently.
+                const recovered = { ...projected };
+                delete recovered.nightGhost;
+                onEvent(type, recovered);
             }
         }
     }

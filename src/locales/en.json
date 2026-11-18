@@ -151,6 +151,8 @@
   "retroBackToYear": "Back to {year}",
   "retroModeActivated": "1981 Retro Mode activated! No shifting back then.",
   "retroModeDeactivated": "Welcome back to {year}!",
+  "nightGhostBands": "A ghost swapped two bands of rows.",
+  "nightGhostStacks": "A ghost swapped two stacks of columns.",
   "konamiAbPrompt": "Code",
   "fistBumpAwesome": "Awesome!",
   "fistBumpAmazing": "Amazing!",

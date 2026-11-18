@@ -1,5 +1,5 @@
 import { LANDSCAPE_LAYOUT_QUERY, useSplitLayout } from './hooks/useSplitLayout.js';
-import { LandscapeArtwork } from './components/LandscapeArtwork.jsx';
+import { ScreenArtwork } from './components/LandscapeArtwork.jsx';
 import { selectLandscapeArtwork } from './services/landscape-artwork.js';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createCoopFistBumpTracker } from './domain/coop-fist-bump.js';
@@ -27,6 +27,7 @@ import { useFeedbackTimers } from './hooks/useFeedbackTimers.js';
 import { useGameTimersAndModals } from './hooks/useGameTimersAndModals.js';
 import { useKeyboardNavigation } from './hooks/useKeyboardNavigation.js';
 import { useNavigationAndSetup } from './hooks/useNavigationAndSetup.js';
+import { canScheduleNightGhost, isNightGhostScene, useNightGhost, useScheduledNightGhost } from './hooks/useNightGhost.js';
 import { useOnlineSession } from './hooks/useOnlineSession.js';
 import { useTicTacToe } from './hooks/useTicTacToe.js';
 import { SessionNotices } from './components/SessionNotices.jsx';
@@ -325,6 +326,16 @@ export function App() {
         }, 1850);
     }, [soundEffectsRef]);
 
+    const ghostBoardVisible = isNightGhostScene(stateRef.current, legalPage);
+    const { nightGhost, showNightGhost, dismissNightGhost } = useNightGhost({
+        stateRef,
+        soundEffectsRef,
+        announce,
+        scene: JSON.stringify([navTab, onlineGameId, gameState.variant]),
+        solution: gameState.solution,
+        visible: ghostBoardVisible,
+    });
+
     const {
         persistSnapshotIfNeeded,
         syncLobbyProgress,
@@ -379,11 +390,26 @@ export function App() {
         triggerUnitCelebration,
         playMoveSoundFeedback,
         triggerFloatingReaction,
+        showNightGhost,
         triggerFistBumpEffect,
         handleRemoteCellSolveForFistBump,
         ticTacToe,
         announce,
         showFeedback,
+    });
+
+    useScheduledNightGhost({
+        active: canScheduleNightGhost(ghostBoardVisible, isSpectating, mode, myRole),
+        stateRef,
+        onlineClientRef,
+        setGameState,
+        setHintsMap,
+        clearPendingHint,
+        clearHintHighlight,
+        clearUnitCelebration,
+        showNightGhost,
+        persistSnapshotIfNeeded,
+        buildSyncPayload,
     });
 
     useEffect(() => {
@@ -644,6 +670,8 @@ export function App() {
         unitCelebration: unitCelebration,
         hintHighlight: hintHighlight,
         fistBump: fistBump,
+        nightGhost,
+        dismissNightGhost,
         boardBackground: boardBackground,
         actionFeedback: actionFeedback,
         isCoopSession: isCoopSession,
@@ -962,7 +990,12 @@ export function App() {
                 />
             </div>
 
-            {showBottomNav && <LandscapeArtwork artwork={landscapeArtwork} active={landscapeLayout} />}
+            <ScreenArtwork
+                menuVisible={showBottomNav}
+                menuArtwork={landscapeArtwork}
+                active={landscapeLayout}
+                nightGhost={nightGhost}
+            />
             {showBottomNav && (
                 <BottomNav
                     activeTab={showLegalPage ? null : navTab}

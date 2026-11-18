@@ -1,3 +1,5 @@
+import { ghostSwapGroups } from '../domain/night-ghost.js';
+import { NightGhost } from './NightGhost.jsx';
 import React from 'react';
 import { getCellCoords, getColLabel, getVariantSpec, inferVariantFromBoardLength } from '../domain/sudoku-generator.js';
 import { getUnitsForVariant } from '../domain/sudoku-variants.js';
@@ -42,6 +44,13 @@ function ownershipClasses(isGiven, value, isPartnerOwned) {
     };
 }
 
+function ghostGroupAttribute(row, col, groups) {
+    if (!groups) return undefined;
+    const { axis, size, from, to } = groups;
+    const group = Math.floor((axis === 'band' ? row : col) / size);
+    return group === from || group === to ? true : undefined;
+}
+
 export function SudokuBoard({
     gameState,
     selectedIndex,
@@ -57,6 +66,7 @@ export function SudokuBoard({
     unitCelebration = null,
     hintHighlight = null,
     fistBump = null,
+    nightGhost = null,
     boardBackground = null,
     messages = null,
 }) {
@@ -64,6 +74,7 @@ export function SudokuBoard({
     const spec = getVariantSpec(variant);
     const { gridSize, boxRows, boxCols, maxDigit } = spec;
     const is6x6 = gridSize === 6;
+    const ghostGroups = nightGhost && { ...ghostSwapGroups(nightGhost.swap, spec), axis: nightGhost.swap.axis };
 
     const focusAnchorIndex = selectedIndex !== null ? selectedIndex : playerCursorIndex;
     const focusCoords = focusAnchorIndex !== null ? getCellCoords(focusAnchorIndex, spec.id) : null;
@@ -127,9 +138,11 @@ export function SudokuBoard({
                             hasArtwork ? 'sudoku-board--has-artwork' : '',
                             isSolved ? 'sudoku-board--solved' : '',
                         ].filter(Boolean).join(' ')}
+                        data-night-ghost-phase={nightGhost?.phase}
                         role="grid"
                         aria-label={`${gridSize} by ${gridSize} Sudoku grid`}
                     >
+                        {nightGhost && <NightGhost appearance={nightGhost} spec={spec} />}
                         {hasArtwork && (
                             <div className="sudoku-board__artwork" aria-hidden="true">
                                 <img
@@ -209,6 +222,7 @@ export function SudokuBoard({
                                             role="gridcell"
                                             tabIndex={idx === activeTabStop ? 0 : -1}
                                             data-index={idx}
+                                            data-night-ghost-group={ghostGroupAttribute(r, c, ghostGroups)}
                                             style={Object.keys(cellStyle).length > 0 ? cellStyle : undefined}
                                             aria-selected={isSelected}
                                             aria-invalid={isConflict ? 'true' : undefined}
