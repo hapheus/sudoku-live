@@ -1,3 +1,4 @@
+import { validateGhostSwap } from '../domain/night-ghost.js';
 import { ALLOWED_REACTIONS } from '../utils/watcher-helpers.js';
 import { isBoundedString, optional, validateContextEntries, validateNetworkChallenge, validateNetworkEnvelope, validateShift, validateSnapshotPayload } from './network-payloads.js';
 import { isValidGameId } from './ws-config.js';
@@ -128,6 +129,7 @@ export function validateIncomingGameMessage(type, data, totalCells = 81, maxDigi
     }
 
     if (data.gameState !== undefined && !SNAPSHOT_TYPES.has(type)) return false;
+    if (data.nightGhost !== undefined && (type !== 'sync' || !validateGhostSwap(data.nightGhost, data.gameState?.board))) return false;
 
     switch (type) {
     case 'cell-update':

@@ -50,6 +50,7 @@ export function createRoomAuthority(seed = {}) {
                 && (!requests.has(data.requestId) || requests.get(data.requestId) === member.id);
             if (type === 'join-cancel') return data.requesterId === member.id && requests.get(data.requestId) === member.id;
             if (type === 'hint' || type === 'reaction') return true;
+            if (data.nightGhost !== undefined) return type === 'sync' && role === 'host';
             if (HOST_ACTIONS.has(type)) return role === 'host';
             if (!PLAYER_ACTIONS.has(type) || role === 'spectator') return false;
             if (data.role !== undefined && data.role !== role) return false;

@@ -151,6 +151,8 @@
   "retroBackToYear": "Zurück zu {year}",
   "retroModeActivated": "1981 Retro-Modus aktiviert! Damals gab es noch kein Shift.",
   "retroModeDeactivated": "Willkommen zurück in {year}!",
+  "nightGhostBands": "Ein Geist hat zwei Zeilenblöcke vertauscht.",
+  "nightGhostStacks": "Ein Geist hat zwei Spaltenblöcke vertauscht.",
   "konamiAbPrompt": "Code",
   "fistBumpAwesome": "Awesome!",
   "fistBumpAmazing": "Amazing!",

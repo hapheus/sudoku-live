@@ -354,6 +354,7 @@ export function useBoardActions({
 
         const prevBoard = [...cur.gameState.board];
         const prevGivens = [...cur.gameState.givens];
+        const prevSolution = cur.gameState.solution;
         const prevNotes = cur.gameState.notes.map((n) => [...n]);
         const nextState = undoLastMove(cur.gameState);
         setGameState(nextState);
@@ -362,7 +363,8 @@ export function useBoardActions({
 
         if (isOnlineBroadcaster(cur)) {
             const givensChanged = prevGivens.some((val, idx) => val !== nextState.givens[idx]);
-            if (givensChanged) {
+            const solutionChanged = prevSolution?.some((digit, idx) => digit !== nextState.solution?.[idx]);
+            if (givensChanged || solutionChanged) {
                 onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'sync', buildSyncPayload());
             } else {
                 const totalCells = nextState.board.length;

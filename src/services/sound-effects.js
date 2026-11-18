@@ -414,6 +414,30 @@ export function createSoundEffectsPlayer({
         });
     });
 
+    const playNightGhost = () => withReadyContext((activeCtx, dest) => {
+        scheduleTone(activeCtx, dest, {
+            freq: 294, endFreq: 415, duration: 0.49, type: 'sine', volume: 0.28, attack: 0.14,
+        });
+        scheduleTone(activeCtx, dest, {
+            freq: 622, endFreq: 554, startOffset: 0.08, duration: 0.51,
+            type: 'triangle', volume: 0.09, attack: 0.18, filterFreq: 950,
+        });
+    });
+
+    const playNightGhostSwap = () => withReadyContext((activeCtx, dest) => {
+        scheduleTone(activeCtx, dest, {
+            freq: 660, endFreq: 150, duration: 0.21, type: 'triangle', volume: 0.24, attack: 0.015,
+        });
+        scheduleTone(activeCtx, dest, {
+            freq: 220, endFreq: 850, startOffset: 0.1, duration: 0.27,
+            type: 'triangle', volume: 0.19, attack: 0.04, filterFreq: 1300,
+        });
+        scheduleTone(activeCtx, dest, {
+            freq: 110, endFreq: 73, startOffset: 0.37, duration: 0.15,
+            type: 'sine', volume: 0.27, attack: 0.006,
+        });
+    });
+
     const playRetroActivate = () => withReadyContext((activeCtx, dest) => {
         // Iconic 8-bit power-up arpeggio
         scheduleChiptuneNotes(activeCtx, dest, [329.63, 392.0, 659.25, 523.25, 587.33, 783.99], {
@@ -550,6 +574,8 @@ export function createSoundEffectsPlayer({
         playSpectatorCheer,
         playShift,
         playFistBump,
+        playNightGhost,
+        playNightGhostSwap,
         playRetroActivate,
         playRetroExit,
         setRetroMode: (nextRetro) => {
