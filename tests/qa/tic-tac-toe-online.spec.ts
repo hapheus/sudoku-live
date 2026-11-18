@@ -28,7 +28,12 @@ for (const autoAccept of [true, false]) {
             await guest.goto(`http://127.0.0.1:5178/games/${roomId}?watch=1`);
             await expect(guest.locator('#connection-status')).toHaveText('Live');
             await guest.locator('#join-from-watch-btn').click();
-            if (!autoAccept) await host.getByRole('button', { name: 'Allow', exact: true }).click();
+            if (!autoAccept) {
+                const admission = host.locator('#join-request-banner');
+                await expect(admission).toBeVisible();
+                expect((await admission.boundingBox())!.x).toBeGreaterThanOrEqual(await host.evaluate(() => innerWidth / 2));
+                await host.getByRole('button', { name: 'Allow', exact: true }).click();
+            }
             await expect(host.locator('#opponent-status')).toContainText('online', { ignoreCase: true });
             if (!autoAccept) {
                 await guestContext.setOffline(true);

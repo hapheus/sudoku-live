@@ -23,6 +23,7 @@ import {
 const ACTIVE_OPTION_CLASS = 'segmented-label--active';
 
 export function SettingsPanel({
+    hidden = false,
     theme,
     language,
     playerName = '',
@@ -83,7 +84,7 @@ export function SettingsPanel({
     const soundPercent = Math.round(Math.min(1, Math.max(0, Number(soundVolume) || 0)) * 100);
 
     return (
-        <section id="settings-panel" className="settings-panel split-layout" aria-label={messages.settingsTitle}>
+        <section hidden={hidden} id="settings-panel" className="settings-panel split-layout" aria-label={messages.settingsTitle}>
             <div className="split-region split-region--primary">
                 <header className="settings-panel__header">
                     <h2 className="settings-panel__title">{messages.settingsTitle}</h2>

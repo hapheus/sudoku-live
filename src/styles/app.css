@@ -1188,15 +1188,10 @@ body {
     pointer-events: none;
 }
 
-/* Visible Action Feedback Banner (floating, non-layout-shifting) */
+/* General action feedback belongs to the status/guide stack, outside the board. */
 .action-feedback {
-    position: absolute;
-    left: 50%;
-    top: 3.1rem;
-    transform: translateX(-50%);
-    z-index: 20;
     pointer-events: none;
-    max-width: calc(100% - 1rem);
+    max-width: 100%;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
@@ -3720,7 +3715,7 @@ body {
         gap: 0.45rem 0.85rem;
     }
 
-    .gameplay-stage > .status-banner {
+    .gameplay-stage__status {
         grid-area: status;
     }
 
@@ -3776,7 +3771,7 @@ body {
         gap: 0.75rem 1.25rem;
     }
 
-    .gameplay-stage > .status-banner {
+    .gameplay-stage__status {
         grid-area: status;
     }
 
@@ -3911,7 +3906,7 @@ body {
 
     .gameplay-stage__board { grid-area: board; }
     .gameplay-stage__side { grid-area: side; }
-    .gameplay-stage > .status-banner { grid-area: status; }
+    .gameplay-stage__status { grid-area: status; }
 
     .bottom-nav {
         left: calc(env(viewport-segment-left 1 0) + var(--segment-padding));
@@ -3924,5 +3919,118 @@ body {
         right: auto;
         width: var(--segment-content);
         padding-inline: 0;
+    }
+}
+
+/* One content column plus artwork for screens without a board/control split. */
+.landscape-screen__content { display: contents; }
+.gameplay-stage__status, .gameplay-stage__guide {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.gameplay-stage__status .confirm-banner, .gameplay-stage__guide .confirm-banner {
+    width: 100%;
+    max-width: 100%;
+    align-self: stretch;
+}
+.landscape-artwork { display: none; }
+
+/* Keep this query in sync with useSplitLayout.js. */
+@media (orientation: landscape), (min-width: 900px) and (min-height: 540px), (horizontal-viewport-segments: 2) {
+    body {
+        --landscape-inset: calc(0.75rem + max(env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)));
+        --landscape-gap: var(--split-gap, 1.25rem);
+        --landscape-shell-width: min(960px, calc(100vw - 2 * var(--landscape-inset)));
+        --landscape-shell-left: calc((100vw - var(--landscape-shell-width)) / 2);
+        padding-inline: var(--landscape-inset);
+    }
+
+    .gameplay-stage {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-rows: auto 1fr;
+        grid-template-areas: "board status" "board side";
+        align-items: start;
+    }
+    .gameplay-stage__board { grid-area: board; }
+    .gameplay-stage__side { grid-area: side; }
+    .gameplay-stage__status { grid-area: status; }
+    .gameplay-stage__guide { grid-column: 2; grid-row: 1 / span 2; min-width: 0; }
+    .dialog-card--panel {
+        max-width: 100%;
+        max-height: calc(100dvh - 5rem);
+        padding: 0.75rem;
+        box-shadow: none;
+    }
+
+}
+
+@media (orientation: landscape), (horizontal-viewport-segments: 2) {
+    .app-container.landscape-screen {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
+        gap: var(--landscape-gap);
+        max-width: var(--landscape-shell-width);
+    }
+    .landscape-screen__content {
+        grid-column: 2;
+        grid-row: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+    .landscape-screen .split-layout {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        max-width: 100%;
+    }
+    .landscape-screen .split-region { display: contents; }
+    .landscape-screen .confirm-banner { width: 100%; }
+    .landscape-artwork {
+        display: flex;
+        position: fixed;
+        inset: 0 auto auto 0;
+        width: 50vw;
+        height: 100dvh;
+        overflow: hidden;
+        background: var(--color-surface);
+        pointer-events: none;
+    }
+    .landscape-artwork__image { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; }
+    .bottom-nav {
+        left: calc(var(--landscape-shell-left) + (var(--landscape-shell-width) + var(--landscape-gap)) / 2);
+        right: auto;
+        width: calc((var(--landscape-shell-width) - var(--landscape-gap)) / 2);
+    }
+}
+
+@media (horizontal-viewport-segments: 2) {
+    body {
+        --landscape-shell-width: calc(2 * var(--segment-content) + var(--split-gap));
+        --landscape-shell-left: calc(env(viewport-segment-right 0 0) - var(--segment-padding) - var(--segment-content));
+        padding-left: var(--landscape-shell-left);
+        padding-right: calc(100vw - env(viewport-segment-left 1 0) - var(--segment-padding) - var(--segment-content));
+    }
+}
+
+@media (horizontal-viewport-segments: 2) {
+    .landscape-artwork {
+        left: env(viewport-segment-left 0 0);
+        width: env(viewport-segment-width 0 0);
+    }
+}
+
+.settings-panel[hidden] { display: none; }
+
+@media (orientation: landscape), (horizontal-viewport-segments: 2) {
+    .landscape-screen__content > .dialog-card--panel {
+        max-height: calc(100dvh - 7rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
     }
 }

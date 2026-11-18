@@ -1,13 +1,22 @@
 import { test, expect, type Page } from '@playwright/test';
 
-async function assertRegions(page: Page, primary: string, secondary: string) {
+async function assertRegions(page: Page, primary: string, secondary: string, equalWidths = true) {
     const left = page.locator(primary);
     const right = page.locator(secondary);
     await expect(left).toBeVisible();
     await expect(right).toBeVisible();
-    const a = (await left.boundingBox())!;
-    const b = (await right.boundingBox())!;
-    expect(Math.abs(a.width - b.width)).toBeLessThanOrEqual(1);
+    // A resize can finish between two protocol round trips; sample both regions
+    // in one browser task and wait for the requested side-by-side layout.
+    const readBounds = () => page.evaluate(([primary, secondary]) => [
+        document.querySelector(primary)!.getBoundingClientRect().toJSON(),
+        document.querySelector(secondary)!.getBoundingClientRect().toJSON(),
+    ], [primary, secondary]);
+    await expect.poll(async () => {
+        const [a, b] = await readBounds();
+        return (!equalWidths || Math.abs(a.width - b.width) <= 1) && a.right <= b.left;
+    }).toBe(true);
+    const [a, b] = await readBounds();
+    if (equalWidths) expect(Math.abs(a.width - b.width)).toBeLessThanOrEqual(1);
     expect(a.x + a.width).toBeLessThanOrEqual(b.x);
     for (const region of [left, right]) {
         const overflow = await region.evaluate(element => {
@@ -47,19 +56,19 @@ for (const variant of ['3x3', '2x3']) {
     }
 }
 
-test('setup, settings, watch and legal screens have explicit equal regions', async ({ page }) => {
+test('setup, settings, watch and legal keep artwork left and all content right', async ({ page }) => {
     await page.setViewportSize({ width: 812, height: 375 });
     await page.addInitScript(() => localStorage.setItem('sudoku_lang', 'en'));
     await page.routeWebSocket(/.*/, socket => socket.close());
     await page.goto('/');
-    await assertRegions(page, '#play-setup .split-region--primary', '#play-setup .split-region--secondary');
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
     await page.locator('#nav-settings').click();
-    await assertRegions(page, '#settings-panel .split-region--primary', '#settings-panel .split-region--secondary');
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
     await page.locator('#nav-watch').click();
-    await assertRegions(page, '#watch-directory .split-region--primary', '#watch-directory .split-region--secondary');
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
     await page.locator('#nav-play').click();
     await page.locator('#privacy-link').click();
-    await assertRegions(page, '.legal-page__top-bar', '.legal-card');
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
 });
 
 test('emulated unequal display segments keep all screens and dialogs clear of the hinge', async ({ page, context }) => {
@@ -73,18 +82,20 @@ test('emulated unequal display segments keep all screens and dialogs clear of th
     await page.routeWebSocket(/.*/, socket => socket.close());
     await page.goto('/');
     expect(await page.evaluate(() => matchMedia('(horizontal-viewport-segments: 2)').matches)).toBe(true);
-    await assertRegions(page, '#play-setup .split-region--primary', '#play-setup .split-region--secondary');
+    const artwork = (await page.locator('.landscape-artwork').boundingBox())!;
+    expect(artwork).toEqual({ x: 0, y: 0, width: 550, height: 800 });
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
     await page.locator('#nav-settings').click();
-    await assertRegions(page, '#settings-panel .split-region--primary', '#settings-panel .split-region--secondary');
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
     await page.locator('#settings-guide-btn').click();
     const dialog = (await page.getByRole('dialog').boundingBox())!;
     expect(dialog.x).toBeGreaterThanOrEqual(580);
     await page.keyboard.press('Escape');
     await page.locator('#nav-watch').click();
-    await assertRegions(page, '#watch-directory .split-region--primary', '#watch-directory .split-region--secondary');
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
     await page.locator('#nav-play').click();
     await page.locator('#privacy-link').click();
-    await assertRegions(page, '.legal-page__top-bar', '.legal-card');
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
     await page.locator('#legal-back-btn').click();
     await page.locator('#start-game-btn').click();
     await page.keyboard.press('Escape');
@@ -114,7 +125,7 @@ for (const variant of ['3x3', '2x3']) {
             const right = (await page.locator('.gameplay-stage__side').boundingBox())!;
             expect(left.x + left.width).toBeLessThanOrEqual(951 / 2);
             expect(right.x).toBeGreaterThanOrEqual(951 / 2);
-            await assertRegions(page, '.gameplay-stage__board', '.gameplay-stage > .status-banner');
+            await assertRegions(page, '.gameplay-stage__board', '.gameplay-stage__status > .status-banner');
             expect(Math.abs((left.x + left.width + right.x) / 2 - 951 / 2)).toBeLessThanOrEqual(1);
             const puzzle = await page.getByRole('grid').innerText();
             await page.setViewportSize({ width: 466, height: 678 });

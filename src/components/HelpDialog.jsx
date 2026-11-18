@@ -1,11 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import enMessages from '../locales/en.json';
 
-export function HelpDialog({ isOpen, onClose, messages = enMessages }) {
+export function HelpDialog({ isOpen, onClose, panel = false, returnFocusRef = null, messages = enMessages }) {
     const closeBtnRef = useRef(null);
 
     useEffect(() => {
         if (!isOpen) return undefined;
+        const target = returnFocusRef?.current;
+        const opener = target?.isConnected ? target : document.activeElement;
         closeBtnRef.current?.focus();
 
         const onKeyDown = (e) => {
@@ -15,24 +17,20 @@ export function HelpDialog({ isOpen, onClose, messages = enMessages }) {
             }
         };
         document.addEventListener('keydown', onKeyDown);
-        return () => document.removeEventListener('keydown', onKeyDown);
-    }, [isOpen, onClose]);
+        return () => {
+            document.removeEventListener('keydown', onKeyDown);
+            if (opener?.isConnected) opener.focus();
+        };
+    }, [isOpen, onClose, returnFocusRef]);
 
     if (!isOpen) return null;
 
-    return (
-        <div
-            className="dialog-backdrop"
-            role="presentation"
-            onClick={(e) => {
-                if (e.target === e.currentTarget) onClose();
-            }}
-        >
+    const content = (
             <section
                 id="help-dialog"
-                className="dialog-card"
+                className={`dialog-card ${panel ? 'dialog-card--panel' : ''}`}
                 role="dialog"
-                aria-modal="true"
+                aria-modal={panel ? undefined : true}
                 aria-labelledby="help-dialog-title"
             >
                 <div className="dialog-card__header">
@@ -84,6 +82,13 @@ export function HelpDialog({ isOpen, onClose, messages = enMessages }) {
                     </div>
                 </div>
             </section>
+    );
+    if (panel) return content;
+    return (
+        <div className="dialog-backdrop" role="presentation" onClick={(event) => {
+            if (event.target === event.currentTarget) onClose();
+        }}>
+            {content}
         </div>
     );
 }
