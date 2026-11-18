@@ -18,7 +18,7 @@ RUN npm run build
 # ==============================================================================
 # Stage 2: Lightweight Nginx Static Web Runtime
 # ==============================================================================
-FROM nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
+FROM nginx:1.31-alpine@sha256:fed7e14be83cbd2661a75cdc5b872d936cf155d46c327084d30b8df19ae88d72
 
 LABEL org.opencontainers.image.title="Sudoku Shift" \
       org.opencontainers.image.description="Runnable Sudoku Shift SPA container (Game Off 2026) with real-time Centrifugo WebSocket co-op and spectator mode" \
