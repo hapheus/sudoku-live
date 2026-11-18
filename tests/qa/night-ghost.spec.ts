@@ -4,6 +4,16 @@ import { createSudokuGame, serializeGameState } from '../../src/domain/sudoku-en
 const minuteBefore = (hour: number) => new Date(Date.UTC(2026, 10, 17, 23 + hour) - 1000);
 const cells = (page: Page) => page.getByRole('gridcell').allTextContents();
 const ghost = (page: Page) => page.locator('.night-ghost');
+const artwork = (page: Page) => page.locator('.landscape-artwork--right');
+
+async function expectRightArtwork(page: Page) {
+    const image = artwork(page).locator('img');
+    await expect(image).toBeVisible();
+    await expect.poll(() => image.evaluate(element => (element as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+    await expect(image).toHaveCSS('object-fit', 'cover');
+    const { width, height } = page.viewportSize()!;
+    expect(await artwork(page).boundingBox()).toEqual({ x: width / 2, y: 0, width: width / 2, height });
+}
 
 async function seedSolo(page: Page, variant = '3x3', roomId = 'qa-night-ghost', muted = false) {
     const game = createSudokuGame({ variant });
@@ -45,19 +55,27 @@ for (const hour of [0, 1, 2, 3]) {
         const fullMotion = hour === 0;
         await pauseAt(page, minuteBefore(hour));
         await page.emulateMedia({ reducedMotion: fullMotion ? 'no-preference' : 'reduce' });
-        await page.setViewportSize({ width: 390, height: 844 });
+        await page.setViewportSize(hour === 1 ? { width: 844, height: 390 } : { width: 390, height: 844 });
         await seedSolo(page, hour % 2 ? '2x3' : '3x3', undefined, !fullMotion);
         await page.routeWebSocket(/.*/, socket => socket.close());
         await page.goto('/');
         await play(page);
         const before = await cells(page);
         await expect(ghost(page)).toHaveCount(0);
+        await expect(artwork(page)).toBeHidden();
         await page.clock.runFor(1000);
         await expect(ghost(page)).toHaveAttribute('data-phase', 'enter');
         await expect(ghost(page).locator('.night-ghost__flight')).toHaveCSS('animation-name', fullMotion ? 'night-ghost-enter' : 'none');
         await expect(ghost(page).locator('.night-ghost-slab')).toHaveCount(2);
         await page.clock.runFor(540);
         await expect(ghost(page)).toHaveAttribute('data-phase', 'hover');
+        if (hour === 1) {
+            await expectRightArtwork(page);
+            await expect(page.locator('.gameplay-stage__side')).toBeHidden();
+            await page.screenshot({ path: testInfo.outputPath('night-ghost-landscape.png') });
+        } else {
+            await expect(artwork(page)).toBeHidden();
+        }
         if (fullMotion) await page.screenshot({ path: testInfo.outputPath('night-ghost-hover.png') });
         await page.clock.runFor(400);
         await expect(ghost(page)).toHaveAttribute('data-phase', 'swap');
@@ -79,8 +97,11 @@ for (const hour of [0, 1, 2, 3]) {
         if (fullMotion) await page.screenshot({ path: testInfo.outputPath('night-ghost-grin.png') });
         await page.clock.runFor(370);
         await expect(ghost(page)).toHaveAttribute('data-phase', 'exit');
+        if (hour === 1) await expectRightArtwork(page);
         await page.clock.runFor(560);
         await expect(ghost(page)).toHaveCount(0);
+        await expect(artwork(page)).toBeHidden();
+        await expect(page.locator('.gameplay-stage__side')).toBeVisible();
         const after = await cells(page);
         expect(after).not.toEqual(before);
         if (fullMotion) {
@@ -93,6 +114,25 @@ for (const hour of [0, 1, 2, 3]) {
         expect(await cells(page)).toEqual(after);
     });
 }
+
+test('ghost art fills the right display segment up to the hinge', async ({ page, context }) => {
+    await page.setViewportSize({ width: 1200, height: 800 });
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Emulation.setDeviceMetricsOverride', {
+        width: 1200, height: 800, deviceScaleFactor: 1, mobile: true,
+        displayFeature: { orientation: 'vertical', offset: 550, maskLength: 30 },
+    });
+    await pauseAt(page, minuteBefore(0));
+    await seedSolo(page);
+    await page.routeWebSocket(/.*/, socket => socket.close());
+    await page.goto('/');
+    await play(page);
+    await page.clock.runFor(1000);
+    await expect(artwork(page)).toBeVisible();
+    expect(await artwork(page).boundingBox()).toEqual({ x: 580, y: 0, width: 620, height: 800 });
+    await page.clock.runFor(2490);
+    await expect(artwork(page)).toBeHidden();
+});
 
 test('an inactive slot is skipped and a repeated local hour stays claimed after reload', async ({ page }) => {
     await pauseAt(page, new Date('2026-10-25T01:59:59+02:00'));
@@ -124,7 +164,7 @@ test('an inactive slot is skipped and a repeated local hour stays claimed after 
 for (const variant of ['2x3', '3x3']) {
     test(`host, guest and spectator converge on one ghost swap on ${variant}`, async ({ browser, baseURL }) => {
         test.skip(!process.env.CENTRIFUGO_E2E, 'Requires the local Centrifugo broker on port 8081');
-        const contexts = await Promise.all(Array.from({ length: 3 }, () => browser.newContext({ timezoneId: 'Europe/Vienna' })));
+        const contexts = await Promise.all(Array.from({ length: 3 }, () => browser.newContext({ timezoneId: 'Europe/Vienna', viewport: { width: 844, height: 390 } })));
         try {
             const [host, guest, spectator] = await Promise.all(contexts.map(context => context.newPage()));
             const room = `ghost-${variant}-${Date.now()}`;
@@ -148,12 +188,14 @@ for (const variant of ['2x3', '3x3']) {
             await expect(ghost(host)).toBeVisible();
             await expect(ghost(guest)).toBeVisible();
             await expect(ghost(spectator)).toBeVisible();
+            await Promise.all([host, guest, spectator].map(expectRightArtwork));
             const after = await cells(host);
             expect(after).not.toEqual(before);
             await expect.poll(() => cells(guest)).toEqual(after);
             await expect.poll(() => cells(spectator)).toEqual(after);
             await host.clock.runFor(2490);
             await expect(ghost(host)).toHaveCount(0);
+            await Promise.all([host, guest, spectator].map(page => expect(artwork(page)).toBeHidden()));
             await spectator.reload();
             await expect.poll(() => cells(spectator)).toEqual(after);
             await expect(ghost(spectator)).toHaveCount(0);

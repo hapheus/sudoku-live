@@ -3936,7 +3936,7 @@ body {
     max-width: 100%;
     align-self: stretch;
 }
-.landscape-artwork { display: none; }
+.landscape-artwork, .landscape-artwork[hidden] { display: none; }
 
 /* Keep this query in sync with useSplitLayout.js. */
 @media (orientation: landscape), (min-width: 900px) and (min-height: 540px), (horizontal-viewport-segments: 2) {
@@ -4003,6 +4003,14 @@ body {
         background: var(--color-surface);
         pointer-events: none;
     }
+    .landscape-artwork--right {
+        inset-inline: auto 0;
+        z-index: 30;
+        pointer-events: auto;
+    }
+    #sudoku-app:has(+ .landscape-artwork--right:not([hidden])) :is(.gameplay-stage__status, .gameplay-stage__side, .gameplay-stage__guide) {
+        visibility: hidden;
+    }
     .landscape-artwork__image { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; }
     .bottom-nav {
         left: calc(var(--landscape-shell-left) + (var(--landscape-shell-width) + var(--landscape-gap)) / 2);
@@ -4024,6 +4032,11 @@ body {
     .landscape-artwork {
         left: env(viewport-segment-left 0 0);
         width: env(viewport-segment-width 0 0);
+    }
+    .landscape-artwork--right {
+        left: env(viewport-segment-left 1 0);
+        right: auto;
+        width: env(viewport-segment-width 1 0);
     }
 }
 

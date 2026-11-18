@@ -1,5 +1,5 @@
 import { LANDSCAPE_LAYOUT_QUERY, useSplitLayout } from './hooks/useSplitLayout.js';
-import { LandscapeArtwork } from './components/LandscapeArtwork.jsx';
+import { ScreenArtwork } from './components/LandscapeArtwork.jsx';
 import { selectLandscapeArtwork } from './services/landscape-artwork.js';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createCoopFistBumpTracker } from './domain/coop-fist-bump.js';
@@ -990,7 +990,12 @@ export function App() {
                 />
             </div>
 
-            {showBottomNav && <LandscapeArtwork artwork={landscapeArtwork} active={landscapeLayout} />}
+            <ScreenArtwork
+                menuVisible={showBottomNav}
+                menuArtwork={landscapeArtwork}
+                active={landscapeLayout}
+                nightGhost={nightGhost}
+            />
             {showBottomNav && (
                 <BottomNav
                     activeTab={showLegalPage ? null : navTab}
