@@ -42,8 +42,9 @@ npm run verify:itch
 
 ### Option A: Web Dashboard
 1. Create or open your HTML5 project on itch.io.
-2. Upload `sudoku-shift-itch.zip` and check **This file will be played in the browser**.
-3. Recommended embed settings:
+2. Upload the [630 × 500 project cover](cover.png) in the **Cover image** field. The favicon is included in the HTML5 package.
+3. Upload `sudoku-shift-itch.zip` and check **This file will be played in the browser**.
+4. Recommended embed settings:
    - **Viewport dimensions**: `480 × 820` (portrait) or `960 × 720` (responsive)
    - **Mobile friendly**: Enabled
    - **Fullscreen button**: Enabled
