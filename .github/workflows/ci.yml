@@ -56,13 +56,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-
-      - run: npm ci
-      - run: npm run docker:config
+      - name: Validate Docker Compose configurations
+        run: |
+          docker compose config -q
+          docker compose -f compose.prod.yml config -q
 
       - name: Start Docker Compose stack and verify endpoints
         run: |
@@ -85,6 +82,8 @@ jobs:
   e2e-playwright:
     name: Playwright E2E & Accessibility
     runs-on: ubuntu-latest
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
     steps:
       - uses: actions/checkout@v7
 
@@ -94,8 +93,16 @@ jobs:
           cache: npm
 
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npm run e2e -- --ignore-snapshots
+
+      - name: Cache Chromium
+        uses: actions/cache@v5
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+
+      # The chromium channel uses the full browser in headless mode.
+      - run: npx playwright install --with-deps --no-shell chromium
+      - run: npm run e2e -- --ignore-snapshots --workers=2 --reporter=list
 
       - name: Start isolated convergence broker
         run: |
@@ -119,3 +126,13 @@ jobs:
             test-results/
             playwright-report/
           retention-days: 7
+
+  benchmark-playwright-image:
+    name: Benchmark Playwright image setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Pull version-matched Playwright image
+        run: |
+          version=$(jq -er '.packages["node_modules/@playwright/test"].version' package-lock.json)
+          docker pull "mcr.microsoft.com/playwright:v${version}-noble"
