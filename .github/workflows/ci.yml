@@ -56,13 +56,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-
-      - run: npm ci
-      - run: npm run docker:config
+      - name: Validate Docker Compose configurations
+        run: |
+          docker compose config -q
+          docker compose -f compose.prod.yml config -q
 
       - name: Start Docker Compose stack and verify endpoints
         run: |
@@ -93,9 +90,26 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npm run e2e -- --ignore-snapshots
+      - name: Start version-matched Playwright container
+        run: |
+          version=$(jq -er '.packages["node_modules/@playwright/test"].version' package-lock.json)
+          node_dist=$(dirname "$(dirname "$(command -v node)")")
+          npm_cache=$(npm config get cache)
+          mkdir -p "$npm_cache"
+
+          # Host networking keeps the isolated broker reachable on 127.0.0.1.
+          docker run --detach --init --network host --ipc host --name sudoku-playwright \
+            --user "$(id -u):$(id -g)" --workdir /workspace \
+            --volume "$PWD:/workspace" --volume "$node_dist:/opt/node:ro" \
+            --volume "$npm_cache:/npm-cache" --env NPM_CONFIG_CACHE=/npm-cache \
+            --env HOME=/tmp --env CI --env PATH=/opt/node/bin:/usr/bin:/bin \
+            "mcr.microsoft.com/playwright:v${version}-noble" sleep infinity
+
+      - name: Install E2E dependencies
+        run: docker exec sudoku-playwright npm ci
+
+      - name: Run E2E and accessibility suite
+        run: docker exec sudoku-playwright npm run e2e -- --ignore-snapshots --workers=2 --reporter=list
 
       - name: Start isolated convergence broker
         run: |
@@ -103,12 +117,12 @@ jobs:
           curl --fail --silent --show-error --retry 20 --retry-delay 1 --retry-all-errors http://127.0.0.1:17881/health
 
       - name: Verify concurrent edits and exhausted-history recovery
-        run: SYNC_E2E=1 npx playwright test --config playwright.sync.config.ts
+        run: docker exec --env SYNC_E2E=1 sudoku-playwright npm exec -- playwright test --config playwright.sync.config.ts
 
-      - name: Stop isolated convergence broker
+      - name: Stop Playwright container and isolated convergence broker
         if: always()
         run: |
-          docker rm -f sudoku-convergence-qa || true
+          docker rm -f sudoku-playwright sudoku-convergence-qa || true
           docker compose -p sudoku-convergence-qa down --remove-orphans
 
       - uses: actions/upload-artifact@v7
