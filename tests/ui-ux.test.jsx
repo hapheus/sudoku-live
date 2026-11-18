@@ -517,8 +517,8 @@ describe('UI/UX components & Solo persistence', () => {
         const css = fs.readFileSync(path.join(process.cwd(), 'src/styles/app.css'), 'utf8');
         expect(css).toContain('.gameplay-stage');
         expect(css).toMatch(/@media\s*\(orientation:\s*landscape\)/);
-        expect(css).toMatch(/@media\s*\(min-width:\s*900px\)/);
-        expect(css).toMatch(/@media\s*\(horizontal-viewport-segments:\s*2\)/);
+        expect(css).toMatch(/@media\s*\(orientation:\s*landscape\)\s*and\s*\(min-width:\s*900px\)/);
+        expect(css).toMatch(/@media\s*\(orientation:\s*landscape\)\s*and\s*\(horizontal-viewport-segments:\s*2\)/);
     });
 
     it('keeps reveal scrim on artwork cells during hint previews in CSS', () => {

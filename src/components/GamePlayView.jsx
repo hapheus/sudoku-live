@@ -9,6 +9,7 @@ export function GamePlayView({
     mainClassName,
     mainAriaLabel,
     topBar,
+    landscapeLayout = false,
     guide = null,
     notices = null,
     connectionStatus,
@@ -52,6 +53,29 @@ export function GamePlayView({
     const notifications = <>{notices}{actionFeedback && (
         <div id="action-feedback" className="action-feedback" role="status">{actionFeedback}</div>
     )}</>;
+    const status = (
+        <div className="gameplay-stage__status">
+            {notifications}
+            <StatusBanner
+                connectionStatus={connectionStatus}
+                mode={mode}
+                isSpectating={isSpectating}
+                myRole={myRole}
+                myClientId={myClientId}
+                currentMembers={currentMembers}
+                spectatedGameMode={spectatedGameMode}
+                gameState={gameState}
+                onReconnect={onReconnect}
+                onContinueSolo={onContinueSolo}
+                messages={messages}
+            />
+        </div>
+    );
+    const toolbar = (
+        <div className="gameplay-stage__toolbar">
+            {topBar}
+        </div>
+    );
     return (
         <main
             className={mainClassName}
@@ -59,26 +83,9 @@ export function GamePlayView({
             onPointerDownCapture={nightGhost ? dismissNightGhost : undefined}
             onKeyDownCapture={nightGhost ? dismissNightGhost : undefined}
         >
-            {topBar}
+            {landscapeLayout && toolbar}
 
-            <div className="gameplay-stage">
-                {!guide && <div className="gameplay-stage__status">
-                    {notifications}
-                    <StatusBanner
-                        connectionStatus={connectionStatus}
-                        mode={mode}
-                        isSpectating={isSpectating}
-                        myRole={myRole}
-                        myClientId={myClientId}
-                        currentMembers={currentMembers}
-                        spectatedGameMode={spectatedGameMode}
-                        gameState={gameState}
-                        onReconnect={onReconnect}
-                        onContinueSolo={onContinueSolo}
-                        messages={messages}
-                    />
-                </div>}
-
+            <div className="gameplay-stage split-panes">
                 <div className="gameplay-stage__board">
                     {ticTacToeGame && ticTacToeGame.phase !== 'transition' ? (
                         <TicTacToeView
@@ -119,35 +126,41 @@ export function GamePlayView({
                     )}
                 </div>
 
-                {guide ? <div className="gameplay-stage__guide">{notifications}{guide}</div> : <div className="gameplay-stage__side">
+                <div className="gameplay-stage__controls">
+                    <div className="gameplay-stage__controls-content">
+                        {!guide && status}
+                        {guide ? <div className="gameplay-stage__guide">{notifications}{guide}</div> : <div className="gameplay-stage__side">
 
-                    {gameState.status === 'solved' ? (
-                        <SolveSummary
-                            difficulty={gameState.difficulty}
-                            elapsedSeconds={gameState.elapsedSeconds}
-                            mode={isCoopSession ? 'online' : 'solo'}
-                            isSpectating={isSpectating}
-                            restartLabel={restartLabel}
-                            restartDisabled={restartDisabled}
-                            onPlayAgain={onPlayAgain}
-                            onBackToSetup={onBackToSetup}
-                            messages={messages}
-                        />
-                    ) : (
-                        <>
-                            <SpectatorHintsFeed
-                                hintsByCell={hintsByCell}
-                                variant={activeBoardVariant}
-                                canApply={!isSpectating}
-                                onSelectHint={onSelectHint}
-                                onApplyHint={onApplyHint}
-                                messages={messages}
-                            />
+                            {gameState.status === 'solved' ? (
+                                <SolveSummary
+                                    difficulty={gameState.difficulty}
+                                    elapsedSeconds={gameState.elapsedSeconds}
+                                    mode={isCoopSession ? 'online' : 'solo'}
+                                    isSpectating={isSpectating}
+                                    restartLabel={restartLabel}
+                                    restartDisabled={restartDisabled}
+                                    onPlayAgain={onPlayAgain}
+                                    onBackToSetup={onBackToSetup}
+                                    messages={messages}
+                                />
+                            ) : (
+                                <>
+                                    <SpectatorHintsFeed
+                                        hintsByCell={hintsByCell}
+                                        variant={activeBoardVariant}
+                                        canApply={!isSpectating}
+                                        onSelectHint={onSelectHint}
+                                        onApplyHint={onApplyHint}
+                                        messages={messages}
+                                    />
 
-                            {bottomControls}
-                        </>
-                    )}
-                </div>}
+                                    {bottomControls}
+                                </>
+                            )}
+                        </div>}
+                    </div>
+                    {!landscapeLayout && toolbar}
+                </div>
             </div>
         </main>
     );

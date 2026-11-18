@@ -13,10 +13,10 @@ async function assertRegions(page: Page, primary: string, secondary: string, equ
     ], [primary, secondary]);
     await expect.poll(async () => {
         const [a, b] = await readBounds();
-        return (!equalWidths || Math.abs(a.width - b.width) <= 1) && a.right <= b.left;
+        return (!equalWidths || a.width === b.width) && a.right <= b.left;
     }).toBe(true);
     const [a, b] = await readBounds();
-    if (equalWidths) expect(Math.abs(a.width - b.width)).toBeLessThanOrEqual(1);
+    if (equalWidths) expect(a.width).toBe(b.width);
     expect(a.x + a.width).toBeLessThanOrEqual(b.x);
     for (const region of [left, right]) {
         const overflow = await region.evaluate(element => {
@@ -33,9 +33,18 @@ async function assertRegions(page: Page, primary: string, secondary: string, equ
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 }
 
+async function assertTopToolbar(page: Page) {
+    const toolbar = page.locator('.gameplay-stage__toolbar');
+    const stage = page.locator('.gameplay-stage');
+    await expect(toolbar.getByRole('button', { name: 'Open Guide' })).toBeInViewport();
+    const [bar, content] = await Promise.all([toolbar.boundingBox(), stage.boundingBox()]);
+    expect(bar!.y + bar!.height).toBeLessThanOrEqual(content!.y + 1);
+    expect(bar!.y).toBeCloseTo(12, 0);
+}
+
 for (const variant of ['3x3', '2x3']) {
     for (const [width, height] of [[667, 375], [812, 375], [844, 390], [1024, 768], [1440, 900]]) {
-        test(`equal gameplay regions contain controls through resize ${variant} ${width}x${height}`, async ({ page }) => {
+        test(`equal gameplay regions contain controls through resize ${variant} ${width}x${height}`, async ({ page }, testInfo) => {
             await page.setViewportSize({ width, height });
             await page.addInitScript(() => localStorage.setItem('sudoku_lang', 'en'));
             await page.routeWebSocket(/.*/, socket => socket.close());
@@ -43,14 +52,28 @@ for (const variant of ['3x3', '2x3']) {
             await page.getByText(variant === '2x3' ? '2×3 (6×6)' : '3×3 (9×9)', { exact: true }).click();
             await page.locator('#start-game-btn').click();
             await page.keyboard.press('Escape');
-            await assertRegions(page, '.gameplay-stage__board', '.gameplay-stage__side');
+            await assertRegions(page, '.gameplay-stage__board', '.gameplay-stage__controls');
+            await assertTopToolbar(page);
+            await page.screenshot({ path: testInfo.outputPath('landscape-toolbar.png') });
+            if (width === 667 && variant === '3x3') {
+                const stage = page.locator('.gameplay-stage__controls-content');
+                await stage.evaluate(element => { element.scrollTop = element.scrollHeight; });
+                expect(await stage.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+                await assertTopToolbar(page);
+            }
             await page.locator('#game-help-btn').click();
             await expect(page.getByRole('dialog')).toBeVisible();
+            await assertTopToolbar(page);
+            await page.screenshot({ path: testInfo.outputPath('landscape-guide-toolbar.png') });
             await page.keyboard.press('Escape');
             const board = await page.getByRole('grid').innerText();
             await page.setViewportSize({ width: height, height: width });
+            const toolbar = page.locator('.gameplay-stage__toolbar');
+            await expect(toolbar.getByRole('button', { name: 'Open Guide' })).toBeInViewport();
+            await expect.poll(async () => (await toolbar.boundingBox())!.y).toBeGreaterThan(width - 80);
             await page.setViewportSize({ width, height });
-            await assertRegions(page, '.gameplay-stage__board', '.gameplay-stage__side');
+            await assertTopToolbar(page);
+            await assertRegions(page, '.gameplay-stage__board', '.gameplay-stage__controls');
             expect(await page.getByRole('grid').innerText()).toBe(board);
         });
     }
@@ -61,14 +84,14 @@ test('setup, settings, watch and legal keep artwork left and all content right',
     await page.addInitScript(() => localStorage.setItem('sudoku_lang', 'en'));
     await page.routeWebSocket(/.*/, socket => socket.close());
     await page.goto('/');
-    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__pane');
     await page.locator('#nav-settings').click();
-    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__pane');
     await page.locator('#nav-watch').click();
-    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__pane');
     await page.locator('#nav-play').click();
     await page.locator('#privacy-link').click();
-    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__pane');
 });
 
 test('emulated unequal display segments keep all screens and dialogs clear of the hinge', async ({ page, context }) => {
@@ -83,25 +106,26 @@ test('emulated unequal display segments keep all screens and dialogs clear of th
     await page.goto('/');
     expect(await page.evaluate(() => matchMedia('(horizontal-viewport-segments: 2)').matches)).toBe(true);
     const artwork = (await page.locator('.landscape-artwork').boundingBox())!;
-    expect(artwork).toEqual({ x: 0, y: 0, width: 550, height: 800 });
-    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
+    expect(artwork.x + artwork.width).toBeLessThanOrEqual(550);
+    expect((await page.locator('.landscape-screen__pane').boundingBox())!.x).toBeGreaterThanOrEqual(580);
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__pane');
     await page.locator('#nav-settings').click();
-    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__pane');
     await page.locator('#settings-guide-btn').click();
     const dialog = (await page.getByRole('dialog').boundingBox())!;
     expect(dialog.x).toBeGreaterThanOrEqual(580);
     await page.keyboard.press('Escape');
     await page.locator('#nav-watch').click();
-    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__pane');
     await page.locator('#nav-play').click();
     await page.locator('#privacy-link').click();
-    await assertRegions(page, '.landscape-artwork', '.landscape-screen__content', false);
+    await assertRegions(page, '.landscape-artwork', '.landscape-screen__pane');
     await page.locator('#legal-back-btn').click();
     await page.locator('#start-game-btn').click();
     await page.keyboard.press('Escape');
-    await assertRegions(page, '.gameplay-stage__board', '.gameplay-stage__side');
+    await assertRegions(page, '.gameplay-stage__board', '.gameplay-stage__controls');
     const board = (await page.locator('.gameplay-stage__board').boundingBox())!;
-    const controls = (await page.locator('.gameplay-stage__side').boundingBox())!;
+    const controls = (await page.locator('.gameplay-stage__controls').boundingBox())!;
     expect(board.x + board.width).toBeLessThanOrEqual(550);
     expect(controls.x).toBeGreaterThanOrEqual(580);
 });
@@ -120,17 +144,18 @@ for (const variant of ['3x3', '2x3']) {
             await page.getByText(variant === '2x3' ? '2×3 (6×6)' : '3×3 (9×9)', { exact: true }).click();
             await page.locator('#start-game-btn').click();
             await page.keyboard.press('Escape');
-            await assertRegions(page, '.gameplay-stage__board', '.gameplay-stage__side');
+            await assertRegions(page, '.gameplay-stage__board', '.gameplay-stage__controls');
             const left = (await page.locator('.gameplay-stage__board').boundingBox())!;
-            const right = (await page.locator('.gameplay-stage__side').boundingBox())!;
+            await assertTopToolbar(page);
+            const right = (await page.locator('.gameplay-stage__controls').boundingBox())!;
             expect(left.x + left.width).toBeLessThanOrEqual(951 / 2);
             expect(right.x).toBeGreaterThanOrEqual(951 / 2);
-            await assertRegions(page, '.gameplay-stage__board', '.gameplay-stage__status > .status-banner');
+            await assertRegions(page, '.gameplay-stage__board', '.gameplay-stage__status > .status-banner', false);
             expect(Math.abs((left.x + left.width + right.x) / 2 - 951 / 2)).toBeLessThanOrEqual(1);
             const puzzle = await page.getByRole('grid').innerText();
             await page.setViewportSize({ width: 466, height: 678 });
             await page.setViewportSize({ width: 951, height: 669 });
-            await assertRegions(page, '.gameplay-stage__board', '.gameplay-stage__side');
+            await assertRegions(page, '.gameplay-stage__board', '.gameplay-stage__controls');
             expect(await page.getByRole('grid').innerText()).toBe(puzzle);
             await testInfo.attach('duo-gameplay', { body: await page.screenshot(), contentType: 'image/png' });
         });

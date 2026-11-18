@@ -3675,26 +3675,6 @@ body {
    Responsive Device Support: Landscape, iPhone/iPad, itch.io/Desktop, iPhone Duo
    ========================================================================== */
 
-.gameplay-stage {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    width: 100%;
-}
-
-.gameplay-stage__board,
-.gameplay-stage__side {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    width: 100%;
-    min-width: 0;
-}
-
-.gameplay-stage__side {
-    position: relative;
-}
-
 @media (orientation: landscape) and (max-height: 540px) {
     .app-container--with-nav:has(.settings-panel) {
         max-width: min(100%, 920px);
@@ -3704,33 +3684,7 @@ body {
         max-width: min(100%, 920px);
     }
 
-    .gameplay-stage {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        grid-template-rows: auto 1fr;
-        grid-template-areas:
-            "board status"
-            "board side";
-        align-items: start;
-        gap: 0.45rem 0.85rem;
-    }
-
-    .gameplay-stage__status {
-        grid-area: status;
-    }
-
-    .gameplay-stage__board {
-        grid-area: board;
-    }
-
-    .gameplay-stage__side {
-        grid-area: side;
-        max-width: 440px;
-    }
-
-    .gameplay-stage__board .board-wrapper,
-    .gameplay-stage__board .tic-tac-toe {
-        width: min(100%, calc(100dvh - 3.75rem));
+    .gameplay-stage__board .board-wrapper {
         max-width: 360px;
     }
 
@@ -3751,36 +3705,13 @@ body {
     }
 }
 
-@media (min-width: 900px) and (min-height: 540px) {
+@media (orientation: landscape) and (min-width: 900px) and (min-height: 540px) {
     .app-container--with-nav {
         max-width: 680px;
     }
 
     .app-container--gameplay {
         max-width: 960px;
-    }
-
-    .gameplay-stage {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        grid-template-rows: auto 1fr;
-        grid-template-areas:
-            "board status"
-            "board side";
-        align-items: start;
-        gap: 0.75rem 1.25rem;
-    }
-
-    .gameplay-stage__status {
-        grid-area: status;
-    }
-
-    .gameplay-stage__board {
-        grid-area: board;
-    }
-
-    .gameplay-stage__side {
-        grid-area: side;
     }
 
     .gameplay-stage__side .numpad {
@@ -3802,34 +3733,11 @@ body {
     }
 }
 
-/* Equal content regions exclude the shared gutter and outer safe-area padding. */
-@media (orientation: landscape) and (max-height: 540px), (min-width: 900px) and (min-height: 540px), (horizontal-viewport-segments: 2) {
-    /* Unequal safe-area insets must not move the split away from the fold. */
-    body {
-        padding-inline: calc(0.75rem + max(env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)));
-    }
-
-    .gameplay-stage__board, .gameplay-stage__side {
-        max-width: 100%;
-        overflow-wrap: anywhere;
-    }
-
-    .gameplay-stage__board .board-wrapper,
-    .gameplay-stage__board .tic-tac-toe,
-    .gameplay-stage__board .board-frame {
-        max-width: 100%;
-    }
-
-    .gameplay-stage__side .shift-bar__actions {
-        flex-basis: min(100%, calc(4 * var(--touch-min) + 3 * 0.45rem));
-    }
-}
-
 .split-region {
     display: contents;
 }
 
-@media (orientation: landscape) and (max-height: 540px), (horizontal-viewport-segments: 2) {
+@media (orientation: landscape) and (max-height: 540px), (orientation: landscape) and (horizontal-viewport-segments: 2) {
     .app-container--with-nav {
         max-width: 960px;
     }
@@ -3873,15 +3781,265 @@ body {
         min-width: 0;
     }
 
-    .confirm-banner {
-        width: calc((100% - var(--split-gap, 0.85rem)) / 2);
-        align-self: end;
+}
+
+/* Two equal tracks share the usable area after the gutter and safe areas.
+   Rounding down keeps both tracks identical at odd viewport dimensions. */
+body {
+    --layout-inset-top: calc(0.75rem + env(safe-area-inset-top, 0px));
+    --layout-inset-bottom: env(safe-area-inset-bottom, 0px);
+    --layout-height: calc(100dvh - var(--layout-inset-top) - var(--layout-inset-bottom));
+}
+
+.split-panes {
+    --pane-gap: 0.5rem;
+    --pane-size: calc((100% - var(--pane-gap)) / 2);
+    display: grid;
+    gap: var(--pane-gap);
+    grid-template: repeat(2, var(--pane-size)) / minmax(0, 1fr);
+    align-content: center;
+}
+
+@supports (width: round(down, 50%, 1px)) {
+    .split-panes {
+        --pane-size: round(down, calc((100% - var(--pane-gap)) / 2), 1px);
     }
 }
 
-/* Segment coordinates, rather than a device name, define the unavailable gap.
-   Use the smaller usable segment so unequal displays still have a 1:1 contract. */
-@media (horizontal-viewport-segments: 2) {
+.app-container.landscape-screen {
+    height: var(--layout-height);
+    padding-bottom: 0;
+}
+
+.game-screen,
+.watch-screen {
+    height: var(--layout-height);
+}
+
+.gameplay-stage {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+}
+
+.gameplay-stage__board {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    min-height: 0;
+    container-type: size;
+}
+
+.gameplay-stage__board .board-wrapper {
+    width: 100%;
+}
+
+.gameplay-stage__board .board-frame {
+    --axis-height: 1rem;
+    max-width: min(calc(var(--board-max-size) + 1.5rem), calc(100cqh - var(--axis-height) - 0.2rem + 1.5rem));
+}
+
+.gameplay-stage__board .board-col-axes {
+    height: var(--axis-height);
+}
+
+.gameplay-stage__board .tic-tac-toe {
+    max-width: min(100%, calc(100cqh - 5rem));
+}
+
+.landscape-screen__pane,
+.gameplay-stage__controls {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+}
+
+.landscape-screen__content,
+.gameplay-stage__controls-content {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-height: 0;
+    min-width: 0;
+    overflow: auto;
+    overflow-wrap: anywhere;
+    overscroll-behavior: contain;
+}
+
+.landscape-screen__content > *,
+.gameplay-stage__controls-content > * {
+    flex-shrink: 0;
+}
+
+.app-container--gameplay .landscape-screen__pane,
+.app-container--gameplay .landscape-screen__content {
+    display: contents;
+}
+
+.landscape-screen__content {
+    gap: 0.75rem;
+    padding-block: 0.375rem;
+}
+
+.landscape-screen .play-setup {
+    min-height: 0;
+}
+
+.landscape-screen .confirm-banner,
+.gameplay-stage__controls-content .confirm-banner {
+    width: 100%;
+}
+
+.gameplay-stage__status,
+.gameplay-stage__guide,
+.gameplay-stage__side {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.gameplay-stage__side {
+    position: relative;
+}
+
+.gameplay-stage__toolbar {
+    position: relative;
+    z-index: 31;
+    flex: none;
+    padding-block: 0.375rem;
+    background: var(--color-nav-bg);
+    border-top: 1px solid var(--color-border);
+}
+
+.gameplay-stage__toolbar .game-top-bar__back-btn {
+    justify-self: start;
+}
+
+.landscape-screen__pane > .bottom-nav {
+    position: static;
+    flex: none;
+    width: 100%;
+    padding-bottom: 0.45rem;
+}
+
+.landscape-artwork {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--color-surface);
+    pointer-events: none;
+}
+
+.landscape-artwork--right,
+.landscape-artwork[hidden] {
+    display: none;
+}
+
+.landscape-artwork__image {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+}
+
+@media (orientation: portrait) {
+    body {
+        --layout-inset-bottom: max(env(safe-area-inset-top, 0px), env(safe-area-inset-bottom, 0px));
+        --layout-inset-top: var(--layout-inset-bottom);
+        padding-top: var(--layout-inset-top);
+    }
+
+    .landscape-screen .landscape-artwork {
+        border-radius: var(--radius-md);
+    }
+}
+
+@media (orientation: portrait) and (vertical-viewport-segments: 2) {
+    .split-panes {
+        --pane-gap: calc(2 * max(
+            0.25rem,
+            calc(50dvh - env(viewport-segment-bottom 0 0)),
+            calc(env(viewport-segment-top 0 1) - 50dvh)
+        ));
+    }
+}
+
+/* Keep this orientation query in sync with useLandscapeLayout.js. */
+@media (orientation: landscape) {
+    body {
+        --landscape-inset: calc(0.75rem + max(env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)));
+        padding-inline: var(--landscape-inset);
+    }
+
+    .split-panes {
+        --pane-gap: var(--split-gap, 1.25rem);
+        grid-template: minmax(0, 1fr) / repeat(2, var(--pane-size));
+        align-content: stretch;
+        justify-content: center;
+    }
+
+    .app-container.landscape-screen {
+        max-width: none;
+    }
+
+    .landscape-screen .split-layout {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .landscape-screen .split-region {
+        display: contents;
+    }
+
+    .landscape-screen__pane > .bottom-nav,
+    .gameplay-stage__toolbar {
+        border-top: 0;
+        border-bottom: 1px solid var(--color-border);
+    }
+
+    .gameplay-stage__board {
+        justify-content: flex-start;
+    }
+
+    .gameplay-stage__board .board-frame {
+        max-width: calc(100cqh - var(--axis-height) - 0.2rem + 1.5rem);
+    }
+
+    .gameplay-stage__side .shift-bar__actions {
+        flex-basis: min(100%, calc(4 * var(--touch-min) + 3 * 0.45rem));
+    }
+
+    .dialog-card--panel {
+        max-width: 100%;
+        max-height: none;
+        overflow: visible;
+        padding: 0.75rem;
+        box-shadow: none;
+    }
+
+    .landscape-artwork--right:not([hidden]) {
+        display: block;
+        position: fixed;
+        inset: 0 0 auto auto;
+        width: 50vw;
+        height: 100dvh;
+        z-index: 30;
+        pointer-events: auto;
+    }
+
+    #sudoku-app:has(+ .landscape-artwork--right:not([hidden])) .gameplay-stage__controls {
+        visibility: hidden;
+    }
+}
+
+@media (orientation: landscape) and (horizontal-viewport-segments: 2) {
     :root {
         --segment-padding: max(0.75rem, env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
         --segment-content: calc(min(env(viewport-segment-width 0 0), env(viewport-segment-width 1 0)) - 2 * var(--segment-padding));
@@ -3893,25 +4051,8 @@ body {
         padding-right: calc(100vw - env(viewport-segment-left 1 0) - var(--segment-padding) - var(--segment-content));
     }
 
-    .app-container--with-nav, .app-container--gameplay {
+    .app-container--gameplay {
         max-width: none;
-    }
-
-    .gameplay-stage {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        grid-template-areas: "board status" "board side";
-        gap: 0.5rem var(--split-gap);
-    }
-
-    .gameplay-stage__board { grid-area: board; }
-    .gameplay-stage__side { grid-area: side; }
-    .gameplay-stage__status { grid-area: status; }
-
-    .bottom-nav {
-        left: calc(env(viewport-segment-left 1 0) + var(--segment-padding));
-        right: auto;
-        width: var(--segment-content);
     }
 
     .dialog-backdrop {
@@ -3920,130 +4061,14 @@ body {
         width: var(--segment-content);
         padding-inline: 0;
     }
-}
 
-/* One content column plus artwork for screens without a board/control split. */
-.landscape-screen__content { display: contents; }
-.gameplay-stage__status, .gameplay-stage__guide {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    min-width: 0;
-    overflow-wrap: anywhere;
-}
-.gameplay-stage__status .confirm-banner, .gameplay-stage__guide .confirm-banner {
-    width: 100%;
-    max-width: 100%;
-    align-self: stretch;
-}
-.landscape-artwork, .landscape-artwork[hidden] { display: none; }
-
-/* Keep this query in sync with useSplitLayout.js. */
-@media (orientation: landscape), (min-width: 900px) and (min-height: 540px), (horizontal-viewport-segments: 2) {
-    body {
-        --landscape-inset: calc(0.75rem + max(env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)));
-        --landscape-gap: var(--split-gap, 1.25rem);
-        --landscape-shell-width: min(960px, calc(100vw - 2 * var(--landscape-inset)));
-        --landscape-shell-left: calc((100vw - var(--landscape-shell-width)) / 2);
-        padding-inline: var(--landscape-inset);
-    }
-
-    .gameplay-stage {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        grid-template-rows: auto 1fr;
-        grid-template-areas: "board status" "board side";
-        align-items: start;
-    }
-    .gameplay-stage__board { grid-area: board; }
-    .gameplay-stage__side { grid-area: side; }
-    .gameplay-stage__status { grid-area: status; }
-    .gameplay-stage__guide { grid-column: 2; grid-row: 1 / span 2; min-width: 0; }
-    .dialog-card--panel {
-        max-width: 100%;
-        max-height: calc(100dvh - 5rem);
-        padding: 0.75rem;
-        box-shadow: none;
-    }
-
-}
-
-@media (orientation: landscape), (horizontal-viewport-segments: 2) {
-    .app-container.landscape-screen {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        align-items: start;
-        gap: var(--landscape-gap);
-        max-width: var(--landscape-shell-width);
-    }
-    .landscape-screen__content {
-        grid-column: 2;
-        grid-row: 1;
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-        min-width: 0;
-        overflow-wrap: anywhere;
-    }
-    .landscape-screen .split-layout {
-        display: flex;
-        flex-direction: column;
-        width: 100%;
-        max-width: 100%;
-    }
-    .landscape-screen .split-region { display: contents; }
-    .landscape-screen .confirm-banner { width: 100%; }
-    .landscape-artwork {
-        display: flex;
-        position: fixed;
-        inset: 0 auto auto 0;
-        width: 50vw;
-        height: 100dvh;
-        overflow: hidden;
-        background: var(--color-surface);
-        pointer-events: none;
-    }
-    .landscape-artwork--right {
-        inset-inline: auto 0;
-        z-index: 30;
-        pointer-events: auto;
-    }
-    #sudoku-app:has(+ .landscape-artwork--right:not([hidden])) :is(.gameplay-stage__status, .gameplay-stage__side, .gameplay-stage__guide) {
-        visibility: hidden;
-    }
-    .landscape-artwork__image { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; }
-    .bottom-nav {
-        left: calc(var(--landscape-shell-left) + (var(--landscape-shell-width) + var(--landscape-gap)) / 2);
-        right: auto;
-        width: calc((var(--landscape-shell-width) - var(--landscape-gap)) / 2);
-    }
-}
-
-@media (horizontal-viewport-segments: 2) {
-    body {
-        --landscape-shell-width: calc(2 * var(--segment-content) + var(--split-gap));
-        --landscape-shell-left: calc(env(viewport-segment-right 0 0) - var(--segment-padding) - var(--segment-content));
-        padding-left: var(--landscape-shell-left);
-        padding-right: calc(100vw - env(viewport-segment-left 1 0) - var(--segment-padding) - var(--segment-content));
-    }
-}
-
-@media (horizontal-viewport-segments: 2) {
-    .landscape-artwork {
-        left: env(viewport-segment-left 0 0);
-        width: env(viewport-segment-width 0 0);
-    }
-    .landscape-artwork--right {
+    .landscape-artwork--right:not([hidden]) {
         left: env(viewport-segment-left 1 0);
         right: auto;
         width: env(viewport-segment-width 1 0);
     }
 }
 
-.settings-panel[hidden] { display: none; }
-
-@media (orientation: landscape), (horizontal-viewport-segments: 2) {
-    .landscape-screen__content > .dialog-card--panel {
-        max-height: calc(100dvh - 7rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
-    }
+.settings-panel[hidden] {
+    display: none;
 }
