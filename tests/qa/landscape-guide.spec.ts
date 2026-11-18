@@ -51,7 +51,6 @@ test('primary navigation and artwork follow the viewport orientation', async ({ 
     await page.routeWebSocket(/.*/, socket => socket.close());
     await page.goto('/');
     await expect(page.locator('.landscape-artwork img')).toBeVisible();
-    expect(await page.locator('.landscape-artwork').boundingBox()).toEqual({ x: 0, y: 0, width: 951 / 2, height: 669 });
     await expect(page.locator('.landscape-artwork img')).toHaveCSS('object-fit', 'cover');
     const images = await page.locator('.landscape-artwork img').evaluateAll(elements => elements.map(element => element.getAttribute('src')));
     for (const tab of ['#nav-settings', '#nav-watch', '#nav-play']) {
@@ -59,6 +58,9 @@ test('primary navigation and artwork follow the viewport orientation', async ({ 
         const navigation = (await page.locator('.bottom-nav').boundingBox())!;
         expect(navigation.x).toBeGreaterThanOrEqual(951 / 2);
         const content = (await page.locator('.landscape-screen__content').boundingBox())!;
+        const artwork = (await page.locator('.landscape-artwork').boundingBox())!;
+        const pane = (await page.locator('.landscape-screen__pane').boundingBox())!;
+        expect(artwork.width).toBe(pane.width);
         expect(content.x).toBeGreaterThanOrEqual(951 / 2);
         expect(navigation.y + navigation.height).toBeLessThanOrEqual(content.y + 1);
         expect(await page.locator('.landscape-screen__content').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
@@ -69,9 +71,11 @@ test('primary navigation and artwork follow the viewport orientation', async ({ 
         await page.setViewportSize({ width, height });
         await expect.poll(() => page.evaluate(height => {
             const artwork = document.querySelector('.landscape-artwork')!.getBoundingClientRect();
+            const pane = document.querySelector('.landscape-screen__pane')!.getBoundingClientRect();
             const setup = document.querySelector('.play-setup')!.getBoundingClientRect();
             const nav = document.querySelector('.bottom-nav')!.getBoundingClientRect();
-            return artwork.height > 0 && artwork.bottom <= setup.top && Math.abs(nav.bottom - height) < 1;
+            return artwork.height > 0 && artwork.height === pane.height && artwork.bottom <= setup.top &&
+                Math.abs((artwork.bottom + pane.top) / 2 - height / 2) < 1 && Math.abs(nav.bottom - height) < 1;
         }, height)).toBe(true);
         if (width === 390) {
             await page.screenshot({ path: testInfo.outputPath('portrait-bottom-navigation.png') });
@@ -94,8 +98,6 @@ for (const [width, height] of [[844, 390], [951, 669], [1280, 800]]) {
         await page.keyboard.press('1');
         const puzzle = await page.getByRole('grid').innerText();
         const board = (await page.locator('.gameplay-stage__board').boundingBox())!;
-        const readStageScroll = () => page.locator('.gameplay-stage').evaluate(element => element.scrollTop);
-        const boardStageY = board.y + await readStageScroll();
         await page.getByRole('button', { name: 'New Puzzle', exact: true }).click();
         const notice = page.getByRole('alertdialog');
         await expect(notice).toBeVisible();
@@ -118,10 +120,8 @@ for (const [width, height] of [[844, 390], [951, 669], [1280, 800]]) {
         expect(feedbackBounds.x).toBeGreaterThanOrEqual(width / 2);
         const currentBoard = (await page.locator('.gameplay-stage__board').boundingBox())!;
         expect(feedbackBounds.y).toBeLessThanOrEqual(currentBoard.y + 1);
-        // Clicking the lower controls can scroll the stage, while feedback
-        // should leave the board in the same position within that stage.
-        expect({ ...currentBoard, y: currentBoard.y + await readStageScroll() })
-            .toEqual({ ...board, y: boardStageY });
+        // Scrolling controls and adding feedback leave the board anchored.
+        expect(currentBoard).toEqual(board);
     });
 }
 

@@ -1,5 +1,5 @@
 import { useLandscapeLayout } from './hooks/useLandscapeLayout.js';
-import { ScreenArtwork } from './components/LandscapeArtwork.jsx';
+import { LandscapeArtwork, NightGhostArtwork } from './components/LandscapeArtwork.jsx';
 import { selectLandscapeArtwork } from './services/landscape-artwork.js';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createCoopFistBumpTracker } from './domain/coop-fist-bump.js';
@@ -701,7 +701,8 @@ export function App() {
 
     return (
         <>
-            <div id="sudoku-app" className={`app-container ${showBottomNav ? 'app-container--with-nav landscape-screen' : 'app-container--gameplay'}`}>
+            <div id="sudoku-app" className={`app-container ${showBottomNav ? 'app-container--with-nav landscape-screen split-panes' : 'app-container--gameplay'}`}>
+                {showBottomNav && <LandscapeArtwork artwork={landscapeArtwork} />}
                 <div className="landscape-screen__pane">
                 {landscapeLayout && primaryNavigation}
                 <div className="landscape-screen__content">
@@ -1006,12 +1007,7 @@ export function App() {
                 />
             </div>
 
-            <ScreenArtwork
-                menuVisible={showBottomNav}
-                menuArtwork={landscapeArtwork}
-                active={landscapeLayout}
-                nightGhost={nightGhost}
-            />
+            {!showBottomNav && <NightGhostArtwork active={landscapeLayout} nightGhost={nightGhost} />}
         </>
     );
 }

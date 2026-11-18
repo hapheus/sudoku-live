@@ -11,7 +11,6 @@ export function LandscapeArtwork({ artwork, active = true, side = 'left', hidden
     );
 }
 
-export function ScreenArtwork({ menuVisible, menuArtwork, active, nightGhost }) {
-    if (menuVisible) return <LandscapeArtwork artwork={menuArtwork} />;
+export function NightGhostArtwork({ active, nightGhost }) {
     return <LandscapeArtwork artwork={GHOST_ARTWORK} active={active} side="right" hidden={!nightGhost} />;
 }

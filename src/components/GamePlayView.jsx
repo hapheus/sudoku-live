@@ -85,7 +85,7 @@ export function GamePlayView({
         >
             {landscapeLayout && toolbar}
 
-            <div className="gameplay-stage">
+            <div className="gameplay-stage split-panes">
                 <div className="gameplay-stage__board">
                     {ticTacToeGame && ticTacToeGame.phase !== 'transition' ? (
                         <TicTacToeView
@@ -126,38 +126,42 @@ export function GamePlayView({
                     )}
                 </div>
 
-                {!guide && status}
-                {guide ? <div className="gameplay-stage__guide">{notifications}{guide}</div> : <div className="gameplay-stage__side">
+                <div className="gameplay-stage__controls">
+                    <div className="gameplay-stage__controls-content">
+                        {!guide && status}
+                        {guide ? <div className="gameplay-stage__guide">{notifications}{guide}</div> : <div className="gameplay-stage__side">
 
-                    {gameState.status === 'solved' ? (
-                        <SolveSummary
-                            difficulty={gameState.difficulty}
-                            elapsedSeconds={gameState.elapsedSeconds}
-                            mode={isCoopSession ? 'online' : 'solo'}
-                            isSpectating={isSpectating}
-                            restartLabel={restartLabel}
-                            restartDisabled={restartDisabled}
-                            onPlayAgain={onPlayAgain}
-                            onBackToSetup={onBackToSetup}
-                            messages={messages}
-                        />
-                    ) : (
-                        <>
-                            <SpectatorHintsFeed
-                                hintsByCell={hintsByCell}
-                                variant={activeBoardVariant}
-                                canApply={!isSpectating}
-                                onSelectHint={onSelectHint}
-                                onApplyHint={onApplyHint}
-                                messages={messages}
-                            />
+                            {gameState.status === 'solved' ? (
+                                <SolveSummary
+                                    difficulty={gameState.difficulty}
+                                    elapsedSeconds={gameState.elapsedSeconds}
+                                    mode={isCoopSession ? 'online' : 'solo'}
+                                    isSpectating={isSpectating}
+                                    restartLabel={restartLabel}
+                                    restartDisabled={restartDisabled}
+                                    onPlayAgain={onPlayAgain}
+                                    onBackToSetup={onBackToSetup}
+                                    messages={messages}
+                                />
+                            ) : (
+                                <>
+                                    <SpectatorHintsFeed
+                                        hintsByCell={hintsByCell}
+                                        variant={activeBoardVariant}
+                                        canApply={!isSpectating}
+                                        onSelectHint={onSelectHint}
+                                        onApplyHint={onApplyHint}
+                                        messages={messages}
+                                    />
 
-                            {bottomControls}
-                        </>
-                    )}
-                </div>}
+                                    {bottomControls}
+                                </>
+                            )}
+                        </div>}
+                    </div>
+                    {!landscapeLayout && toolbar}
+                </div>
             </div>
-            {!landscapeLayout && toolbar}
         </main>
     );
 }
