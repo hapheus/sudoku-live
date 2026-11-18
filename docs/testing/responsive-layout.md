@@ -1,6 +1,6 @@
 # Responsive region contract
 
-Landscape gameplay uses two equal grid tracks at compact landscape heights (up to 540 CSS px) and at widths of at least 900 CSS px with heights of at least 540 CSS px. Each track is `minmax(0, 1fr)`: content cannot determine its width. The measurement excludes the shared gutter and the body padding, which includes safe-area insets. A difference of at most one CSS pixel is allowed for rounding.
+Landscape gameplay uses two equal grid tracks at compact landscape heights (up to 540 CSS px) and at widths of at least 900 CSS px with heights of at least 540 CSS px. Each track is `minmax(0, 1fr)`: content cannot determine its width. The measurement excludes the shared gutter and the body padding, which includes safe-area insets. A difference of at most one CSS pixel is allowed for rounding. Split layouts use the larger left/right safe-area inset on **both** outer edges, so an asymmetric notch inset cannot shift the column boundary away from the physical display midpoint. On reported dual segments, the segment-coordinate padding below takes precedence.
 
 Compact landscape and browsers reporting two horizontal viewport segments also split the other screens explicitly:
 
@@ -22,6 +22,8 @@ Ordinary portrait screens retain their existing single-column flow. Controls can
 npx playwright test tests/qa/split-layout.spec.ts tests/qa/storage-denied.spec.ts
 npm run e2e -- --ignore-snapshots
 ```
+
+The Duo regression applies a 62 CSS px safe-area inset to each side separately at 951×669. Before the fix, a region crossed the display midpoint by 21 CSS px despite equal track widths; the corrected layout keeps both regions on their own side and centers the gutter. Compact Settings checks at 320, 360, 390 and 466 CSS px require single-line join legends and aligned option rows in English and German. The visible auto-admission heading is “Auto-accept” / “Automatisch”; its radio group retains the full accessible name. These are headless browser reproductions; the owner will retest on the physical Duo.
 
 The region tests measure equal widths and horizontal containment of descendants in both Sudoku variants at 667×375, 812×375, 844×390, 1024×768 and 1440×900. They repeat geometry checks after portrait/landscape resizing and assert preservation of the displayed puzzle. Another case traverses setup, Settings, Watch and the privacy page. Chromium display-feature emulation tests unequal segments with a 30 px hinge, including help-dialog placement. This is emulated geometry, not physical-device evidence. Existing end-to-end tests exercise completion, spectator interactions, localization, keyboard controls, zoom and accessibility.
 

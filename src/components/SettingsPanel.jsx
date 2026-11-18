@@ -259,7 +259,7 @@ export function SettingsPanel({
                         <legend className="settings-fieldset__legend">
                             <span className="settings-fieldset__legend-inner">
                                 <IconUserCheck className="settings-icon settings-icon--legend" />
-                                <span>{messages.settingsJoinsAutoAccept || 'Auto-accept Joins'}</span>
+                                <span>{messages.settingsJoinsAutoAcceptLabel || 'Auto-accept'}</span>
                             </span>
                         </legend>
                         <div className="segmented-options segmented-options--2" role="radiogroup" aria-label={messages.settingsJoinsAutoAccept || 'Auto-accept Joins'}>
