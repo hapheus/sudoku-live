@@ -133,22 +133,3 @@ jobs:
             test-results/
             playwright-report/
           retention-days: 7
-
-  benchmark-playwright-cache:
-    name: Benchmark warm Chromium cache
-    runs-on: ubuntu-latest
-    env:
-      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - uses: actions/cache/restore@v5
-        with:
-          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
-          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
-          fail-on-cache-miss: true
-      - run: npx playwright install --with-deps --no-shell chromium
