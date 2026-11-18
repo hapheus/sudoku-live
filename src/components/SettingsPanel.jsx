@@ -23,6 +23,7 @@ import {
 const ACTIVE_OPTION_CLASS = 'segmented-label--active';
 
 export function SettingsPanel({
+    hidden = false,
     theme,
     language,
     playerName = '',
@@ -83,7 +84,7 @@ export function SettingsPanel({
     const soundPercent = Math.round(Math.min(1, Math.max(0, Number(soundVolume) || 0)) * 100);
 
     return (
-        <section id="settings-panel" className="settings-panel split-layout" aria-label={messages.settingsTitle}>
+        <section hidden={hidden} id="settings-panel" className="settings-panel split-layout" aria-label={messages.settingsTitle}>
             <div className="split-region split-region--primary">
                 <header className="settings-panel__header">
                     <h2 className="settings-panel__title">{messages.settingsTitle}</h2>
@@ -259,7 +260,7 @@ export function SettingsPanel({
                         <legend className="settings-fieldset__legend">
                             <span className="settings-fieldset__legend-inner">
                                 <IconUserCheck className="settings-icon settings-icon--legend" />
-                                <span>{messages.settingsJoinsAutoAccept || 'Auto-accept Joins'}</span>
+                                <span>{messages.settingsJoinsAutoAcceptLabel || 'Auto-accept'}</span>
                             </span>
                         </legend>
                         <div className="segmented-options segmented-options--2" role="radiogroup" aria-label={messages.settingsJoinsAutoAccept || 'Auto-accept Joins'}>

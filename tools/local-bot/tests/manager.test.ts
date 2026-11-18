@@ -360,6 +360,9 @@ test('bots emit real hint-highlight preview/solve events, sync hintPreview, and 
   const manager = createManager({ wsUrl: 'ws://memory.test', slots: ['expert'], notesPolicy: 'never', random: () => 0.04 });
   const guest = new OnlineGameClient({ wsConfig: { wsUrl: 'ws://memory.test' } });
   const watcher = new OnlineGameClient({ wsConfig: { wsUrl: 'ws://memory.test' } });
+  // These are distinct players even when Node supplies process-wide sessionStorage.
+  guest.clientId = 'hint-clear-guest';
+  watcher.clientId = 'hint-clear-watcher';
   try {
     await manager.step(0);
     const session = manager.sessions()[0];

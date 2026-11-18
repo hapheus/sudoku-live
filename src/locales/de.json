@@ -60,6 +60,7 @@
   "langDe": "Deutsch",
   "settingsJoinsAllowed": "Joins erlauben",
   "settingsJoinsAutoAccept": "Joins automatisch erlauben",
+  "settingsJoinsAutoAcceptLabel": "Automatisch",
   "joinOptOn": "Ein",
   "joinOptOff": "Aus",
   "settingsMusic": "Hintergrundmusik",

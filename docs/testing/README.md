@@ -86,3 +86,13 @@ attaching the observed page-transition sequence. Its launch configuration allows
 Chromium's back/forward cache; the recorded `pageshow.persisted` value distinguishes
 actual cache restoration from a non-cached remount. Native lifecycle and mixed
 installed app builds remain device QA in #59/#72.
+
+## Concurrent-state recovery
+
+The bounded revision/generation contract and complete backend scenario matrix are
+in [the convergence report](../architecture/snapshot-recovery.md). The CI Playwright
+job starts a separate Centrifugo on port 17881 and executes `playwright.sync.config.ts`.
+For local reproduction, use the setup/cleanup commands in that report; no production
+or existing development broker needs to be interrupted. `SYNC_ALL=1` runs the full
+suite through this config on its separate Vite port 5182. The existing real-UI broker
+cases additionally use `CENTRIFUGO_E2E=1` and the local broker on port 8081.
