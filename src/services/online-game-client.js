@@ -1,5 +1,5 @@
 import { Centrifuge } from 'centrifuge';
-import { createStateRecovery } from './state-recovery.js';
+import { createStateRecovery, REMATCH_EVENT } from './state-recovery.js';
 import { createPeerCompatibility, eventFeature } from './peer-compatibility.js';
 import { createRoomAuthority } from './room-authority.js';
 import { createEventDeduper } from './event-deduper.js';
@@ -33,8 +33,9 @@ export { generateEventId, generateGameId, isValidGameId, resolveRuntimeWsConfig 
 
 const PRESENCE_ANNOUNCE = 'presence-announce';
 const LOBBY_UPDATE = 'lobby-update';
-const RECOVERABLE_EVENTS = new Set(['init', 'sync', 'cell-update', 'new-puzzle-accept', 'new-puzzle-request', 'new-puzzle-cancel', 'ping', 'join-policy', 'tic-tac-toe-state', 'retro-mode']);
+const RECOVERABLE_EVENTS = new Set(['init', 'sync', 'cell-update', REMATCH_EVENT, 'new-puzzle-request', 'new-puzzle-cancel', 'ping', 'join-policy', 'tic-tac-toe-state', 'retro-mode']);
 const PRESENCE_SETTLE_TIMEOUT_MS = 350;
+const RETRY_MUTATIONS = new Set(['init', 'sync', 'cell-update', REMATCH_EVENT, 'new-puzzle-request', 'new-puzzle-cancel']);
 
 function normalizeRole(role) {
     return role === 'host' || role === 'guest' || role === 'spectator' ? role : 'spectator';
@@ -50,10 +51,12 @@ function replayPublications(publications, canStart) {
         const bo = Number.isFinite(b?.offset) ? b.offset : 0;
         return ao - bo;
     });
+    // Modern revisions must see every bounded entry: the last broker snapshot may lose a concurrent tie.
+    if (orderedPubs.some((pub) => pub.data?.data?.stateClock)) return orderedPubs;
     let startIdx = 0;
     for (let i = orderedPubs.length - 1; i >= 0; i -= 1) {
         const t = orderedPubs[i]?.data?.type;
-        if ((t === 'new-puzzle-accept' || t === 'init' || t === 'sync' || t === 'ping') && canStart(orderedPubs[i])) {
+        if ((t === REMATCH_EVENT || t === 'init' || t === 'sync' || t === 'ping') && canStart(orderedPubs[i])) {
             startIdx = i;
             break;
         }
@@ -90,6 +93,7 @@ export class OnlineGameClient {
         this.senderIdentityGuard = createSenderIdentityGuard();
         this.protocolMeta = buildProtocolMetadata();
         this.peerCompatibility = createPeerCompatibility();
+        this.pendingMutations = new Map();
         this.seqCounter = 0;
         this.stateActor = generateEventId();
         this.clientId = getOrCreateClientId();
@@ -116,16 +120,22 @@ export class OnlineGameClient {
         return data;
     }
 
-    buildOutgoingEnvelope(data = {}) {
+    buildOutgoingEnvelope(data = {}, type = null) {
+        if (type === 'ping' && data.gameState) data = { ...data, gameState: this.stateRecovery.snapshot(data.gameState) };
+        const eventId = data.eventId || generateEventId();
+        const stateClock = this.stateRecovery.nextClock();
         return {
-            ...(data.gameState ? { stateVector: this.stateRecovery.vector() } : {}),
+            ...(data.gameState ? { stateVector: this.stateRecovery.vector(), stateRevisions: this.stateRecovery.revisions() } : {}),
             ...data,
-            eventId: data.eventId || generateEventId(),
+            eventId,
+            puzzleGeneration: type === REMATCH_EVENT ? eventId : this.stateRecovery.generation(),
             senderId: data.senderId || this.clientId,
             seq: ++this.seqCounter,
             sentAt: Date.now(),
             protocolVersion: PROTOCOL_VERSION,
             stateActor: this.stateActor,
+            stateClock,
+            puzzleRevision: type === REMATCH_EVENT ? [stateClock, this.stateActor] : this.stateRecovery.revision(),
         };
     }
 
@@ -251,10 +261,14 @@ export class OnlineGameClient {
     deliverHistory(accepted, onEvent) {
         for (const pub of replayPublications(accepted, ({ data: { type, data }, authoritative }) => this.stateRecovery.accepts(type, data, authoritative))) {
             const { type, data } = pub.data;
-            if (!this.stateRecovery.accepts(type, data, pub.authoritative)) continue;
+            if (!this.stateRecovery.accepts(type, data, pub.authoritative)) {
+                this.stateRecovery.supersede(type, data);
+                continue;
+            }
             if (data.eventId && this.rememberEvent(data.eventId)) continue;
             if (data.gameState) this.boardCells = data.gameState.board.length;
-            const projected = this.projectGameFeatures(type, data);
+            const featureProjection = this.projectGameFeatures(type, data);
+            const projected = featureProjection && this.stateRecovery.project(type, featureProjection, pub.authoritative);
             if (projected) {
                 this.stateRecovery.observe(type, projected);
                 onEvent(type, projected);
@@ -378,6 +392,7 @@ export class OnlineGameClient {
         if (this.authorityRoomId !== gameId) {
             this.roomAuthority = createRoomAuthority();
             this.stateRecovery = createStateRecovery();
+            this.pendingMutations.clear();
             this.authorityRoomId = gameId;
             this.boardCells = 81;
         }
@@ -456,6 +471,8 @@ export class OnlineGameClient {
             }
 
             announceSelf();
+            if (this.pendingMutations.size) await this.flushPendingMutations(sub);
+            if (this.gameChannel !== sub) return;
             if (typeof onSubscribed === 'function') {
                 onSubscribed();
             }
@@ -523,11 +540,15 @@ export class OnlineGameClient {
                 return;
             }
 
-            if (!this.stateRecovery.accepts(payload.type, payload.data, this.roomAuthority.role(ctx.info.client) === 'host')) return;
+            if (!this.stateRecovery.accepts(payload.type, payload.data, this.roomAuthority.role(ctx.info.client) === 'host')) {
+                this.stateRecovery.supersede(payload.type, payload.data);
+                return;
+            }
             if (eventId) this.rememberEvent(eventId);
             this.roomAuthority.observe(payload.type, payload.data);
             if (payload.data.gameState) this.boardCells = payload.data.gameState.board.length;
-            const projected = this.projectGameFeatures(payload.type, this.roomAuthority.project(ctx.info.client, payload.data));
+            const featureProjection = this.projectGameFeatures(payload.type, this.roomAuthority.project(ctx.info.client, payload.data));
+            const projected = featureProjection && this.stateRecovery.project(payload.type, featureProjection, this.roomAuthority.role(ctx.info.client) === 'host');
             if (projected) {
                 this.stateRecovery.observe(payload.type, projected);
                 onEvent(payload.type, projected);
@@ -539,6 +560,32 @@ export class OnlineGameClient {
         return sub;
     }
 
+    async publishMutation(sub, type, data) {
+        try {
+            let packet = { type, data };
+            if (RETRY_MUTATIONS.has(type)) {
+                // Freeze the JSON wire payload: callers may replace/mutate their source arrays before retry.
+                packet = this.pendingMutations.get(data.eventId) || { type, data: JSON.parse(JSON.stringify(data)) };
+                this.pendingMutations.set(data.eventId, packet);
+            }
+            await sub.publish(packet);
+            this.pendingMutations.delete(data.eventId);
+        } catch {
+            // Retain optimistic edits until the room resubscribes; preserve their identity/order.
+        }
+    }
+
+    async flushPendingMutations(sub) {
+        for (const { type, data } of this.pendingMutations.values()) {
+            if (this.gameChannel !== sub) return;
+            if (data.puzzleGeneration !== this.stateRecovery.generation()) {
+                this.pendingMutations.delete(data.eventId);
+                continue;
+            }
+            await this.publishMutation(sub, type, data);
+        }
+    }
+
     sendWhisperEvent(type, data = {}) {
         data = this.projectGameFeatures(type, data);
         if (!data) return;
@@ -547,12 +594,12 @@ export class OnlineGameClient {
                 ...data,
                 ...(type === PRESENCE_ANNOUNCE ? { ...this.protocolMeta,
                     approvedGuestIds: this.gameRole === 'host' ? this.roomAuthority.approvedGuestIds() : undefined } : {}),
-            });
+            }, type);
             this.stateRecovery.observe(type, payloadData);
             this.rememberEvent(payloadData.eventId);
             if (payloadData.gameState) this.boardCells = payloadData.gameState.board.length;
             try {
-                Promise.resolve(this.gameChannel.publish({ type, data: payloadData })).catch(() => {});
+                void this.publishMutation(this.gameChannel, type, payloadData);
             } catch {
                 // Ignore publish failure if channel is not ready
             }
@@ -568,7 +615,7 @@ export class OnlineGameClient {
 
         data = this.projectGameFeatures(type, data);
         if (!data) return;
-        const payloadData = this.buildOutgoingEnvelope(data);
+        const payloadData = this.buildOutgoingEnvelope(data, type);
         this.stateRecovery.observe(type, payloadData);
         this.rememberEvent(payloadData.eventId);
         if (payloadData.gameState) this.boardCells = payloadData.gameState.board.length;
@@ -581,7 +628,7 @@ export class OnlineGameClient {
 
         if (this.gameChannel) {
             try {
-                await this.gameChannel.publish({ type, data: payloadData });
+                await this.publishMutation(this.gameChannel, type, payloadData);
             } catch {
                 // Ignore publish failure if offline / solo
             }
@@ -884,6 +931,7 @@ export class OnlineGameClient {
     }
 
     disconnect() {
+        this.pendingMutations.clear();
         this.suspended = false;
         this.leaveGameChannel();
         this.leaveLobby();

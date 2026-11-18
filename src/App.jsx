@@ -1,3 +1,6 @@
+import { LANDSCAPE_LAYOUT_QUERY, useSplitLayout } from './hooks/useSplitLayout.js';
+import { LandscapeArtwork } from './components/LandscapeArtwork.jsx';
+import { selectLandscapeArtwork } from './services/landscape-artwork.js';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createCoopFistBumpTracker } from './domain/coop-fist-bump.js';
 import { advanceKonamiState, createKonamiState } from './domain/konami-code.js';
@@ -26,7 +29,7 @@ import { useKeyboardNavigation } from './hooks/useKeyboardNavigation.js';
 import { useNavigationAndSetup } from './hooks/useNavigationAndSetup.js';
 import { useOnlineSession } from './hooks/useOnlineSession.js';
 import { useTicTacToe } from './hooks/useTicTacToe.js';
-import { AlertBannerDialog } from './components/AlertBannerDialog.jsx';
+import { SessionNotices } from './components/SessionNotices.jsx';
 import { GamePlayView } from './components/GamePlayView.jsx';
 import { SetupView } from './components/SetupView.jsx';
 import { WatchDirectory } from './components/WatchDirectory.jsx';
@@ -57,6 +60,11 @@ function getRestartState(messages, isCoopSession, partnerOnline, gameState, rema
 
 export function App() {
     const isNativeApp = isNativeCapacitorApp();
+    const splitLayout = useSplitLayout();
+    const landscapeLayout = useSplitLayout(LANDSCAPE_LAYOUT_QUERY);
+    const [landscapeArtwork] = useState(() => selectLandscapeArtwork());
+    const settingsGuideOpenerRef = useRef(null);
+    const closeGuide = useCallback(() => setIsHelpOpen(false), []);
     const initialRoute = useMemo(() => parseInitialRoute(), []);
 
     const [legalPage, setLegalPage] = useState(() => (
@@ -600,7 +608,23 @@ export function App() {
     const showBottomNav = showLegalPage || !((navTab === 'play' && isPlayingGame) || (navTab === 'watch' && isSpectating));
     const showGlobalRetroBar = isRetroMode && (showLegalPage || navTab !== 'play' || !isPlayingGame);
 
+    const inlineGuide = splitLayout && !showBottomNav && isHelpOpen;
+    const settingsGuide = landscapeLayout && navTab === 'settings' && !showLegalPage && isHelpOpen;
+    const sessionNotices = (
+        <SessionNotices
+            pendingConfirm={pendingConfirm}
+            incomingJoinRequest={incomingJoinRequest}
+            myRole={myRole}
+            isSpectating={isSpectating}
+            confirmCancelRef={confirmCancelRef}
+            onClearConfirmation={() => setPendingConfirm(null)}
+            onRespondJoinRequest={handleRespondJoinRequest}
+            messages={messages}
+        />
+    );
     const sharedGameViewProps = {
+        notices: sessionNotices,
+        guide: inlineGuide ? <HelpDialog isOpen panel onClose={closeGuide} messages={messages} /> : null,
         connectionStatus: connectionStatus,
         mode: mode,
         myRole: myRole,
@@ -637,7 +661,8 @@ export function App() {
 
     return (
         <>
-            <div id="sudoku-app" className={`app-container ${showBottomNav ? 'app-container--with-nav' : 'app-container--gameplay'}`}>
+            <div id="sudoku-app" className={`app-container ${showBottomNav ? 'app-container--with-nav landscape-screen' : 'app-container--gameplay'}`}>
+                <div className="landscape-screen__content">
                 <div id="game-announcements" className="sr-only" aria-live="polite" aria-atomic="true">
                     {announcement}
                 </div>
@@ -668,43 +693,7 @@ export function App() {
                     />
                 )}
 
-                {pendingConfirm && (
-                    <AlertBannerDialog
-                        id="confirm-dialog"
-                        titleId="confirm-title"
-                        title={pendingConfirm.title}
-                        message={pendingConfirm.message}
-                        cancelLabel={pendingConfirm.cancelLabel}
-                        confirmLabel={pendingConfirm.confirmLabel}
-                        confirmVariant="confirm"
-                        cancelRef={confirmCancelRef}
-                        onCancel={() => setPendingConfirm(null)}
-                        onConfirm={() => {
-                            const action = pendingConfirm.onConfirm;
-                            setPendingConfirm(null);
-                            action?.();
-                        }}
-                    />
-                )}
-
-                {incomingJoinRequest && myRole === 'host' && !isSpectating && (
-                    <AlertBannerDialog
-                        id="join-request-banner"
-                        titleId="join-request-title"
-                        title={messages.joinRequestTitle || 'Player wants to join'}
-                        message={incomingJoinRequest.requesterName
-                            ? (messages.joinRequestMessageNamed || '{name} would like to join this puzzle in Co-op mode.')
-                                .replace('{name}', incomingJoinRequest.requesterName)
-                            : (messages.joinRequestMessage || 'Another player would like to join this puzzle in Co-op mode.')}
-                        cancelId="decline-join-btn"
-                        confirmId="accept-join-btn"
-                        cancelLabel={messages.joinRequestDecline || 'Decline'}
-                        confirmLabel={messages.joinRequestAccept || 'Allow'}
-                        confirmVariant="accept"
-                        onCancel={() => handleRespondJoinRequest(false)}
-                        onConfirm={() => handleRespondJoinRequest(true)}
-                    />
-                )}
+                {showBottomNav && sessionNotices}
 
                 {!showLegalPage && navTab === 'play' && !isPlayingGame && (
                     <SetupView
@@ -929,44 +918,59 @@ export function App() {
                 )}
 
                 {!showLegalPage && navTab === 'settings' && (
-                    <SettingsPanel
-                        theme={theme}
-                        language={language}
-                        playerName={playerName}
-                        playerTag={formatPlayerTag(playerName, onlineClientRef.current?.clientId || getOrCreateClientId())}
-                        joinsAllowed={joinsAllowed}
-                        joinsAutoAccept={joinsAutoAccept}
-                        musicEnabled={musicEnabled}
-                        musicVolume={musicVolume}
-                        soundEnabled={soundEnabled}
-                        soundVolume={soundVolume}
-                        onChangeTheme={setTheme}
-                        onChangeLanguage={setLanguage}
-                        onChangePlayerName={setPlayerName}
-                        onRandomizePlayerName={randomizePlayerName}
-                        onChangeJoinsAllowed={setJoinsAllowed}
-                        onChangeJoinsAutoAccept={setJoinsAutoAccept}
-                        onChangeMusicEnabled={handleMusicEnabledChange}
-                        onChangeMusicVolume={handleMusicVolumeChange}
-                        onChangeSoundEnabled={handleSoundEnabledChange}
-                        onChangeSoundVolume={handleSoundVolumeChange}
-                        onOpenGuide={() => setIsHelpOpen(true)}
-                        messages={messages}
-                    />
+                    <>
+                        <SettingsPanel
+                            hidden={settingsGuide}
+                            theme={theme}
+                            language={language}
+                            playerName={playerName}
+                            playerTag={formatPlayerTag(playerName, onlineClientRef.current?.clientId || getOrCreateClientId())}
+                            joinsAllowed={joinsAllowed}
+                            joinsAutoAccept={joinsAutoAccept}
+                            musicEnabled={musicEnabled}
+                            musicVolume={musicVolume}
+                            soundEnabled={soundEnabled}
+                            soundVolume={soundVolume}
+                            onChangeTheme={setTheme}
+                            onChangeLanguage={setLanguage}
+                            onChangePlayerName={setPlayerName}
+                            onRandomizePlayerName={randomizePlayerName}
+                            onChangeJoinsAllowed={setJoinsAllowed}
+                            onChangeJoinsAutoAccept={setJoinsAutoAccept}
+                            onChangeMusicEnabled={handleMusicEnabledChange}
+                            onChangeMusicVolume={handleMusicVolumeChange}
+                            onChangeSoundEnabled={handleSoundEnabledChange}
+                            onChangeSoundVolume={handleSoundVolumeChange}
+                            onOpenGuide={(event) => {
+                                settingsGuideOpenerRef.current = event?.currentTarget || document.activeElement;
+                                setIsHelpOpen(true);
+                            }}
+                            messages={messages}
+                        />
+                        {settingsGuide && (
+                            <HelpDialog isOpen panel onClose={closeGuide} returnFocusRef={settingsGuideOpenerRef} messages={messages} />
+                        )}
+                    </>
                 )}
 
+                </div>
                 <HelpDialog
-                    isOpen={isHelpOpen}
-                    onClose={() => setIsHelpOpen(false)}
+                    isOpen={isHelpOpen && !inlineGuide && !settingsGuide}
+                    returnFocusRef={settingsGuideOpenerRef}
+                    onClose={closeGuide}
                     messages={messages}
                 />
             </div>
 
+            {showBottomNav && <LandscapeArtwork artwork={landscapeArtwork} active={landscapeLayout} />}
             {showBottomNav && (
                 <BottomNav
                     activeTab={showLegalPage ? null : navTab}
                     isWatchActive={mode === 'watch' || isSpectating}
-                    onSelectTab={handleSelectNavTab}
+                    onSelectTab={(tab) => {
+                        closeGuide();
+                        handleSelectNavTab(tab);
+                    }}
                     messages={messages}
                 />
             )}

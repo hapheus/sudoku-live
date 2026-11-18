@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { createSudokuGame, serializeGameState } from '../../src/domain/sudoku-engine.js';
 
 for (const autoAccept of [true, false]) {
-    test(`two joined players and a spectator share Tic Tac Toe (${autoAccept ? 'auto' : 'confirmed'} join)`, async ({ browser }) => {
+    test(`two joined players and a spectator share Tic Tac Toe (${autoAccept ? 'auto' : 'confirmed'} join)`, async ({ browser, baseURL }) => {
         test.skip(!process.env.CENTRIFUGO_E2E, 'Requires a local Centrifugo server on port 8081');
         const hostContext = await browser.newContext();
         const guestContext = await browser.newContext();
@@ -20,15 +20,20 @@ for (const autoAccept of [true, false]) {
             localStorage.setItem('sudoku_lang', 'en');
         }, { snapshot: JSON.stringify({ gameState: serializeGameState(game), roomId }), autoAccept });
         try {
-            await host.goto('http://127.0.0.1:5178/');
+            await host.goto(`${baseURL}/`);
             await host.getByRole('button', { name: 'Play', exact: true }).click();
             await expect(host.locator('[role="gridcell"]')).toHaveCount(81);
             const sudokuBoardBox = await host.locator('.sudoku-board').boundingBox();
             const originalBoard = await host.locator('[role="gridcell"]').allTextContents();
-            await guest.goto(`http://127.0.0.1:5178/games/${roomId}?watch=1`);
+            await guest.goto(`${baseURL}/games/${roomId}?watch=1`);
             await expect(guest.locator('#connection-status')).toHaveText('Live');
             await guest.locator('#join-from-watch-btn').click();
-            if (!autoAccept) await host.getByRole('button', { name: 'Allow', exact: true }).click();
+            if (!autoAccept) {
+                const admission = host.locator('#join-request-banner');
+                await expect(admission).toBeVisible();
+                expect((await admission.boundingBox())!.x).toBeGreaterThanOrEqual(await host.evaluate(() => innerWidth / 2));
+                await host.getByRole('button', { name: 'Allow', exact: true }).click();
+            }
             await expect(host.locator('#opponent-status')).toContainText('online', { ignoreCase: true });
             if (!autoAccept) {
                 await guestContext.setOffline(true);
@@ -37,7 +42,7 @@ for (const autoAccept of [true, false]) {
                 await expect(guest.locator('#connection-status')).toHaveText('Live');
                 await expect(host.locator('#opponent-status')).toContainText('online', { ignoreCase: true });
             }
-            await spectator.goto(`http://127.0.0.1:5178/games/${roomId}?watch=1`);
+            await spectator.goto(`${baseURL}/games/${roomId}?watch=1`);
             await expect(spectator.locator('#connection-status')).toHaveText('Live');
             const shift = async (page, index, button) => {
                 await page.locator(`[role="gridcell"][data-index="${index}"]`).click();
@@ -55,10 +60,10 @@ for (const autoAccept of [true, false]) {
             expect(Math.abs((tttBoardBox?.width ?? 0) - (sudokuBoardBox?.width ?? 0))).toBeLessThanOrEqual(1);
             expect(Math.abs((tttBoardBox?.height ?? 0) - (sudokuBoardBox?.height ?? 0))).toBeLessThanOrEqual(1);
             await expect(guest.getByText('You are O. Waiting for your opponent.')).toBeVisible();
-            await lateViewer.goto('http://127.0.0.1:5178/');
+            await lateViewer.goto(`${baseURL}/`);
             await lateViewer.locator('#nav-watch').click();
             await expect(lateViewer.locator('.live-game-card').filter({ has: lateViewer.locator(`[data-watch-id="${roomId}"]`) })).toContainText('Tic Tac Toe');
-            await lateViewer.goto(`http://127.0.0.1:5178/games/${roomId}?watch=1`);
+            await lateViewer.goto(`${baseURL}/games/${roomId}?watch=1`);
             await expect(lateViewer.getByRole('heading', { name: 'Tic Tac Toe' })).toBeVisible();
             for (const [page, label] of [[host, 'Row 1, column 1'], [guest, 'Row 2, column 1'], [host, 'Row 1, column 2'], [guest, 'Row 2, column 2'], [host, 'Row 1, column 3']] as const) {
                 await page.getByRole('button', { name: label, exact: true }).click();

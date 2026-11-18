@@ -9,6 +9,7 @@ const VALID_LOBBY_MODES = new Set(['solo', 'online']);
 const VALID_LOBBY_STATUSES = new Set(['waiting', 'in_progress', 'solved', 'finished']);
 const VALID_DIFFICULTIES = new Set(['easy', 'medium', 'hard', 'expert']);
 const VALID_VARIANTS = new Set(['3x3', '2x3', '9x9', '6x6']);
+const SNAPSHOT_TYPES = new Set(['init', 'sync', 'new-puzzle-accept', 'ping']);
 const VALID_GAME_TYPES = new Set([
     'init',
     'sync',
@@ -125,6 +126,8 @@ export function validateIncomingGameMessage(type, data, totalCells = 81, maxDigi
     if (typeof type !== 'string' || !VALID_GAME_TYPES.has(type) || !isPlainObject(data) || !validateNetworkEnvelope(data)) {
         return false;
     }
+
+    if (data.gameState !== undefined && !SNAPSHOT_TYPES.has(type)) return false;
 
     switch (type) {
     case 'cell-update':
