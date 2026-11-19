@@ -65,6 +65,10 @@ Optional lane flags:
 - `skip_bump:true` — Keep the current `CURRENT_PROJECT_VERSION` during `beta`.
 - `wait:true` — Wait for App Store Connect build processing to finish.
 
+### iOS version for archives and TestFlight
+
+Fetch the release tags and check out the intended release before archiving or uploading. Both lanes read the newest version tag reachable from the current commit and save it as `MARKETING_VERSION` for the App target, without the leading `v`. The TestFlight lane also checks build numbers for that version and saves the next build number. Include the resulting Xcode project version changes in the release PR after verifying the build.
+
 ---
 
 ## Authentication Options

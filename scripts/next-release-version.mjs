@@ -111,9 +111,10 @@ const isMainModule =
 
 if (isMainModule) {
     const latestTag = getLatestSemverTag();
-    const commits = getCommitsSinceTag(latestTag);
-    const nextVersion = computeNextVersion(latestTag, commits);
-    if (nextVersion) {
-        process.stdout.write(`${nextVersion}\n`);
+    const version = process.argv[2] === '--latest-tag'
+        ? latestTag
+        : computeNextVersion(latestTag, getCommitsSinceTag(latestTag));
+    if (version) {
+        process.stdout.write(`${version}\n`);
     }
 }

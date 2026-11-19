@@ -14,6 +14,7 @@ if ENV["IN_NIX_SHELL"] || ENV["DEVELOPER_DIR"].to_s.start_with?("/nix/store/")
   }.join(File::PATH_SEPARATOR)
 end
 
+require "open3"
 require "xcodeproj"
 
 REPO_ROOT = File.expand_path("../..", __dir__)
@@ -53,6 +54,28 @@ def read_current_build_number
   target = project.targets.find { |t| t.name == "App" } || project.targets.first
   raw = target.build_configurations.first.build_settings["CURRENT_PROJECT_VERSION"].to_s
   raw.to_i
+end
+
+def sync_marketing_version!
+  output, status = Open3.capture2(
+    "node", "scripts/next-release-version.mjs", "--latest-tag", chdir: REPO_ROOT
+  )
+  UI.user_error!("Could not read the release tag from Git.") unless status.success?
+
+  tag = output.strip
+  UI.user_error!("No release tag found in this checkout. Fetch the tags and check out the intended release.") if tag.empty?
+
+  version = tag.delete_prefix("v")
+  project = Xcodeproj::Project.open(PROJECT_PATH)
+  target = project.targets.find { |t| t.name == "App" } || project.targets.first
+  if target.build_configurations.any? { |config| config.build_settings["MARKETING_VERSION"] != version }
+    target.build_configurations.each do |config|
+      config.build_settings["MARKETING_VERSION"] = version
+    end
+    project.save
+  end
+  UI.message("iOS version #{version} from Git tag #{tag}")
+  version
 end
 
 def write_build_number!(next_build)
@@ -161,6 +184,7 @@ platform :ios do
 
   desc "Build and export a signed App Store IPA locally (without uploading)"
   lane :archive do |options|
+    sync_marketing_version!
     sync_web unless options[:skip_web]
     api_key = resolve_asc_api_key
     build_release_ipa!(api_key)
@@ -168,6 +192,7 @@ platform :ios do
 
   desc "Build, bump build number, and upload to TestFlight (Internal Testing)"
   lane :beta do |options|
+    version = sync_marketing_version!
     sync_web unless options[:skip_web]
     api_key = resolve_asc_api_key
 
@@ -177,6 +202,7 @@ platform :ios do
       begin
         remote_params = {
           app_identifier: APP_IDENTIFIER,
+          version: version,
           initial_build_number: 0
         }
         remote_params[:api_key] = api_key if api_key
