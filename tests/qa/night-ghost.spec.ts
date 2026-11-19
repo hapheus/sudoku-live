@@ -4,15 +4,28 @@ import { createSudokuGame, serializeGameState } from '../../src/domain/sudoku-en
 const minuteBefore = (hour: number) => new Date(Date.UTC(2026, 10, 17, 23 + hour) - 1000);
 const cells = (page: Page) => page.getByRole('gridcell').allTextContents();
 const ghost = (page: Page) => page.locator('.night-ghost');
-const artwork = (page: Page) => page.locator('.landscape-artwork--right');
+const artwork = (page: Page) => page.locator('.landscape-artwork--right, .landscape-artwork--bottom');
 
-async function expectRightArtwork(page: Page) {
+async function expectLoadedArtwork(page: Page) {
     const image = artwork(page).locator('img');
     await expect(image).toBeVisible();
     await expect.poll(() => image.evaluate(element => (element as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
     await expect(image).toHaveCSS('object-fit', 'cover');
+}
+
+async function expectRightArtwork(page: Page) {
+    await expectLoadedArtwork(page);
     const { width, height } = page.viewportSize()!;
     expect(await artwork(page).boundingBox()).toEqual({ x: width / 2, y: 0, width: width / 2, height });
+}
+
+async function expectBottomArtwork(page: Page) {
+    await expectLoadedArtwork(page);
+    const pane = page.locator('.gameplay-stage__controls');
+    expect(await artwork(page).boundingBox()).toEqual(await pane.boundingBox());
+    await expect(pane.locator('.gameplay-stage__controls-content')).toBeHidden();
+    await expect(pane.locator('.gameplay-stage__toolbar')).toBeHidden();
+    await expect(page.getByRole('grid')).toBeVisible();
 }
 
 async function seedSolo(page: Page, variant = '3x3', roomId = 'qa-night-ghost', muted = false) {
@@ -50,24 +63,33 @@ async function play(page: Page) {
     await expect(page.getByRole('grid')).toBeVisible();
 }
 
-test('watch the full ghost animation in real time', async ({ page }) => {
-    test.skip(process.env.GHOST_PREVIEW !== '1', 'Opt-in visual preview');
-    await page.setViewportSize({ width: 844, height: 390 });
-    await page.emulateMedia({ reducedMotion: 'no-preference' });
-    await page.clock.install();
-    await seedSolo(page);
-    await page.routeWebSocket(/.*/, socket => socket.close());
-    await page.goto('/');
+for (const orientation of ['landscape', 'portrait']) {
+    test(`watch the full ghost animation in real time (${orientation})`, async ({ page }) => {
+        test.skip(process.env.GHOST_PREVIEW !== '1', 'Opt-in visual preview');
+        const landscape = orientation === 'landscape';
+        await page.setViewportSize(landscape ? { width: 844, height: 390 } : { width: 390, height: 844 });
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await page.clock.install();
+        await seedSolo(page);
+        await page.routeWebSocket(/.*/, socket => socket.close());
+        await page.goto('/');
 
-    // Start just before midnight and leave the clock running at normal speed.
-    await page.clock.setSystemTime(new Date(minuteBefore(0).getTime() - 4000));
-    await play(page);
-    await expect(artwork(page)).toBeVisible({ timeout: 10_000 });
-    await expect(ghost(page)).toHaveCount(0, { timeout: 10_000 });
-    await expect(artwork(page)).toBeHidden();
-    // Keep the final board visible briefly before the preview browser closes.
-    await page.waitForTimeout(1250);
-});
+        // Start just before midnight and leave the clock running at normal speed.
+        await page.clock.setSystemTime(new Date(minuteBefore(0).getTime() - 4000));
+        await play(page);
+        await expect(ghost(page)).toBeVisible({ timeout: 10_000 });
+        if (landscape) {
+            await expectRightArtwork(page);
+        } else {
+            await expectBottomArtwork(page);
+        }
+        await expect(ghost(page)).toHaveCount(0, { timeout: 10_000 });
+        await expect(artwork(page)).toBeHidden();
+        await expect(page.locator('.gameplay-stage__toolbar')).toBeVisible();
+        // Keep the final board visible briefly before the preview browser closes.
+        await page.waitForTimeout(1250);
+    });
+}
 
 for (const hour of [0, 1, 2, 3]) {
     test(`night ghost at 0${hour}:00`, async ({ page }, testInfo) => {
@@ -94,7 +116,7 @@ for (const hour of [0, 1, 2, 3]) {
             await expect(page.locator('.gameplay-stage__side')).toBeHidden();
             await page.screenshot({ path: testInfo.outputPath('night-ghost-landscape.png') });
         } else {
-            await expect(artwork(page)).toBeHidden();
+            await expectBottomArtwork(page);
         }
         if (fullMotion) await page.screenshot({ path: testInfo.outputPath('night-ghost-hover.png') });
         await page.clock.runFor(400);
@@ -118,6 +140,7 @@ for (const hour of [0, 1, 2, 3]) {
         await page.clock.runFor(370);
         await expect(ghost(page)).toHaveAttribute('data-phase', 'exit');
         if (hour === 1) await expectRightArtwork(page);
+        else await expectBottomArtwork(page);
         if (fullMotion) await expect(ghost(page).locator('.night-ghost__flight')).toHaveCSS('animation-duration', '3s');
         await page.clock.runFor(2999);
         await expect(ghost(page)).toHaveAttribute('data-phase', 'exit');
@@ -125,6 +148,7 @@ for (const hour of [0, 1, 2, 3]) {
         await expect(ghost(page)).toHaveCount(0);
         await expect(artwork(page)).toBeHidden();
         await expect(page.locator('.gameplay-stage__side')).toBeVisible();
+        await expect(page.locator('.gameplay-stage__toolbar')).toBeVisible();
         const after = await cells(page);
         expect(after).not.toEqual(before);
         if (fullMotion) {
