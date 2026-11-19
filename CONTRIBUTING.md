@@ -98,3 +98,9 @@ The quality CLI always enforces a minimum of 90/100; lowering the CLI threshold 
 3. Keep external dependencies minimal. Avoid introducing heavy UI or state management libraries.
 4. Ensure accessibility adheres to WCAG 2.2 AA guidelines (keyboard focus, touch targets, screen reader labels).
 5. Open a Pull Request targeting `main` with a clear description of the changes.
+
+## Releases After a Squash Merge
+
+The [release workflow](.github/workflows/release.yml) computes the next version from commits on `main` since the latest version tag. For a minor release, start the final squash commit subject with `feat:`. For a patch release, use `fix:`, `perf:`, or `revert:`. Check the subject in the merge dialog, since GitHub can use the PR title there. A `feat:` or `fix:` inside the squash commit body alone does not trigger a release.
+
+Run `node scripts/next-release-version.mjs` with the version tags available to preview the next version for the current commit. After merging, check the release workflow for the new tag and the itch.io and Docker Hub publish jobs.
