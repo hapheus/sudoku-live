@@ -115,23 +115,26 @@ describe('UI/UX components & Solo persistence', () => {
             />,
         );
 
-        fireEvent.click(screen.getByRole('radio', { name: 'System' }));
+        const appearance = screen.getByRole('combobox', { name: 'Appearance' });
+        fireEvent.change(appearance, { target: { value: 'system' } });
         expect(onChangeTheme).toHaveBeenCalledWith('system');
-        fireEvent.click(screen.getByRole('radio', { name: 'Light' }));
+        fireEvent.change(appearance, { target: { value: 'light' } });
         expect(onChangeTheme).toHaveBeenCalledWith('light');
 
-        fireEvent.click(screen.getByRole('radio', { name: 'Deutsch' }));
+        const languageSelect = screen.getByRole('combobox', { name: 'Language' });
+        const guideButton = screen.getByRole('button', { name: 'Open Guide' });
+        expect(guideButton.compareDocumentPosition(languageSelect) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        fireEvent.change(languageSelect, { target: { value: 'de' } });
         expect(onChangeLanguage).toHaveBeenCalledWith('de');
 
-        const joinsAllowedGroup = screen.getByRole('radiogroup', { name: 'Allow Joins' });
-        expect(joinsAllowedGroup.querySelector('input[value="true"]')).toBeChecked();
-        fireEvent.click(joinsAllowedGroup.querySelector('input[value="false"]'));
-        expect(onChangeJoinsAllowed).toHaveBeenCalledWith(false);
-
-        const joinsAutoGroup = screen.getByRole('radiogroup', { name: 'Auto-accept Joins' });
-        expect(joinsAutoGroup.querySelector('input[value="false"]')).toBeChecked();
-        fireEvent.click(joinsAutoGroup.querySelector('input[value="true"]'));
-        expect(onChangeJoinsAutoAccept).toHaveBeenCalledWith(true);
+        const joins = screen.getByRole('combobox', { name: 'Joins' });
+        expect(joins).toHaveValue('confirm');
+        fireEvent.change(joins, { target: { value: 'disabled' } });
+        expect(onChangeJoinsAllowed).toHaveBeenLastCalledWith(false);
+        expect(onChangeJoinsAutoAccept).toHaveBeenLastCalledWith(false);
+        fireEvent.change(joins, { target: { value: 'auto' } });
+        expect(onChangeJoinsAllowed).toHaveBeenLastCalledWith(true);
+        expect(onChangeJoinsAutoAccept).toHaveBeenLastCalledWith(true);
 
         const musicGroup = screen.getByRole('radiogroup', { name: 'Background Music' });
         fireEvent.click(musicGroup.querySelector('input[value="false"]'));
@@ -174,19 +177,17 @@ describe('UI/UX components & Solo persistence', () => {
                 onOpenGuide={onOpenGuide}
             />,
         );
-        const disabledAutoGroup = screen.getByRole('radiogroup', { name: 'Auto-accept Joins' });
-        expect(disabledAutoGroup.querySelector('input[value="true"]')).toBeDisabled();
-        expect(disabledAutoGroup.querySelector('input[value="false"]')).toBeDisabled();
+        expect(screen.getByRole('combobox', { name: 'Joins' })).toHaveValue('disabled');
         expect(screen.getByRole('slider', { name: 'Volume: Background Music' })).toBeDisabled();
         expect(screen.getByRole('slider', { name: 'Volume: Sound Effects' })).toBeDisabled();
         expect(screen.getByText('80%')).toBeInTheDocument();
         expect(screen.getByText('30%')).toBeInTheDocument();
 
-        expect(document.querySelectorAll('#settings-panel svg.settings-icon--legend')).toHaveLength(7);
+        expect(document.querySelectorAll('#settings-panel svg.settings-icon--legend')).toHaveLength(6);
         expect(document.querySelectorAll('#settings-panel svg.settings-icon--volume')).toHaveLength(2);
         expect(document.querySelectorAll('#settings-panel svg.settings-icon--title')).toHaveLength(1);
         expect(document.querySelectorAll('#settings-panel svg.settings-icon--btn')).toHaveLength(1);
-        expect(document.querySelectorAll('#settings-panel svg.settings-icon--option')).toHaveLength(11);
+        expect(document.querySelectorAll('#settings-panel svg.settings-icon--option')).toHaveLength(4);
 
         fireEvent.click(screen.getByRole('button', { name: 'Open Guide' }));
         expect(onOpenGuide).toHaveBeenCalledTimes(1);
@@ -202,7 +203,7 @@ describe('UI/UX components & Solo persistence', () => {
             </>,
         );
 
-        fireEvent.click(screen.getByRole('radio', { name: '2×3 (6×6)' }));
+        fireEvent.click(screen.getByRole('radio', { name: '6×6' }));
         expect(onVariantChange).toHaveBeenCalledWith('2x3');
 
         fireEvent.click(screen.getByRole('radio', { name: 'Hard' }));

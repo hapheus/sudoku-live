@@ -8,7 +8,7 @@ for (const variant of ['3x3', '2x3']) {
             await page.addInitScript(() => localStorage.setItem('sudoku_lang', 'en'));
             await page.routeWebSocket(/.*/, socket => socket.close());
             await page.goto('/');
-            await page.getByText(variant === '2x3' ? '2×3 (6×6)' : '3×3 (9×9)', { exact: true }).click();
+            await page.getByText(variant === '2x3' ? '6×6' : '9×9', { exact: true }).click();
             await page.locator('#start-game-btn').click();
             const board = await page.getByRole('grid').innerText();
             const opener = page.locator('#game-help-btn');
@@ -33,9 +33,18 @@ for (const variant of ['3x3', '2x3']) {
             await expect(page.locator('.player-controls')).toBeVisible();
             expect(await page.getByRole('grid').innerText()).toBe(board);
             await opener.click();
+            await expect(opener).toHaveAccessibleName('Close Guide');
+            await opener.click();
+            await expect(guide).toHaveCount(0);
+            await expect(opener).toHaveAccessibleName('Open Guide');
+            await opener.click();
             await page.setViewportSize({ width: 390, height: 844 });
             await expect(page.getByRole('dialog')).toHaveAttribute('aria-modal', 'true');
             await expect(page.locator('.dialog-backdrop')).toBeVisible();
+            await opener.click();
+            await expect(guide).toHaveCount(0);
+            await expect(page.locator('.player-controls')).toBeVisible();
+            await opener.click();
             await page.setViewportSize({ width, height });
             await expect(page.locator('.dialog-backdrop')).toHaveCount(0);
             await expect(page.getByRole('dialog')).toHaveCount(1);
@@ -69,13 +78,11 @@ test('primary navigation and artwork follow the viewport orientation', async ({ 
     await page.screenshot({ path: testInfo.outputPath('landscape-top-navigation.png') });
     for (const [width, height] of [[390, 844], [1000, 1200]]) {
         await page.setViewportSize({ width, height });
+        await expect(page.locator('.landscape-artwork')).toHaveCount(0);
         await expect.poll(() => page.evaluate(height => {
-            const artwork = document.querySelector('.landscape-artwork')!.getBoundingClientRect();
             const pane = document.querySelector('.landscape-screen__pane')!.getBoundingClientRect();
-            const setup = document.querySelector('.play-setup')!.getBoundingClientRect();
             const nav = document.querySelector('.bottom-nav')!.getBoundingClientRect();
-            return artwork.height > 0 && artwork.height === pane.height && artwork.bottom <= setup.top &&
-                Math.abs((artwork.bottom + pane.top) / 2 - height / 2) < 1 && Math.abs(nav.bottom - height) < 1;
+            return Math.abs(pane.top) < 1 && Math.abs(pane.height - height) < 1 && Math.abs(nav.bottom - height) < 1;
         }, height)).toBe(true);
         if (width === 390) {
             await page.screenshot({ path: testInfo.outputPath('portrait-bottom-navigation.png') });

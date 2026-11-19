@@ -36,7 +36,7 @@ async function assertRegions(page: Page, primary: string, secondary: string, equ
 async function assertTopToolbar(page: Page) {
     const toolbar = page.locator('.gameplay-stage__toolbar');
     const stage = page.locator('.gameplay-stage');
-    await expect(toolbar.getByRole('button', { name: 'Open Guide' })).toBeInViewport();
+    await expect(toolbar.locator('#game-help-btn')).toBeInViewport();
     const [bar, content] = await Promise.all([toolbar.boundingBox(), stage.boundingBox()]);
     expect(bar!.y + bar!.height).toBeLessThanOrEqual(content!.y + 1);
     expect(bar!.y).toBeCloseTo(12, 0);
@@ -49,7 +49,7 @@ for (const variant of ['3x3', '2x3']) {
             await page.addInitScript(() => localStorage.setItem('sudoku_lang', 'en'));
             await page.routeWebSocket(/.*/, socket => socket.close());
             await page.goto('/');
-            await page.getByText(variant === '2x3' ? '2×3 (6×6)' : '3×3 (9×9)', { exact: true }).click();
+            await page.getByText(variant === '2x3' ? '6×6' : '9×9', { exact: true }).click();
             await page.locator('#start-game-btn').click();
             await page.keyboard.press('Escape');
             await assertRegions(page, '.gameplay-stage__board', '.gameplay-stage__controls');
@@ -141,7 +141,7 @@ for (const variant of ['3x3', '2x3']) {
             await page.addInitScript(() => localStorage.setItem('sudoku_lang', 'en'));
             await page.routeWebSocket(/.*/, socket => socket.close());
             await page.goto('/');
-            await page.getByText(variant === '2x3' ? '2×3 (6×6)' : '3×3 (9×9)', { exact: true }).click();
+            await page.getByText(variant === '2x3' ? '6×6' : '9×9', { exact: true }).click();
             await page.locator('#start-game-btn').click();
             await page.keyboard.press('Escape');
             await assertRegions(page, '.gameplay-stage__board', '.gameplay-stage__controls');
@@ -165,27 +165,29 @@ for (const variant of ['3x3', '2x3']) {
 for (const language of ['en', 'de']) {
     const cases: Array<[number, string]> = [[320, 'system-ui'], [320, 'Arial'], [320, 'Verdana'], [360, 'system-ui'], [390, 'system-ui'], [466, 'system-ui']];
     for (const [width, font] of cases) {
-        test(`compact join legends stay on one line and align (${language}, ${width}px, ${font})`, async ({ page }, testInfo) => {
+        test(`settings dropdowns fit compact widths (${language}, ${width}px, ${font})`, async ({ page }, testInfo) => {
             await page.setViewportSize({ width, height: 678 });
             await page.addInitScript(language => localStorage.setItem('sudoku_lang', language), language);
             await page.routeWebSocket(/.*/, socket => socket.close());
             await page.goto('/');
             await page.addStyleTag({ content: `html { font-family: ${font}, sans-serif; }` });
             await page.locator('#nav-settings').click();
-            const fields = page.locator('.settings-fieldset').filter({ has: page.locator('input[name^="sudoku-joins-"]') });
-            await expect(fields).toHaveCount(2);
-            const measurements = await fields.evaluateAll(elements => elements.map(element => {
-                const legend = element.querySelector('.settings-fieldset__legend-inner > span')!;
-                const text = document.createRange();
-                text.selectNodeContents(legend);
-                const rects = Array.from(text.getClientRects());
-                const bounds = element.getBoundingClientRect();
-                return { lines: rects.length, within: rects.every(rect => rect.left >= bounds.left && rect.right <= bounds.right),
-                    optionsY: element.querySelector('[role="radiogroup"]')!.getBoundingClientRect().y };
-            }));
-            expect(measurements.map(value => value.lines)).toEqual([1, 1]);
-            expect(measurements.every(value => value.within)).toBe(true);
-            expect(Math.abs(measurements[0].optionsY - measurements[1].optionsY)).toBeLessThanOrEqual(1);
+            const appearance = page.locator('#sudoku-theme');
+            const joins = page.locator('#sudoku-join-policy');
+            await expect(joins.locator('option')).toHaveText(language === 'en'
+                ? ['Off', 'Allow', 'Auto-accept']
+                : ['Aus', 'Erlauben', 'Automatisch annehmen']);
+            for (const select of [appearance, joins]) {
+                await expect(select).toBeVisible();
+                expect(await select.evaluate(element => {
+                    const bounds = element.getBoundingClientRect();
+                    const group = element.parentElement!.getBoundingClientRect();
+                    return bounds.left >= group.left && bounds.right <= group.right && bounds.height >= 44;
+                })).toBe(true);
+            }
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+            await joins.selectOption('auto');
+            await expect(joins).toHaveValue('auto');
             await testInfo.attach('compact-join-settings', { body: await page.locator('#settings-panel').screenshot(), contentType: 'image/png' });
         });
     }

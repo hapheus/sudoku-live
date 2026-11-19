@@ -1,23 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import enMessages from '../locales/en.json';
+import { resolveJoinPolicy } from '../services/join-settings.js';
 import { isValidPlayerName, MAX_PLAYER_NAME_LENGTH } from '../services/player-name.js';
 import { PlayerTag } from './PlayerTag.jsx';
 import {
     IconAudioLines,
     IconBookOpen,
-    IconCheck,
     IconContrast,
     IconGlobe,
     IconHelpCircle,
-    IconMoon,
     IconMusic,
-    IconSun,
     IconUserCheck,
     IconUsers,
     IconVolume1,
     IconVolume2,
     IconVolumeX,
-    IconX,
 } from './AppIcons.jsx';
 
 const ACTIVE_OPTION_CLASS = 'segmented-label--active';
@@ -54,12 +51,6 @@ export function SettingsPanel({
     }, [playerName]);
 
     const isPlayerNameInvalid = draftPlayerName.length > 0 && !isValidPlayerName(draftPlayerName);
-    const themeOptions = [
-        { value: 'system', label: messages.themeSystem, Icon: IconContrast },
-        { value: 'dark', label: messages.themeDark, Icon: IconMoon },
-        { value: 'light', label: messages.themeLight, Icon: IconSun },
-    ];
-
     const langOptions = [
         { value: 'en', label: messages.langEn },
         { value: 'de', label: messages.langDe },
@@ -75,10 +66,7 @@ export function SettingsPanel({
         { value: false, label: messages.soundOff || 'Off', Icon: IconVolumeX },
     ];
 
-    const joinOptions = [
-        { value: true, label: messages.joinOptOn || 'On', Icon: IconCheck },
-        { value: false, label: messages.joinOptOff || 'Off', Icon: IconX },
-    ];
+    const joinPolicy = resolveJoinPolicy(joinsAllowed, joinsAutoAccept);
 
     const musicPercent = Math.round(Math.min(1, Math.max(0, Number(musicVolume) || 0)) * 100);
     const soundPercent = Math.round(Math.min(1, Math.max(0, Number(soundVolume) || 0)) * 100);
@@ -158,135 +146,38 @@ export function SettingsPanel({
                     </div>
                 </div>
 
-                <div className="settings-group settings-group--2col settings-group--preferences">
-                    <fieldset className="settings-fieldset">
-                        <legend className="settings-fieldset__legend">
-                            <span className="settings-fieldset__legend-inner">
-                                <IconContrast className="settings-icon settings-icon--legend" />
-                                <span>{messages.settingsTheme}</span>
-                            </span>
-                        </legend>
-                        <div className="segmented-options segmented-options--3" role="radiogroup" aria-label={messages.settingsTheme}>
-                            {themeOptions.map((opt) => {
-                                const active = theme === opt.value;
-                                const OptionIcon = opt.Icon;
-                                return (
-                                    <label
-                                        key={opt.value}
-                                        className={`segmented-label ${active ? ACTIVE_OPTION_CLASS : ''}`}
-                                    >
-                                        <input
-                                            type="radio"
-                                            name="sudoku-theme"
-                                            value={opt.value}
-                                            checked={active}
-                                            onChange={() => onChangeTheme(opt.value)}
-                                        />
-                                        <OptionIcon className="settings-icon settings-icon--option" />
-                                        <span>{opt.label}</span>
-                                    </label>
-                                );
-                            })}
-                        </div>
-                    </fieldset>
-
-                    <fieldset className="settings-fieldset">
-                        <legend className="settings-fieldset__legend">
-                            <span className="settings-fieldset__legend-inner">
-                                <IconGlobe className="settings-icon settings-icon--legend" />
-                                <span>{messages.settingsLanguage}</span>
-                            </span>
-                        </legend>
-                        <div className="segmented-options segmented-options--2" role="radiogroup" aria-label={messages.settingsLanguage}>
-                            {langOptions.map((opt) => {
-                                const active = language === opt.value;
-                                return (
-                                    <label
-                                        key={opt.value}
-                                        className={`segmented-label ${active ? ACTIVE_OPTION_CLASS : ''}`}
-                                    >
-                                        <input
-                                            type="radio"
-                                            name="sudoku-language"
-                                            value={opt.value}
-                                            checked={active}
-                                            onChange={() => onChangeLanguage(opt.value)}
-                                        />
-                                        <span>{opt.label}</span>
-                                    </label>
-                                );
-                            })}
-                        </div>
-                    </fieldset>
+                <div className="settings-group">
+                    <label htmlFor="sudoku-theme" className="settings-fieldset__legend settings-fieldset__legend-inner">
+                        <IconContrast className="settings-icon settings-icon--legend" />
+                        <span>{messages.settingsTheme}</span>
+                    </label>
+                    <select id="sudoku-theme" className="settings-select" value={theme} onChange={(event) => onChangeTheme(event.target.value)}>
+                        <option value="system">{messages.themeSystem}</option>
+                        <option value="dark">{messages.themeDark}</option>
+                        <option value="light">{messages.themeLight}</option>
+                    </select>
                 </div>
             </div>
             <div className="split-region split-region--secondary">
-                <div className="settings-group settings-group--2col">
-                    <fieldset className="settings-fieldset">
-                        <legend className="settings-fieldset__legend">
-                            <span className="settings-fieldset__legend-inner">
-                                <IconUsers className="settings-icon settings-icon--legend" />
-                                <span>{messages.settingsJoinsAllowed || 'Allow Joins'}</span>
-                            </span>
-                        </legend>
-                        <div className="segmented-options segmented-options--2" role="radiogroup" aria-label={messages.settingsJoinsAllowed || 'Allow Joins'}>
-                            {joinOptions.map((opt) => {
-                                const active = Boolean(joinsAllowed) === opt.value;
-                                const OptionIcon = opt.Icon;
-                                return (
-                                    <label
-                                        key={String(opt.value)}
-                                        className={`segmented-label ${active ? ACTIVE_OPTION_CLASS : ''}`}
-                                    >
-                                        <input
-                                            type="radio"
-                                            name="sudoku-joins-allowed"
-                                            value={String(opt.value)}
-                                            checked={active}
-                                            onChange={() => onChangeJoinsAllowed(opt.value)}
-                                        />
-                                        <OptionIcon className="settings-icon settings-icon--option" />
-                                        <span>{opt.label}</span>
-                                    </label>
-                                );
-                            })}
-                        </div>
-                    </fieldset>
-
-                    <fieldset
-                        className={`settings-fieldset settings-fieldset--sub ${!joinsAllowed ? 'settings-fieldset--disabled' : ''}`}
-                        disabled={!joinsAllowed}
+                <div className="settings-group">
+                    <label htmlFor="sudoku-join-policy" className="settings-fieldset__legend settings-fieldset__legend-inner">
+                        <IconUsers className="settings-icon settings-icon--legend" />
+                        <span>{messages.settingsJoins}</span>
+                    </label>
+                    <select
+                        id="sudoku-join-policy"
+                        className="settings-select"
+                        value={joinPolicy}
+                        onChange={(event) => {
+                            const policy = event.target.value;
+                            onChangeJoinsAllowed(policy !== 'disabled');
+                            onChangeJoinsAutoAccept(policy === 'auto');
+                        }}
                     >
-                        <legend className="settings-fieldset__legend">
-                            <span className="settings-fieldset__legend-inner">
-                                <IconUserCheck className="settings-icon settings-icon--legend" />
-                                <span>{messages.settingsJoinsAutoAcceptLabel || 'Auto-accept'}</span>
-                            </span>
-                        </legend>
-                        <div className="segmented-options segmented-options--2" role="radiogroup" aria-label={messages.settingsJoinsAutoAccept || 'Auto-accept Joins'}>
-                            {joinOptions.map((opt) => {
-                                const active = Boolean(joinsAutoAccept) === opt.value;
-                                const OptionIcon = opt.Icon;
-                                return (
-                                    <label
-                                        key={String(opt.value)}
-                                        className={`segmented-label ${active ? ACTIVE_OPTION_CLASS : ''}`}
-                                    >
-                                        <input
-                                            type="radio"
-                                            name="sudoku-joins-auto"
-                                            value={String(opt.value)}
-                                            checked={active}
-                                            disabled={!joinsAllowed}
-                                            onChange={() => onChangeJoinsAutoAccept(opt.value)}
-                                        />
-                                        <OptionIcon className="settings-icon settings-icon--option" />
-                                        <span>{opt.label}</span>
-                                    </label>
-                                );
-                            })}
-                        </div>
-                    </fieldset>
+                        <option value="disabled">{messages.settingsJoinsOff}</option>
+                        <option value="confirm">{messages.settingsJoinsAllow}</option>
+                        <option value="auto">{messages.settingsJoinsAutoAccept}</option>
+                    </select>
                 </div>
 
                 <div className="settings-group">
@@ -411,6 +302,15 @@ export function SettingsPanel({
                         <span>{messages.openGuide}</span>
                     </button>
                 </div>
+                <label className="settings-language">
+                    <IconGlobe className="settings-icon settings-icon--legend" />
+                    <span>{messages.settingsLanguage}</span>
+                    <select className="settings-select" value={language} onChange={(event) => onChangeLanguage(event.target.value)}>
+                        {langOptions.map(({ value, label }) => (
+                            <option key={value} value={value}>{label}</option>
+                        ))}
+                    </select>
+                </label>
             </div>
         </section>
     );

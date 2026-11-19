@@ -698,11 +698,12 @@ export function App() {
             messages={messages}
         />
     );
+    const menuLayout = `app-container--with-nav landscape-screen${landscapeLayout ? ' split-panes' : ''}`;
 
     return (
         <>
-            <div id="sudoku-app" className={`app-container ${showBottomNav ? 'app-container--with-nav landscape-screen split-panes' : 'app-container--gameplay'}`}>
-                {showBottomNav && <LandscapeArtwork artwork={landscapeArtwork} />}
+            <div id="sudoku-app" className={`app-container ${showBottomNav ? menuLayout : 'app-container--gameplay'}`}>
+                {showBottomNav && landscapeLayout && <LandscapeArtwork artwork={landscapeArtwork} />}
                 <div className="landscape-screen__pane">
                 {landscapeLayout && primaryNavigation}
                 <div className="landscape-screen__content">
@@ -742,12 +743,11 @@ export function App() {
                     <SetupView
                         variant={variant}
                         difficulty={difficulty}
-                        musicEnabled={musicEnabled}
                         canResumeGame={canResumeGame}
                         isNativeApp={isNativeApp}
                         onVariantChange={handleVariantChange}
                         onDifficultyChange={handleDifficultyChange}
-                        onMusicEnabledChange={handleMusicEnabledChange}
+                        onOpenSettings={() => handleSelectNavTab('settings')}
                         onPlay={handlePlayFromSetup}
                         onResume={handleResumeFromSetup}
                         onOpenLegalPage={openLegalPage}
@@ -778,9 +778,11 @@ export function App() {
                                         type="button"
                                         id="game-help-btn"
                                         className="game-top-bar__icon-btn"
-                                        aria-label={messages.openGuide || 'Open Guide'}
-                                        title={messages.openGuide || 'Open Guide'}
-                                        onClick={() => setIsHelpOpen(true)}
+                                        aria-label={isHelpOpen ? messages.closeGuide : messages.openGuide}
+                                        title={isHelpOpen ? messages.closeGuide : messages.openGuide}
+                                        aria-expanded={isHelpOpen}
+                                        aria-controls={isHelpOpen ? 'help-dialog' : undefined}
+                                        onClick={() => setIsHelpOpen(open => !open)}
                                     >
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                             <circle cx="12" cy="12" r="10" />

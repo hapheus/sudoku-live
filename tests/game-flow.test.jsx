@@ -30,13 +30,13 @@ it('renders classic BottomNav and flows cleanly from Play Setup (3x3/2x3 + diffi
 
     // Setup screen: pick 2x3 and Hard, board not rendered yet
     expect(screen.queryByRole('grid')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('radio', { name: '2×3 (6×6)' }));
+    fireEvent.click(screen.getByRole('radio', { name: '6×6' }));
     fireEvent.click(screen.getByRole('radio', { name: 'Hard' }));
     fireEvent.click(screen.getByRole('button', { name: 'Play' }));
 
     // Clean active game screen without Variant/Difficulty clutter
     expect(screen.getByRole('grid')).toBeVisible();
-    expect(screen.queryByRole('radio', { name: '2×3 (6×6)' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: '6×6' })).not.toBeInTheDocument();
     const saved = JSON.parse(localStorage.getItem('sudoku_solo_snapshot_v1')).gameState;
     const rated = rateSudokuDifficulty(saved.board, '2x3').difficulty;
     expect(document.getElementById('game-status-text')).toHaveTextContent(`2×3 ${rated[0].toUpperCase() + rated.slice(1)} • Solo`);
@@ -59,11 +59,11 @@ it('switches cleanly between Watch lobby, Spectator view, and Settings (Light mo
     fireEvent.click(document.getElementById('game-settings-btn'));
     expect(screen.getByRole('heading', { name: 'Settings' })).toBeVisible();
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Light' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Appearance' }), { target: { value: 'light' } });
     expect(document.documentElement.dataset.theme).toBe('light');
     expect(localStorage.getItem('sudoku_theme')).toBe('light');
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Deutsch' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Language' }), { target: { value: 'de' } });
     expect(document.documentElement.lang).toBe('de');
     expect(screen.getByRole('heading', { name: 'Einstellungen' })).toBeVisible();
     expect(screen.getByRole('tab', { name: 'Spielen' })).toBeVisible();
@@ -149,7 +149,7 @@ it('does not publish a game to the live lobby during Setup selection, only once 
     render(<App />);
 
     // Selecting variant/difficulty on Setup and letting heartbeat run must NOT publish a game
-    fireEvent.click(screen.getByRole('radio', { name: '2×3 (6×6)' }));
+    fireEvent.click(screen.getByRole('radio', { name: '6×6' }));
     fireEvent.click(screen.getByRole('radio', { name: 'Hard' }));
     act(() => {
         vi.advanceTimersByTime(6000);
@@ -343,13 +343,9 @@ it('enforces join approval settings defaults, persists changes, and handles host
 
     render(<App />);
 
-    // Defaults in Settings: Allow Joins ON, Auto-accept Joins OFF
     fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
-    const allowGroup = screen.getByRole('radiogroup', { name: 'Allow Joins' });
-    const autoGroup = screen.getByRole('radiogroup', { name: 'Auto-accept Joins' });
-    expect(allowGroup.querySelector('input[value="true"]')).toBeChecked();
-    expect(autoGroup.querySelector('input[value="false"]')).toBeChecked();
-    expect(autoGroup.querySelector('input[value="true"]')).not.toBeDisabled();
+    const joinSettings = () => screen.getByRole('combobox', { name: 'Joins' });
+    expect(joinSettings()).toHaveValue('confirm');
 
     // Start game as host (default policy: 'confirm')
     fireEvent.click(screen.getByRole('tab', { name: 'Play' }));
@@ -389,7 +385,7 @@ it('enforces join approval settings defaults, persists changes, and handles host
 
     // 3. Auto-accept ON: incoming request auto-approved without banner
     fireEvent.click(document.getElementById('game-settings-btn'));
-    fireEvent.click(screen.getByRole('radiogroup', { name: 'Auto-accept Joins' }).querySelector('input[value="true"]'));
+    fireEvent.change(joinSettings(), { target: { value: 'auto' } });
     expect(localStorage.getItem('sudoku_joins_auto_accept')).toBe('true');
     expect(updatePolicySpy).toHaveBeenCalledWith('auto');
 
@@ -404,11 +400,11 @@ it('enforces join approval settings defaults, persists changes, and handles host
         accepted: true,
     });
 
-    // 4. Allow Joins OFF: Auto-accept inputs disabled and requests rejected with reason 'disabled'
-    fireEvent.click(screen.getByRole('radiogroup', { name: 'Allow Joins' }).querySelector('input[value="false"]'));
+    // 4. Off rejects requests with reason 'disabled'
+    fireEvent.change(joinSettings(), { target: { value: 'disabled' } });
     expect(localStorage.getItem('sudoku_joins_allowed')).toBe('false');
     expect(updatePolicySpy).toHaveBeenCalledWith('disabled');
-    expect(screen.getByRole('radiogroup', { name: 'Auto-accept Joins' }).querySelector('input[value="true"]')).toBeDisabled();
+    expect(localStorage.getItem('sudoku_joins_auto_accept')).toBe('false');
 
     broadcastGameSpy.mockClear();
     act(() => {
@@ -421,6 +417,12 @@ it('enforces join approval settings defaults, persists changes, and handles host
         accepted: false,
         reason: 'disabled',
     });
+
+    updatePolicySpy.mockClear();
+    fireEvent.change(joinSettings(), { target: { value: 'confirm' } });
+    expect(localStorage.getItem('sudoku_joins_allowed')).toBe('true');
+    expect(localStorage.getItem('sudoku_joins_auto_accept')).toBe('false');
+    expect(updatePolicySpy).toHaveBeenCalledWith('confirm');
 });
 
 it('handles requester join approval, decline, and cancel flow from Watch Directory', () => {
@@ -1222,38 +1224,30 @@ it('clears selected cell highlight as soon as the final digit solves the puzzle'
     expect(document.querySelectorAll('.sudoku-cell--revealed')).toHaveLength(36);
 });
 
-it('defaults background music to Off (opt-in) on Start screen, syncs with Settings, and remembers preference across reload', () => {
+it('links from Start to background music settings and remembers the opt-in preference across reload', () => {
+    const openMusicSettings = () => {
+        fireEvent.click(screen.getByRole('link', { name: 'Background Music' }));
+        return screen.getByRole('radiogroup', { name: 'Background Music' });
+    };
+
     render(<App />);
-
-    const setupMusicGroup = document.getElementById('setup-music-control').querySelector('[role="radiogroup"]');
-    expect(setupMusicGroup.querySelector('input[value="false"]')).toBeChecked();
-    expect(setupMusicGroup.querySelector('input[value="true"]')).not.toBeChecked();
-
-    // Opt in directly on the Start screen
-    fireEvent.click(setupMusicGroup.querySelector('input[value="true"]'));
+    expect(screen.queryByRole('radiogroup', { name: 'Background Music' })).not.toBeInTheDocument();
+    const settingsMusicGroup = openMusicSettings();
+    expect(settingsMusicGroup.querySelector('input[value="false"]')).toBeChecked();
+    fireEvent.click(settingsMusicGroup.querySelector('input[value="true"]'));
     expect(localStorage.getItem('sudoku_music_enabled')).toBe('true');
-    expect(setupMusicGroup.querySelector('input[value="true"]')).toBeChecked();
-
-    // Settings reflects the opted-in music state
-    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
-    const settingsMusicGroup = screen.getByRole('radiogroup', { name: 'Background Music' });
-    expect(settingsMusicGroup.querySelector('input[value="true"]')).toBeChecked();
     expect(screen.getByRole('slider', { name: 'Volume: Background Music' })).not.toBeDisabled();
 
-    // Reload / remount remembers the opted-in preference on both Start and Settings
     cleanup();
     render(<App />);
-    const reloadedSetupGroup = document.getElementById('setup-music-control').querySelector('[role="radiogroup"]');
-    expect(reloadedSetupGroup.querySelector('input[value="true"]')).toBeChecked();
-
-    // Turning it off in Settings persists Off across reload
-    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
-    fireEvent.click(screen.getByRole('radiogroup', { name: 'Background Music' }).querySelector('input[value="false"]'));
+    const reloadedMusicGroup = openMusicSettings();
+    expect(reloadedMusicGroup.querySelector('input[value="true"]')).toBeChecked();
+    fireEvent.click(reloadedMusicGroup.querySelector('input[value="false"]'));
     expect(localStorage.getItem('sudoku_music_enabled')).toBe('false');
 
     cleanup();
     render(<App />);
-    expect(document.getElementById('setup-music-control').querySelector('input[value="false"]')).toBeChecked();
+    expect(openMusicSettings().querySelector('input[value="false"]')).toBeChecked();
 });
 
 it('runs safely when storage throws SecurityError and skips pushState inside embedded iframes', () => {

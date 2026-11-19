@@ -18,7 +18,7 @@ async function rotate(cdp: CDPSession, angle: 0 | 90 | 270, compact: boolean) {
 
 async function assertGameLayout(page: Page, landscape: boolean) {
     const toolbar = page.locator('.gameplay-stage__toolbar');
-    await expect(toolbar.getByRole('button', { name: 'Open Guide' })).toBeInViewport();
+    await expect(toolbar.locator('#game-help-btn')).toBeInViewport();
     await expect.poll(() => page.evaluate(landscape => {
         const rect = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
         const board = rect('.gameplay-stage__board');
@@ -44,8 +44,8 @@ async function capture(cdp: CDPSession, testInfo: TestInfo, name: string) {
 }
 
 for (const { variant, compact } of [
-    { variant: '3×3 (9×9)', compact: false },
-    { variant: '2×3 (6×6)', compact: true },
+    { variant: '9×9', compact: false },
+    { variant: '6×6', compact: true },
 ]) {
     test(`${variant} follows the orientation on Duo-sized viewports with no device override`, async ({ page, context }, testInfo) => {
         const cdp = await context.newCDPSession(page);
@@ -85,7 +85,7 @@ for (const { variant, compact } of [
     });
 }
 
-test('portrait panes remain exactly equal around an off-center hinge and asymmetric safe areas', async ({ page, context }) => {
+test('portrait gameplay panes remain exactly equal around an off-center hinge and asymmetric safe areas', async ({ page, context }) => {
     const cdp = await context.newCDPSession(page);
     await cdp.send('Emulation.setDeviceMetricsOverride', {
         width: 467, height: 851, deviceScaleFactor: 1, mobile: true,
@@ -98,6 +98,7 @@ test('portrait panes remain exactly equal around an off-center hinge and asymmet
     await page.goto('/');
     expect(await page.evaluate(() => matchMedia('(vertical-viewport-segments: 2)').matches)).toBe(true);
 
+    const artwork = page.locator('.landscape-artwork');
     async function assertHinge(first: string, second: string) {
         await expect.poll(() => page.evaluate(([first, second]) => {
             const upper = document.querySelector(first)!.getBoundingClientRect();
@@ -110,13 +111,13 @@ test('portrait panes remain exactly equal around an off-center hinge and asymmet
 
     for (const tab of ['#nav-watch', '#nav-settings', '#nav-play']) {
         await page.locator(tab).click();
-        await assertHinge('.landscape-artwork', '.landscape-screen__pane');
+        await expect(artwork).toHaveCount(0);
     }
     await page.locator('#privacy-link').click();
     const content = page.locator('.landscape-screen__content');
     await content.evaluate(element => { element.scrollTop = element.scrollHeight; });
     expect(await content.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
-    await assertHinge('.landscape-artwork', '.landscape-screen__pane');
+    await expect(artwork).toHaveCount(0);
     await page.locator('#legal-back-btn').click();
     await page.locator('#start-game-btn').click();
     await assertHinge('.gameplay-stage__board', '.gameplay-stage__controls');
