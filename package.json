@@ -25,6 +25,8 @@
         "ios:preflight": "cd ios && fastlane preflight",
         "ios:devices": "node scripts/ios-device.mjs --list",
         "ios:device": "node scripts/ios-device.mjs",
+        "ios:screenshots": "node scripts/ios-screenshots.mjs",
+        "browser:screenshots": "node scripts/browser-screenshots.mjs",
         "ios:archive": "cd ios && fastlane archive",
         "ios:testflight": "cd ios && fastlane beta",
         "docker:up": "docker compose up -d --build",
