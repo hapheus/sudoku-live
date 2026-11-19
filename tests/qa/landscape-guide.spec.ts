@@ -8,7 +8,7 @@ for (const variant of ['3x3', '2x3']) {
             await page.addInitScript(() => localStorage.setItem('sudoku_lang', 'en'));
             await page.routeWebSocket(/.*/, socket => socket.close());
             await page.goto('/');
-            await page.getByText(variant === '2x3' ? '2×3 (6×6)' : '3×3 (9×9)', { exact: true }).click();
+            await page.getByText(variant === '2x3' ? '6×6' : '9×9', { exact: true }).click();
             await page.locator('#start-game-btn').click();
             const board = await page.getByRole('grid').innerText();
             const opener = page.locator('#game-help-btn');
@@ -18,7 +18,7 @@ for (const variant of ['3x3', '2x3']) {
             await expect(guide).not.toHaveAttribute('aria-modal', 'true');
             await expect(page.locator('.dialog-backdrop')).toHaveCount(0);
             await expect(page.locator('.gameplay-stage__side')).toHaveCount(0);
-            await expect(page.locator('.gameplay-stage__status > .status-banner')).toHaveCount(0);
+            await expect(page.getByRole('region', { name: 'Game Status' })).toHaveCount(0);
             const left = (await page.locator('.gameplay-stage__board').boundingBox())!;
             const right = (await page.locator('.gameplay-stage__guide').boundingBox())!;
             expect(Math.abs(left.width - right.width)).toBeLessThanOrEqual(1);
@@ -33,9 +33,18 @@ for (const variant of ['3x3', '2x3']) {
             await expect(page.locator('.player-controls')).toBeVisible();
             expect(await page.getByRole('grid').innerText()).toBe(board);
             await opener.click();
+            await expect(opener).toHaveAccessibleName('Close Guide');
+            await opener.click();
+            await expect(guide).toHaveCount(0);
+            await expect(opener).toHaveAccessibleName('Open Guide');
+            await opener.click();
             await page.setViewportSize({ width: 390, height: 844 });
             await expect(page.getByRole('dialog')).toHaveAttribute('aria-modal', 'true');
             await expect(page.locator('.dialog-backdrop')).toBeVisible();
+            await opener.click();
+            await expect(guide).toHaveCount(0);
+            await expect(page.locator('.player-controls')).toBeVisible();
+            await opener.click();
             await page.setViewportSize({ width, height });
             await expect(page.locator('.dialog-backdrop')).toHaveCount(0);
             await expect(page.getByRole('dialog')).toHaveCount(1);
@@ -45,6 +54,81 @@ for (const variant of ['3x3', '2x3']) {
         });
     }
 }
+
+test('Game Info uses the controls pane in landscape and the dialog in portrait', async ({ page }) => {
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.addInitScript(() => localStorage.setItem('sudoku_lang', 'en'));
+    await page.routeWebSocket(/.*/, socket => socket.close());
+    await page.goto('/');
+    await page.locator('#start-game-btn').click();
+    const infoButton = page.locator('#game-info-btn');
+    const gameInfo = page.getByRole('dialog', { name: 'Game Info' });
+    const controls = page.locator('.player-controls');
+    await expect(page.getByRole('region', { name: 'Game Status' })).toHaveCount(0);
+    await infoButton.click();
+    await expect(page.locator('.gameplay-stage__controls').getByRole('dialog', { name: 'Game Info' })).toBeVisible();
+    await expect(gameInfo).not.toHaveAttribute('aria-modal', 'true');
+    await expect(controls).toHaveCount(0);
+    await expect(gameInfo.locator('#sudoku-progress')).toContainText('Filled cells');
+    await expect(gameInfo.locator('#sudoku-timer')).toContainText('Elapsed time');
+    const board = await page.getByRole('grid').innerText();
+    const elapsed = await gameInfo.locator('#sudoku-timer').innerText();
+    await expect(gameInfo.locator('#sudoku-timer')).not.toHaveText(elapsed);
+    expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()).violations).toEqual([]);
+
+    await page.locator('#game-help-btn').click();
+    await expect(gameInfo).toHaveCount(0);
+    await expect(page.locator('#help-dialog')).toBeVisible();
+    await infoButton.click();
+    await expect(gameInfo).toBeVisible();
+    await expect(page.locator('#help-dialog')).toHaveCount(0);
+
+    await page.setViewportSize({ width: 320, height: 640 });
+    await expect(gameInfo).toHaveAttribute('aria-modal', 'true');
+    await expect(gameInfo.getByRole('button', { name: 'Close' })).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(gameInfo.getByRole('button', { name: 'Close' })).toBeFocused();
+    await page.keyboard.press('3');
+    expect(await page.getByRole('grid').innerText()).toBe(board);
+    await page.keyboard.press('Escape');
+    await expect(gameInfo).toHaveCount(0);
+    await expect(infoButton).toBeFocused();
+    await expect(controls).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('Watch uses the shared game toolbar, Info and Guide', async ({ page }) => {
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.addInitScript(() => localStorage.setItem('sudoku_lang', 'en'));
+    await page.routeWebSocket(/.*/, socket => socket.close());
+    await page.goto('/games/watch-info?watch=1');
+    const toolbar = page.locator('.game-top-bar');
+    const infoButton = toolbar.locator('#game-info-btn');
+    const status = page.getByRole('region', { name: 'Game Status' });
+    const controls = page.getByRole('region', { name: 'Spectator Interactions' });
+    await expect(status).toHaveCount(0);
+    await expect(controls).toBeVisible();
+
+    await infoButton.click();
+    const info = page.getByRole('dialog', { name: 'Game Info' });
+    await expect(page.locator('.gameplay-stage__controls').getByRole('dialog')).toBeVisible();
+    await expect(info).toContainText('Watching');
+    await expect(info).toContainText('Filled cells');
+    await expect(controls).toHaveCount(0);
+    await toolbar.locator('#game-help-btn').click();
+    await expect(info).toHaveCount(0);
+    await expect(page.locator('#help-dialog')).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(controls).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await infoButton.click();
+    await expect(info).toHaveAttribute('aria-modal', 'true');
+    await page.keyboard.press('Escape');
+    await expect(infoButton).toBeFocused();
+    await expect(status).toHaveCount(0);
+    await expect(controls).toBeVisible();
+});
 
 test('primary navigation and artwork follow the viewport orientation', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 951, height: 669 });
@@ -69,13 +153,11 @@ test('primary navigation and artwork follow the viewport orientation', async ({ 
     await page.screenshot({ path: testInfo.outputPath('landscape-top-navigation.png') });
     for (const [width, height] of [[390, 844], [1000, 1200]]) {
         await page.setViewportSize({ width, height });
+        await expect(page.locator('.landscape-artwork')).toHaveCount(0);
         await expect.poll(() => page.evaluate(height => {
-            const artwork = document.querySelector('.landscape-artwork')!.getBoundingClientRect();
             const pane = document.querySelector('.landscape-screen__pane')!.getBoundingClientRect();
-            const setup = document.querySelector('.play-setup')!.getBoundingClientRect();
             const nav = document.querySelector('.bottom-nav')!.getBoundingClientRect();
-            return artwork.height > 0 && artwork.height === pane.height && artwork.bottom <= setup.top &&
-                Math.abs((artwork.bottom + pane.top) / 2 - height / 2) < 1 && Math.abs(nav.bottom - height) < 1;
+            return Math.abs(pane.top) < 1 && Math.abs(pane.height - height) < 1 && Math.abs(nav.bottom - height) < 1;
         }, height)).toBe(true);
         if (width === 390) {
             await page.screenshot({ path: testInfo.outputPath('portrait-bottom-navigation.png') });

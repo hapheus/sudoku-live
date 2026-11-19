@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { HINT_USED_EVENT, isContributionName, nextHintCount, recordPlayerContribution } from '../domain/game-contributions.js';
 import {
     clearAllNotes,
     fillCandidateNotes,
@@ -123,13 +124,33 @@ export function useBoardActions({
         }
     }, [onlineClientRef, stateRef]);
 
-    const commitCellDigit = useCallback((targetIndex, digit, { clearPending = true } = {}) => {
+    const recordHintUsage = useCallback((state) => {
+        const cur = stateRef.current;
+        const senderId = onlineClientRef.current?.clientId;
+        if (!senderId) return state;
+        const playerName = isContributionName(cur.playerName) ? cur.playerName : undefined;
+        const hintsUsed = nextHintCount(state, senderId);
+        const next = recordPlayerContribution(state, { senderId, playerName, hintsUsed });
+        if (isOnlineBroadcaster(cur)) {
+            onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, HINT_USED_EVENT, { hintsUsed, playerName });
+        }
+        return next;
+    }, [onlineClientRef, stateRef]);
+
+    const commitCellDigit = useCallback((targetIndex, digit, { clearPending = true, usedHint = false } = {}) => {
         const cur = stateRef.current;
         const specInfo = getVariantSpec(cur.gameState.variant || inferVariantFromBoardLength(cur.gameState.board?.length));
         const owner = (cur.myRole === 'host' || cur.myRole === 'guest') ? cur.myRole : null;
+        const authorId = onlineClientRef.current?.clientId || null;
+        const playerName = isContributionName(cur.playerName) ? cur.playerName : undefined;
         const prevGameState = cur.gameState;
         const prevBoard = prevGameState.board;
-        const nextState = setCellValue(prevGameState, targetIndex, digit, { owner });
+        const edited = setCellValue(prevGameState, targetIndex, digit, { owner, authorId });
+        let nextState = edited;
+        if (edited !== prevGameState && digit !== 0) {
+            nextState = usedHint ? recordHintUsage(edited)
+                : recordPlayerContribution(edited, { senderId: authorId, playerName });
+        }
 
         setGameState(nextState);
         stateRef.current.gameState = nextState;
@@ -166,6 +187,9 @@ export function useBoardActions({
                 value: digit,
                 notes: nextState.notes[targetIndex],
                 owner,
+                authorId: nextState.cellAuthors?.[targetIndex] ?? null,
+                playerName,
+                hintsUsed: nextState.playerContributions?.find(({ id }) => id === authorId)?.hintsUsed,
             });
             syncLobbyProgress(nextState);
         }
@@ -178,6 +202,7 @@ export function useBoardActions({
         onlineClientRef,
         persistSnapshotIfNeeded,
         playMoveSoundFeedback,
+        recordHintUsage,
         setActiveDigit,
         setGameState,
         setSelectedIndex,
@@ -377,6 +402,7 @@ export function useBoardActions({
                             value: nextState.board[i],
                             notes: nextState.notes[i],
                             owner: nextState.cellOwners?.[i] || null,
+                            authorId: nextState.cellAuthors?.[i] ?? null,
                         });
                     }
                 }
@@ -473,6 +499,10 @@ export function useBoardActions({
             const hint = findLogicalHint(cur.gameState, { preferredIndex: selectedIndex });
             if (!hint || !hint.digit) return;
 
+            const nextState = recordHintUsage(cur.gameState);
+            setGameState(nextState);
+            stateRef.current.gameState = nextState;
+            persistSnapshotIfNeeded(nextState);
             setPendingHint(hint);
             stateRef.current.pendingHint = hint;
             setSelectedIndex(hint.index);
@@ -496,7 +526,10 @@ export function useBoardActions({
         broadcastCursor,
         broadcastHintHighlight,
         commitCellDigit,
+        persistSnapshotIfNeeded,
+        recordHintUsage,
         selectedIndex,
+        setGameState,
         setPendingHint,
         setSelectedIndex,
         showFeedback,
@@ -509,7 +542,7 @@ export function useBoardActions({
         if (cur.isSpectating || cur.mode === 'watch' || cur.gameState.status === 'solved') return;
         setSelectedIndex(idx);
         broadcastCursor(idx);
-        commitCellDigit(idx, digit);
+        commitCellDigit(idx, digit, { usedHint: true });
     }, [broadcastCursor, commitCellDigit, setSelectedIndex, stateRef]);
 
     const sendSpectatorHint = useCallback((value) => {

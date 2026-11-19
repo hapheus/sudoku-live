@@ -1,4 +1,5 @@
 import { Centrifuge } from 'centrifuge';
+import { HINT_USED_EVENT } from '../domain/game-contributions.js';
 import { createStateRecovery, REMATCH_EVENT } from './state-recovery.js';
 import { createPeerCompatibility, eventFeature } from './peer-compatibility.js';
 import { createRoomAuthority } from './room-authority.js';
@@ -33,9 +34,9 @@ export { generateEventId, generateGameId, isValidGameId, resolveRuntimeWsConfig 
 
 const PRESENCE_ANNOUNCE = 'presence-announce';
 const LOBBY_UPDATE = 'lobby-update';
-const RECOVERABLE_EVENTS = new Set(['init', 'sync', 'cell-update', REMATCH_EVENT, 'new-puzzle-request', 'new-puzzle-cancel', 'ping', 'join-policy', 'tic-tac-toe-state', 'retro-mode']);
+const RECOVERABLE_EVENTS = new Set(['init', 'sync', 'cell-update', HINT_USED_EVENT, REMATCH_EVENT, 'new-puzzle-request', 'new-puzzle-cancel', 'ping', 'join-policy', 'tic-tac-toe-state', 'retro-mode']);
 const PRESENCE_SETTLE_TIMEOUT_MS = 350;
-const RETRY_MUTATIONS = new Set(['init', 'sync', 'cell-update', REMATCH_EVENT, 'new-puzzle-request', 'new-puzzle-cancel']);
+const RETRY_MUTATIONS = new Set(['init', 'sync', 'cell-update', HINT_USED_EVENT, REMATCH_EVENT, 'new-puzzle-request', 'new-puzzle-cancel']);
 
 function normalizeRole(role) {
     return role === 'host' || role === 'guest' || role === 'spectator' ? role : 'spectator';

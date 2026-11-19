@@ -181,6 +181,8 @@ export function StatusBanner({
         isSpectating, isCoopActive, myRole, partnerCount, partnerOnline, partnerMembers, messages, gameState, onContinueSolo, myMember, currentMembers, spectatedGameMode,
     });
 
+    const filledCellsLabel = messages.gameInfoFilledCells || 'Filled cells';
+    const elapsedTimeLabel = messages.gameInfoElapsedTime || 'Elapsed time';
     const hasMetaBadges = Boolean(connectionBadge || canRetryConnection || opponentBadge || continueSoloBtn || spectatorBadge || coopLegend);
 
     return (
@@ -210,11 +212,11 @@ export function StatusBanner({
                     {statusText}
                 </div>
                 <div className="telemetry-pills">
-                    <span id="sudoku-progress" className="telemetry-pill" aria-label="Filled cells">
-                        {`${gameState.filledCount}/${spec.totalCells}`}
+                    <span id="sudoku-progress" className="telemetry-pill">
+                        {`${filledCellsLabel} · ${gameState.filledCount}/${spec.totalCells}`}
                     </span>
-                    <span id="sudoku-timer" className="telemetry-pill" aria-label="Elapsed time">
-                        {formatGameDuration(gameState.elapsedSeconds || 0)}
+                    <span id="sudoku-timer" className="telemetry-pill">
+                        {`${elapsedTimeLabel} · ${formatGameDuration(gameState.elapsedSeconds || 0)}`}
                     </span>
                 </div>
             </div>

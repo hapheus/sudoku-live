@@ -43,10 +43,70 @@ async function checkAccessibility(page: Page, testInfo: TestInfo, state: string)
 }
 
 async function capture(page: Page, testInfo: TestInfo, name: string) {
-    // Only the live elapsed-time text is masked; layout and other telemetry are checked.
-    const options = { mask: [page.locator('#sudoku-timer')], fullPage: true };
+    const options = { fullPage: true };
     await page.screenshot({ ...options, path: testInfo.outputPath(`${name}.png`) });
     await expect.soft(page).toHaveScreenshot(`${name}.png`, options);
+}
+
+test('setup centers vertically when it fits and scrolls from the top when it does not', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openFixture(page);
+    const setup = page.locator('#play-setup');
+    const gaps = () => setup.evaluate(element => {
+        const bounds = element.getBoundingClientRect();
+        const pane = element.parentElement!.getBoundingClientRect();
+        return { top: bounds.top - pane.top, bottom: pane.bottom - bounds.bottom };
+    });
+
+    for (const [width, height] of [[390, 844], [1280, 800]]) {
+        await page.setViewportSize({ width, height });
+        await expect.poll(async () => {
+            const { top, bottom } = await gaps();
+            return top > 12 && Math.abs(top - bottom) <= 1;
+        }).toBe(true);
+    }
+
+    await page.setViewportSize({ width: 568, height: 320 });
+    await expect.poll(async () => {
+        const { top, bottom } = await gaps();
+        return top >= 0 && top < 12 && bottom < 0;
+    }).toBe(true);
+    const legal = setup.locator('#impressum-link');
+    await legal.scrollIntoViewIfNeeded();
+    await expect(legal).toBeInViewport();
+});
+
+for (const language of ['en', 'de']) {
+    test(`title and difficulty choices stay on one line in narrow setup panes (${language})`, async ({ page }) => {
+        await page.setViewportSize({ width: 320, height: 640 });
+        await page.addInitScript(language => localStorage.setItem('sudoku_lang', language), language);
+        await page.routeWebSocket(/.*/, socket => socket.close());
+        await page.goto('/');
+        await expect(page.getByRole('radio', { name: '6×6', exact: true })).toBeVisible();
+        await expect(page.getByRole('radio', { name: '9×9', exact: true })).toBeVisible();
+
+        const labels = page.locator('.difficulty-label');
+        await expect(labels).toHaveCount(4);
+        for (const [width, height] of [[320, 640], [568, 320]]) {
+            await page.setViewportSize({ width, height });
+            await expect.poll(() => page.getByRole('heading', { name: 'Sudoku Shift' }).evaluate(title => {
+                const header = title.parentElement!.getBoundingClientRect();
+                const setup = title.closest('.play-setup')!.getBoundingClientRect();
+                const text = document.createRange();
+                text.selectNodeContents(title);
+                return header.width >= setup.width - 8 && text.getClientRects().length === 1;
+            })).toBe(true);
+            await expect.poll(() => labels.evaluateAll(elements => elements.every(label => {
+                const bounds = label.getBoundingClientRect();
+                const range = document.createRange();
+                range.selectNodeContents(label.querySelector('span')!);
+                const text = Array.from(range.getClientRects());
+                const pane = label.closest('.landscape-screen__content')!.getBoundingClientRect();
+                return text.length === 1 && text[0].left >= bounds.left && text[0].right <= bounds.right &&
+                    bounds.left >= pane.left && bounds.right <= pane.right && bounds.height >= 44;
+            }))).toBe(true);
+        }
+    });
 }
 
 for (const theme of ['dark', 'light']) {
@@ -54,7 +114,7 @@ for (const theme of ['dark', 'light']) {
         test(`setup and gameplay ${theme} ${width}x${height}`, async ({ page }, testInfo) => {
             await page.setViewportSize({ width, height });
             await openFixture(page, theme);
-            await expect(page.getByRole('radio', { name: '3×3 (9×9)', exact: true })).toBeChecked();
+            await expect(page.getByRole('radio', { name: '9×9', exact: true })).toBeChecked();
             await expect(page.getByRole('tab', { name: 'Play', exact: true })).toHaveAttribute('aria-selected', 'true');
             await expect(page.getByRole('grid')).toHaveCount(0);
             await checkAccessibility(page, testInfo, 'setup');
@@ -78,7 +138,7 @@ for (const theme of ['dark', 'light']) {
             await expect(page.getByRole('radio')).toHaveCount(0);
             await expect(page.getByRole('tab')).toHaveCount(0);
             await expect(page.locator('#game-help-btn')).toBeVisible();
-            await expect(page.locator('#game-settings-btn')).toBeVisible();
+            await expect(page.getByRole('button', { name: 'Settings', exact: true })).toHaveCount(0);
             expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
             if (height >= 640) {
                 expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1)).toBe(true);
@@ -125,14 +185,14 @@ test('settings change theme and language persistently; zoom keeps controls reach
     await openFixture(page);
     await page.getByRole('tab', { name: 'Settings', exact: true }).click();
     await checkAccessibility(page, testInfo, 'settings-dark');
-    await page.getByText('Light', { exact: true }).click();
+    await page.getByRole('combobox', { name: 'Appearance' }).selectOption('light');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     await checkAccessibility(page, testInfo, 'settings-light');
     await page.getByRole('button', { name: 'Open Guide', exact: true }).click();
     await expect(page.getByRole('dialog', { name: 'Game Guide' })).toBeVisible();
     await checkAccessibility(page, testInfo, 'guide-light');
     await page.getByRole('button', { name: 'Close', exact: true }).click();
-    await page.getByText('Deutsch', { exact: true }).click();
+    await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('de');
     await expect(page.locator('html')).toHaveAttribute('lang', 'de');
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
@@ -141,7 +201,7 @@ test('settings change theme and language persistently; zoom keeps controls reach
     await page.getByRole('button', { name: 'Anleitung öffnen', exact: true }).click();
     await expect(page.getByRole('dialog', { name: 'Spielanleitung' })).toBeVisible();
     await page.getByRole('button', { name: 'Schließen', exact: true }).click();
-    await page.getByText('English', { exact: true }).click();
+    await page.getByRole('combobox', { name: 'Sprache', exact: true }).selectOption('en');
     await page.getByRole('tab', { name: 'Play', exact: true }).click();
     await page.getByRole('button', { name: 'Play', exact: true }).click();
     await page.evaluate(() => { document.documentElement.style.zoom = '2'; });
@@ -154,7 +214,7 @@ test('settings change theme and language persistently; zoom keeps controls reach
 
 test('setup selects and restores a 6 by 6 easy puzzle', async ({ page }, testInfo) => {
     await openFixture(page);
-    await page.getByText('2×3 (6×6)', { exact: true }).click();
+    await page.getByText('6×6', { exact: true }).click();
     await page.getByText('Easy', { exact: true }).click();
     await page.getByRole('button', { name: 'Play', exact: true }).click();
     await expect(page.getByRole('grid', { name: '6 by 6 Sudoku grid' })).toBeVisible();
@@ -162,7 +222,7 @@ test('setup selects and restores a 6 by 6 easy puzzle', async ({ page }, testInf
     await checkAccessibility(page, testInfo, '6x6');
     const board = await page.getByRole('gridcell').allTextContents();
     await page.reload();
-    await expect(page.getByRole('radio', { name: '2×3 (6×6)', exact: true })).toBeChecked();
+    await expect(page.getByRole('radio', { name: '6×6', exact: true })).toBeChecked();
     await expect(page.getByRole('radio', { name: 'Easy', exact: true })).toBeChecked();
     await page.getByRole('button', { name: 'Play', exact: true }).click();
     expect(await page.getByRole('gridcell').allTextContents()).toEqual(board);
@@ -191,27 +251,22 @@ test('web start screen exposes App Store Coming Soon badge, Privacy Policy, and 
     await expect(page.locator('#play-setup')).toBeVisible();
 });
 
-test('start screen music toggle defaults to Off (opt-in), syncs with Settings, and persists across reload', async ({ page }) => {
+test('music is opt-in from Settings and persists across reload', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openFixture(page, 'dark');
 
-    const setupMusicOff = page.locator('#setup-music-control input[value="false"]');
-    const setupMusicOn = page.locator('#setup-music-control input[value="true"]');
-    await expect(setupMusicOff).toBeChecked();
-    await expect(setupMusicOn).not.toBeChecked();
-
-    // Opt in on Start screen
-    await page.locator('#setup-music-control label', { hasText: 'On' }).click();
-    await expect(setupMusicOn).toBeChecked();
-
-    // Verify synced in Settings and persists across reload
-    await page.getByRole('tab', { name: 'Settings', exact: true }).click();
+    const settingsTab = page.getByRole('tab', { name: 'Settings', exact: true });
     const settingsMusicGroup = page.getByRole('radiogroup', { name: 'Background Music' });
+    await expect(settingsMusicGroup).toHaveCount(0);
+    await settingsTab.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('tab', { name: 'Settings', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await expect(settingsMusicGroup.locator('input[value="false"]')).toBeChecked();
+    await settingsMusicGroup.locator('label', { hasText: 'On' }).click();
     await expect(settingsMusicGroup.locator('input[value="true"]')).toBeChecked();
     await expect(page.getByRole('slider', { name: 'Volume: Background Music' })).toBeEnabled();
 
     await page.reload();
-    await expect(page.locator('#setup-music-control input[value="true"]')).toBeChecked();
+    await settingsTab.click();
+    await expect(settingsMusicGroup.locator('input[value="true"]')).toBeChecked();
 });
-
-

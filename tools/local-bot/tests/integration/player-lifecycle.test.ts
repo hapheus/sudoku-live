@@ -53,10 +53,15 @@ test('a departing player vanishes, the slot stays offline, and a new identity ad
       if (type === 'join-response') replies.push(data);
     } });
     await room.ready(5_000);
+    const seesHost = () => visitor.getGameMembers()?.some(member => member.role === 'host');
+    for (let retry = 0; retry < 40 && !seesHost(); retry++) await delay(50);
+    assert.ok(seesHost());
     await visitor.broadcastGameEvent(replacement.game_id, 'join-request', { requestId: 'disabled-live', requesterId: visitor.clientId });
-    await delay(50);
-    await runner.step(now + 10_001);
-    await delay(50);
-    assert.ok(replies.some(reply => reply.requestId === 'disabled-live' && !reply.accepted && reply.reason === 'disabled'));
+    const receivedRejection = () => replies.some(reply => reply.requestId === 'disabled-live' && !reply.accepted && reply.reason === 'disabled');
+    for (let retry = 0; retry < 40 && !receivedRejection(); retry++) {
+      await runner.step(now + 10_001 + retry);
+      await delay(50);
+    }
+    assert.ok(receivedRejection());
   } finally { visitor.disconnect(); observer.disconnect(); await runner.stop(); }
 });

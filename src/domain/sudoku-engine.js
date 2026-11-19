@@ -18,6 +18,7 @@ import {
 } from './sudoku-board-metrics.js';
 import { shiftBand, shiftCol, shiftRow, shiftStack } from './sudoku-shifts.js';
 import { findLogicalHint } from './sudoku-hints.js';
+import { cloneCellAuthors, mergePlayerContributions, recordPlayerContribution } from './game-contributions.js';
 
 export {
     cloneNotes,
@@ -146,6 +147,9 @@ export function createSudokuGame({ difficulty = 'medium', variant = null, puzzle
         solution: [...generated.solution],
         notes,
         cellOwners,
+        cellAuthors: Array(spec.totalCells).fill(null),
+        playerContributions: [],
+        wasMultiplayer: false,
         conflicts: findConflicts(board, spec.id),
         filledCount: countFilledCells(board, spec.id),
         status: isSolved(board, spec.id) ? 'solved' : 'in_progress',
@@ -163,6 +167,7 @@ function recordBoardHistory(state, recordHistory = true) {
             board: [...state.board],
             notes: cloneNotes(state.notes),
             cellOwners: cloneOwners(state.cellOwners, spec.totalCells),
+            cellAuthors: cloneCellAuthors(state.cellAuthors, spec.totalCells),
         },
     ];
 }
@@ -184,7 +189,16 @@ function finalizeBoardChange(state, nextBoard, nextNotes, nextOwners) {
     };
 }
 
-export function setCellValue(state, index, value, { recordHistory = true, owner = null } = {}) {
+function clearNotesAfterPlacement(notes, index, value, variant) {
+    notes[index] = [];
+    for (const peerIndex of getPeerIndices(index, variant)) {
+        if (notes[peerIndex].length > 0) {
+            notes[peerIndex] = notes[peerIndex].filter((note) => note !== value);
+        }
+    }
+}
+
+export function setCellValue(state, index, value, { recordHistory = true, owner = null, authorId = null } = {}) {
     const spec = getVariantSpec(resolveVariantForState(state));
     if (index < 0 || index >= spec.totalCells) {
         throw new Error(`Invalid cell index ${index}.`);
@@ -206,22 +220,23 @@ export function setCellValue(state, index, value, { recordHistory = true, owner 
     const nextBoard = [...state.board];
     const nextNotes = cloneNotes(state.notes);
     const nextOwners = cloneOwners(state.cellOwners, spec.totalCells);
+    const cellAuthors = cloneCellAuthors(state.cellAuthors, spec.totalCells);
     const nextHistory = recordBoardHistory(state, recordHistory);
 
     nextBoard[index] = value;
     nextOwners[index] = value === 0 ? null : owner;
+    cellAuthors[index] = value === 0 ? null : authorId;
 
     if (value !== 0) {
-        nextNotes[index] = [];
-        // Tidy pencil marks in row, column, and box peers
-        for (const peerIdx of getPeerIndices(index, spec.id)) {
-            if (nextNotes[peerIdx].length > 0) {
-                nextNotes[peerIdx] = nextNotes[peerIdx].filter((n) => n !== value);
-            }
-        }
+        clearNotesAfterPlacement(nextNotes, index, value, spec.id);
     }
 
-    return { ...finalizeBoardChange(state, nextBoard, nextNotes, nextOwners), history: nextHistory };
+    return {
+        ...finalizeBoardChange(state, nextBoard, nextNotes, nextOwners),
+        cellAuthors,
+        history: nextHistory,
+        wasMultiplayer: state.wasMultiplayer || owner === 'guest',
+    };
 }
 
 export function toggleCellNote(state, index, digit, { recordHistory = true } = {}) {
@@ -291,7 +306,7 @@ export function clearAllNotes(state) {
     };
 }
 
-export function applyRemoteCellPatch(state, { index, value, notes = null, owner = null }) {
+export function applyRemoteCellPatch(state, { index, value, notes = null, owner = null, authorId, senderId, playerName, hintsUsed }) {
     const spec = getVariantSpec(resolveVariantForState(state));
     if (index < 0 || index >= spec.totalCells || state.givens[index]) {
         return state;
@@ -300,19 +315,17 @@ export function applyRemoteCellPatch(state, { index, value, notes = null, owner 
     const nextBoard = [...state.board];
     const nextNotes = cloneNotes(state.notes);
     const nextOwners = cloneOwners(state.cellOwners, spec.totalCells);
+    const cellAuthors = cloneCellAuthors(state.cellAuthors, spec.totalCells);
+    const attributedAuthor = authorId === undefined ? ((owner && senderId) || null) : authorId;
 
     if (typeof value === 'number' && value >= 0 && value <= spec.maxDigit) {
         nextBoard[index] = value;
+        cellAuthors[index] = value === 0 ? null : attributedAuthor;
         if (value === 0) {
             nextOwners[index] = null;
         } else {
             nextOwners[index] = owner === 'host' || owner === 'guest' ? owner : (nextOwners[index] || null);
-            nextNotes[index] = [];
-            for (const peerIdx of getPeerIndices(index, spec.id)) {
-                if (nextNotes[peerIdx].length > 0) {
-                    nextNotes[peerIdx] = nextNotes[peerIdx].filter((n) => n !== value);
-                }
-            }
+            clearNotesAfterPlacement(nextNotes, index, value, spec.id);
         }
     }
 
@@ -322,7 +335,13 @@ export function applyRemoteCellPatch(state, { index, value, notes = null, owner 
             .sort((a, b) => a - b);
     }
 
-    return finalizeBoardChange(state, nextBoard, nextNotes, nextOwners);
+    const nextState = {
+        ...finalizeBoardChange(state, nextBoard, nextNotes, nextOwners),
+        cellAuthors,
+        wasMultiplayer: state.wasMultiplayer || owner === 'guest',
+    };
+    return hintsUsed !== undefined || (cellAuthors[index] && cellAuthors[index] === senderId)
+        ? recordPlayerContribution(nextState, { senderId, playerName, hintsUsed }) : nextState;
 }
 
 export function undoLastMove(state) {
@@ -343,6 +362,7 @@ export function undoLastMove(state) {
         solution: Array.isArray(previous.solution) ? [...previous.solution] : state.solution,
         notes: cloneNotes(previous.notes),
         cellOwners: cloneOwners(previous.cellOwners, spec.totalCells),
+        cellAuthors: cloneCellAuthors(previous.cellAuthors, spec.totalCells),
         conflicts,
         filledCount,
         status: 'in_progress',
@@ -361,6 +381,9 @@ export function serializeGameState(state) {
         solution: state.solution,
         notes: state.notes,
         cellOwners: cloneOwners(state.cellOwners, spec.totalCells),
+        cellAuthors: cloneCellAuthors(state.cellAuthors, spec.totalCells),
+        playerContributions: state.playerContributions || [],
+        wasMultiplayer: Boolean(state.wasMultiplayer),
         status: state.status,
         elapsedSeconds: state.elapsedSeconds || 0,
     };
@@ -410,6 +433,10 @@ export function hydrateGameState(raw) {
         solution,
         notes,
         cellOwners,
+        cellAuthors: cloneCellAuthors(raw.cellAuthors, spec.totalCells)
+            .map((id, index) => board[index] && !givens[index] ? id : null),
+        playerContributions: mergePlayerContributions([], Array.isArray(raw.playerContributions) ? raw.playerContributions : []),
+        wasMultiplayer: raw.wasMultiplayer === true,
         conflicts,
         filledCount,
         status: solved ? 'solved' : 'in_progress',

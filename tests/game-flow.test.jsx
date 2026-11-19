@@ -20,6 +20,17 @@ afterEach(() => {
     cleanup();
 });
 
+function openSettingsFromGame() {
+    fireEvent.click(document.getElementById('back-to-setup-btn'));
+    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+}
+
+function addNoteToFirstEmptyCell() {
+    fireEvent.click(document.querySelector('.sudoku-cell:not(.sudoku-cell--given)'));
+    fireEvent.click(screen.getByRole('button', { name: 'Notes', exact: true }));
+    fireEvent.click(document.querySelector('.numpad-btn[data-digit="1"]'));
+}
+
 it('renders classic BottomNav and flows cleanly from Play Setup (3x3/2x3 + difficulty) to the clean Game Screen', () => {
     render(<App />);
 
@@ -30,22 +41,47 @@ it('renders classic BottomNav and flows cleanly from Play Setup (3x3/2x3 + diffi
 
     // Setup screen: pick 2x3 and Hard, board not rendered yet
     expect(screen.queryByRole('grid')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('radio', { name: '2×3 (6×6)' }));
+    fireEvent.click(screen.getByRole('radio', { name: '6×6' }));
     fireEvent.click(screen.getByRole('radio', { name: 'Hard' }));
     fireEvent.click(screen.getByRole('button', { name: 'Play' }));
 
     // Clean active game screen without Variant/Difficulty clutter
     expect(screen.getByRole('grid')).toBeVisible();
-    expect(screen.queryByRole('radio', { name: '2×3 (6×6)' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: '6×6' })).not.toBeInTheDocument();
     const saved = JSON.parse(localStorage.getItem('sudoku_solo_snapshot_v1')).gameState;
     const rated = rateSudokuDifficulty(saved.board, '2x3').difficulty;
+    expect(screen.queryByRole('region', { name: 'Game Status' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Open Game Info' }));
+    const info = screen.getByRole('dialog', { name: 'Game Info' });
+    expect(info).toHaveTextContent('Filled cells');
+    expect(info).toHaveTextContent('Elapsed time');
     expect(document.getElementById('game-status-text')).toHaveTextContent(`2×3 ${rated[0].toUpperCase() + rated.slice(1)} • Solo`);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(info).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hint' })).toBeVisible();
     expect(document.getElementById('back-to-setup-btn')).toBeVisible();
 
     fireEvent.click(screen.getByRole('button', { name: 'Notes' }));
     expect(screen.getByRole('button', { name: 'Notes On' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Fill Candidates' })).toBeVisible();
+});
+
+it('cancels the active puzzle from the toolbar and returns to setup without resumable progress', () => {
+    localStorage.setItem('sudoku_lang', 'de');
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Spielen', exact: true }));
+    fireEvent.click(document.querySelector('.sudoku-cell:not(.sudoku-cell--given)'));
+    fireEvent.click(document.querySelector('#notes-btn'));
+    fireEvent.click(document.querySelector('.numpad-btn[data-digit="1"]'));
+
+    const abort = screen.getByRole('button', { name: 'Abbrechen', exact: true });
+    expect(abort.previousElementSibling).toHaveTextContent('Neues Rätsel');
+    fireEvent.click(abort);
+
+    expect(screen.queryByRole('grid')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Spielen', exact: true })).toBeVisible();
+    expect(document.getElementById('resume-game-btn')).not.toBeInTheDocument();
+    expect(localStorage.getItem('sudoku_solo_snapshot_v1')).toBeNull();
 });
 
 it('switches cleanly between Watch lobby, Spectator view, and Settings (Light mode & Deutsch)', () => {
@@ -55,15 +91,17 @@ it('switches cleanly between Watch lobby, Spectator view, and Settings (Light mo
     fireEvent.click(screen.getByRole('button', { name: 'Play' }));
     expect(screen.getByRole('grid')).toBeVisible();
 
-    // Switch to Settings via in-game Settings button -> Light mode + Deutsch
-    fireEvent.click(document.getElementById('game-settings-btn'));
+    // Return to Setup before switching to Settings.
+    expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument();
+    addNoteToFirstEmptyCell();
+    openSettingsFromGame();
     expect(screen.getByRole('heading', { name: 'Settings' })).toBeVisible();
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Light' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Appearance' }), { target: { value: 'light' } });
     expect(document.documentElement.dataset.theme).toBe('light');
     expect(localStorage.getItem('sudoku_theme')).toBe('light');
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Deutsch' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Language' }), { target: { value: 'de' } });
     expect(document.documentElement.lang).toBe('de');
     expect(screen.getByRole('heading', { name: 'Einstellungen' })).toBeVisible();
     expect(screen.getByRole('tab', { name: 'Spielen' })).toBeVisible();
@@ -71,6 +109,7 @@ it('switches cleanly between Watch lobby, Spectator view, and Settings (Light mo
 
     // Returning to Play keeps active game screen intact (in German!)
     fireEvent.click(screen.getByRole('tab', { name: 'Spielen' }));
+    fireEvent.click(document.getElementById('resume-game-btn'));
     expect(screen.getByRole('grid')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Hinweis' })).toBeVisible();
 
@@ -149,7 +188,7 @@ it('does not publish a game to the live lobby during Setup selection, only once 
     render(<App />);
 
     // Selecting variant/difficulty on Setup and letting heartbeat run must NOT publish a game
-    fireEvent.click(screen.getByRole('radio', { name: '2×3 (6×6)' }));
+    fireEvent.click(screen.getByRole('radio', { name: '6×6' }));
     fireEvent.click(screen.getByRole('radio', { name: 'Hard' }));
     act(() => {
         vi.advanceTimersByTime(6000);
@@ -301,7 +340,7 @@ it('triggers distinct sound effects for wrong/correct digits, unit completion, p
         scheduledFreqs.length = 0;
 
         // Settings toggles and volume sliders persist settings in localStorage
-        fireEvent.click(document.getElementById('game-settings-btn'));
+        openSettingsFromGame();
         const musicGroup = screen.getByRole('radiogroup', { name: 'Background Music' });
         expect(musicGroup.querySelector('input[value="false"]')).toBeChecked();
         expect(screen.getByRole('slider', { name: 'Volume: Background Music' })).toBeDisabled();
@@ -331,7 +370,7 @@ it('triggers distinct sound effects for wrong/correct digits, unit completion, p
 
 it('enforces join approval settings defaults, persists changes, and handles host accept/decline/auto/disabled requests', () => {
     const joinEventHandlers = [];
-    vi.spyOn(OnlineGameClient.prototype, 'joinLobby').mockImplementation(() => null);
+    const joinLobby = vi.spyOn(OnlineGameClient.prototype, 'joinLobby').mockImplementation(() => null);
     vi.spyOn(OnlineGameClient.prototype, 'joinGameChannel').mockImplementation((_gameId, callbacks) => {
         if (callbacks?.onEvent) {
             joinEventHandlers.push(callbacks.onEvent);
@@ -339,27 +378,31 @@ it('enforces join approval settings defaults, persists changes, and handles host
         return null;
     });
     const broadcastGameSpy = vi.spyOn(OnlineGameClient.prototype, 'broadcastGameEvent').mockImplementation(() => {});
-    const updatePolicySpy = vi.spyOn(OnlineGameClient.prototype, 'updateGameJoinPolicy').mockImplementation(() => {});
 
     render(<App />);
 
-    // Defaults in Settings: Allow Joins ON, Auto-accept Joins OFF
     fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
-    const allowGroup = screen.getByRole('radiogroup', { name: 'Allow Joins' });
-    const autoGroup = screen.getByRole('radiogroup', { name: 'Auto-accept Joins' });
-    expect(allowGroup.querySelector('input[value="true"]')).toBeChecked();
-    expect(autoGroup.querySelector('input[value="false"]')).toBeChecked();
-    expect(autoGroup.querySelector('input[value="true"]')).not.toBeDisabled();
+    const joinSettings = () => screen.getByRole('combobox', { name: 'Joins' });
+    expect(joinSettings()).toHaveValue('confirm');
 
     // Start game as host (default policy: 'confirm')
     fireEvent.click(screen.getByRole('tab', { name: 'Play' }));
     fireEvent.click(screen.getByRole('button', { name: 'Play' }));
     expect(joinEventHandlers.length).toBeGreaterThan(0);
-    const hostOnEvent = joinEventHandlers[joinEventHandlers.length - 1];
+    addNoteToFirstEmptyCell();
+    const getHostEvent = () => joinEventHandlers[joinEventHandlers.length - 1];
+    const setJoinPolicyAndResume = (policy) => {
+        openSettingsFromGame();
+        fireEvent.change(joinSettings(), { target: { value: policy } });
+        fireEvent.click(screen.getByRole('tab', { name: 'Play' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Resume Current Game' }));
+        expect(joinLobby).toHaveBeenLastCalledWith(expect.objectContaining({ joinPolicy: policy }));
+        return getHostEvent();
+    };
 
     // 1. Confirm policy: incoming request prompts host -> Accept
     act(() => {
-        hostOnEvent('join-request', { requestId: 'req-accept', requesterId: 'guest-1' });
+        getHostEvent()('join-request', { requestId: 'req-accept', requesterId: 'guest-1' });
     });
     expect(document.getElementById('join-request-banner')).toBeVisible();
     expect(document.getElementById('join-request-title')).toHaveTextContent('Player wants to join');
@@ -375,7 +418,7 @@ it('enforces join approval settings defaults, persists changes, and handles host
     // 2. Confirm policy: incoming request -> Decline
     broadcastGameSpy.mockClear();
     act(() => {
-        hostOnEvent('join-request', { requestId: 'req-decline', requesterId: 'guest-2' });
+        getHostEvent()('join-request', { requestId: 'req-decline', requesterId: 'guest-2' });
     });
     expect(document.getElementById('join-request-banner')).toBeVisible();
     fireEvent.click(document.getElementById('decline-join-btn'));
@@ -388,14 +431,12 @@ it('enforces join approval settings defaults, persists changes, and handles host
     });
 
     // 3. Auto-accept ON: incoming request auto-approved without banner
-    fireEvent.click(document.getElementById('game-settings-btn'));
-    fireEvent.click(screen.getByRole('radiogroup', { name: 'Auto-accept Joins' }).querySelector('input[value="true"]'));
+    const autoHostEvent = setJoinPolicyAndResume('auto');
     expect(localStorage.getItem('sudoku_joins_auto_accept')).toBe('true');
-    expect(updatePolicySpy).toHaveBeenCalledWith('auto');
 
     broadcastGameSpy.mockClear();
     act(() => {
-        hostOnEvent('join-request', { requestId: 'req-auto', requesterId: 'guest-3' });
+        autoHostEvent('join-request', { requestId: 'req-auto', requesterId: 'guest-3' });
     });
     expect(document.getElementById('join-request-banner')).not.toBeInTheDocument();
     expect(broadcastGameSpy).toHaveBeenCalledWith(expect.any(String), 'join-response', {
@@ -404,15 +445,14 @@ it('enforces join approval settings defaults, persists changes, and handles host
         accepted: true,
     });
 
-    // 4. Allow Joins OFF: Auto-accept inputs disabled and requests rejected with reason 'disabled'
-    fireEvent.click(screen.getByRole('radiogroup', { name: 'Allow Joins' }).querySelector('input[value="false"]'));
+    // 4. Off rejects requests with reason 'disabled'
+    const disabledHostEvent = setJoinPolicyAndResume('disabled');
     expect(localStorage.getItem('sudoku_joins_allowed')).toBe('false');
-    expect(updatePolicySpy).toHaveBeenCalledWith('disabled');
-    expect(screen.getByRole('radiogroup', { name: 'Auto-accept Joins' }).querySelector('input[value="true"]')).toBeDisabled();
+    expect(localStorage.getItem('sudoku_joins_auto_accept')).toBe('false');
 
     broadcastGameSpy.mockClear();
     act(() => {
-        hostOnEvent('join-request', { requestId: 'req-disabled', requesterId: 'guest-4' });
+        disabledHostEvent('join-request', { requestId: 'req-disabled', requesterId: 'guest-4' });
     });
     expect(document.getElementById('join-request-banner')).not.toBeInTheDocument();
     expect(broadcastGameSpy).toHaveBeenCalledWith(expect.any(String), 'join-response', {
@@ -421,6 +461,10 @@ it('enforces join approval settings defaults, persists changes, and handles host
         accepted: false,
         reason: 'disabled',
     });
+
+    setJoinPolicyAndResume('confirm');
+    expect(localStorage.getItem('sudoku_joins_allowed')).toBe('true');
+    expect(localStorage.getItem('sudoku_joins_auto_accept')).toBe('false');
 });
 
 it('handles requester join approval, decline, and cancel flow from Watch Directory', () => {
@@ -543,6 +587,7 @@ it('handles requester join approval, decline, and cancel flow from Watch Directo
 
     expect(screen.getByRole('grid')).toBeVisible();
     expect(gameJoinCalls[gameJoinCalls.length - 1].callbacks.role).toBe('guest');
+    fireEvent.click(screen.getByRole('button', { name: 'Open Game Info' }));
     expect(document.getElementById('game-status-text')).toHaveTextContent(/Co-op/i);
 });
 
@@ -1052,6 +1097,7 @@ it('lets a 3rd player join an active co-op game without spectator downgrade and 
     fireEvent.click(screen.getByRole('button', { name: 'Join' }));
     expect(joinCalls[joinCalls.length - 1].callbacks.role).toBe('guest');
     expect(screen.getByRole('grid')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Open Game Info' }));
     expect(document.getElementById('game-status-text')).toHaveTextContent(/Co-op/i);
     expect(screen.getByText('2 Partners online')).toBeVisible();
     expect(document.getElementById('spectator-bar')).not.toBeInTheDocument();
@@ -1222,38 +1268,30 @@ it('clears selected cell highlight as soon as the final digit solves the puzzle'
     expect(document.querySelectorAll('.sudoku-cell--revealed')).toHaveLength(36);
 });
 
-it('defaults background music to Off (opt-in) on Start screen, syncs with Settings, and remembers preference across reload', () => {
+it('remembers the background music opt-in preference across reload', () => {
+    const openMusicSettings = () => {
+        fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+        return screen.getByRole('radiogroup', { name: 'Background Music' });
+    };
+
     render(<App />);
-
-    const setupMusicGroup = document.getElementById('setup-music-control').querySelector('[role="radiogroup"]');
-    expect(setupMusicGroup.querySelector('input[value="false"]')).toBeChecked();
-    expect(setupMusicGroup.querySelector('input[value="true"]')).not.toBeChecked();
-
-    // Opt in directly on the Start screen
-    fireEvent.click(setupMusicGroup.querySelector('input[value="true"]'));
+    expect(screen.queryByRole('radiogroup', { name: 'Background Music' })).not.toBeInTheDocument();
+    const settingsMusicGroup = openMusicSettings();
+    expect(settingsMusicGroup.querySelector('input[value="false"]')).toBeChecked();
+    fireEvent.click(settingsMusicGroup.querySelector('input[value="true"]'));
     expect(localStorage.getItem('sudoku_music_enabled')).toBe('true');
-    expect(setupMusicGroup.querySelector('input[value="true"]')).toBeChecked();
-
-    // Settings reflects the opted-in music state
-    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
-    const settingsMusicGroup = screen.getByRole('radiogroup', { name: 'Background Music' });
-    expect(settingsMusicGroup.querySelector('input[value="true"]')).toBeChecked();
     expect(screen.getByRole('slider', { name: 'Volume: Background Music' })).not.toBeDisabled();
 
-    // Reload / remount remembers the opted-in preference on both Start and Settings
     cleanup();
     render(<App />);
-    const reloadedSetupGroup = document.getElementById('setup-music-control').querySelector('[role="radiogroup"]');
-    expect(reloadedSetupGroup.querySelector('input[value="true"]')).toBeChecked();
-
-    // Turning it off in Settings persists Off across reload
-    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
-    fireEvent.click(screen.getByRole('radiogroup', { name: 'Background Music' }).querySelector('input[value="false"]'));
+    const reloadedMusicGroup = openMusicSettings();
+    expect(reloadedMusicGroup.querySelector('input[value="true"]')).toBeChecked();
+    fireEvent.click(reloadedMusicGroup.querySelector('input[value="false"]'));
     expect(localStorage.getItem('sudoku_music_enabled')).toBe('false');
 
     cleanup();
     render(<App />);
-    expect(document.getElementById('setup-music-control').querySelector('input[value="false"]')).toBeChecked();
+    expect(openMusicSettings().querySelector('input[value="false"]')).toBeChecked();
 });
 
 it('runs safely when storage throws SecurityError and skips pushState inside embedded iframes', () => {

@@ -128,10 +128,12 @@ export function PlayerControls({
                     title="Undo last move (Ctrl/Cmd+Z)"
                     onClick={onUndo}
                 >
-                    <svg className="tool-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M9 14L4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
-                    </svg>
-                    <span>{messages.undo}</span>
+                    <span className="tool-btn__content">
+                        <svg className="tool-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M9 14L4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+                        </svg>
+                        <span>{messages.undo}</span>
+                    </span>
                 </button>
 
                 <button
@@ -142,10 +144,12 @@ export function PlayerControls({
                     title="Erase cell (Backspace / Delete / 0)"
                     onClick={onErase}
                 >
-                    <svg className="tool-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M20 20H7L3 16a1 1 0 0 1 0-1.41l9.59-9.59a2 2 0 0 1 2.82 0l5.18 5.18a2 2 0 0 1 0 2.82L13.41 20" />
-                    </svg>
-                    <span>{messages.erase}</span>
+                    <span className="tool-btn__content">
+                        <svg className="tool-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M20 20H7L3 16a1 1 0 0 1 0-1.41l9.59-9.59a2 2 0 0 1 2.82 0l5.18 5.18a2 2 0 0 1 0 2.82L13.41 20" />
+                        </svg>
+                        <span>{messages.erase}</span>
+                    </span>
                 </button>
 
                 <button
@@ -157,11 +161,13 @@ export function PlayerControls({
                     title="Toggle pencil notes (N)"
                     onClick={onToggleNotes}
                 >
-                    <svg className="tool-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                    </svg>
-                    <span>{notesMode ? messages.notesOn : messages.notes}</span>
-                    <kbd className="tool-btn__kbd" aria-hidden="true">N</kbd>
+                    <span className="tool-btn__content">
+                        <svg className="tool-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                        </svg>
+                        <span>{notesMode ? messages.notesOn : messages.notes}</span>
+                        <kbd className="tool-btn__kbd" aria-hidden="true">N</kbd>
+                    </span>
                 </button>
 
                 <button
@@ -172,10 +178,12 @@ export function PlayerControls({
                     title={isHintArmed ? 'Tap again to fill the highlighted cell' : 'Highlight a logically solvable cell'}
                     onClick={onLocalHint}
                 >
-                    <svg className="tool-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M9 18h6" /><path d="M10 22h4" /><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z" />
-                    </svg>
-                    <span>{messages.hint}</span>
+                    <span className="tool-btn__content">
+                        <svg className="tool-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M9 18h6" /><path d="M10 22h4" /><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z" />
+                        </svg>
+                        <span>{messages.hint}</span>
+                    </span>
                 </button>
             </div>
 

@@ -94,11 +94,16 @@ test('Konami code A/B/C/D prompt resets on wrong button and activates 1981 Retro
 
     await checkAccessibility(page, testInfo, 'retro-dark-390x844');
 
-    // Navigating away to Settings still keeps Back to <year> accessible
-    await page.locator('#game-settings-btn').click();
+    // Resume the current puzzle after visiting Settings from Setup.
+    await page.locator('.sudoku-cell:not(.sudoku-cell--given)').first().click();
+    await page.keyboard.press('1');
+    await page.locator('#back-to-setup-btn').click();
+    await page.locator('#nav-settings').click();
     await expect(page.locator('#retro-global-exit-btn')).toBeVisible();
     await expect(page.locator('#retro-global-exit-btn')).toHaveText(`Back to ${currentYear}`);
     await page.getByRole('tab', { name: 'Play', exact: true }).click();
+
+    await page.locator('#resume-game-btn').click();
 
     // Keyboard activation to return to current year
     await exitBtn.focus();
@@ -121,7 +126,6 @@ for (const theme of ['dark', 'light'] as const) {
             await checkAccessibility(page, testInfo, `retro-${theme}-${width}x${height}`);
             await page.screenshot({
                 path: testInfo.outputPath(`retro-${theme}-${width}x${height}.png`),
-                mask: [page.locator('#sudoku-timer')],
                 fullPage: true,
             });
         });

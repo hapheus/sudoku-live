@@ -1,4 +1,6 @@
 import { useCallback } from 'react';
+import { hasRematchPartner } from '../domain/coop-rematch.js';
+import { rememberCoopPlayers } from '../domain/game-contributions.js';
 import {
     getVariantSpec,
     inferVariantFromBoardLength,
@@ -9,7 +11,14 @@ import {
     serializeGameState,
 } from '../domain/sudoku-engine.js';
 import { selectBoardBackground } from '../services/board-backgrounds.js';
-import { saveSoloGameSnapshot } from '../services/online-state-storage.js';
+import {
+    clearOnlineGameSnapshot,
+    clearParticipantSession,
+    clearSoloGameSnapshot,
+    loadSoloGameSnapshot,
+    saveOnlineGameSnapshot,
+    saveSoloGameSnapshot,
+} from '../services/online-state-storage.js';
 import { hasUnsavedProgress, normalizePathname, updateBrowserUrl } from '../utils/app-routing.js';
 import { setStorageItem } from '../utils/storage.js';
 import { clearPendingJoinState, respondToQueuedJoinRequests } from '../services/join-transitions.js';
@@ -240,10 +249,54 @@ export function useNavigationAndSetup({
         stateRef,
     ]);
 
+    const detachCoopToSolo = useCallback((cur, roomId = null) => {
+        onlineClientRef.current?.leaveGameChannel();
+        onlineClientRef.current?.leaveLobby();
+        setMode('solo');
+        stateRef.current.mode = 'solo';
+        setMyRole('host');
+        stateRef.current.myRole = 'host';
+        setOnlineGameId(roomId);
+        stateRef.current.onlineGameId = roomId;
+        setCurrentMembers([]);
+        stateRef.current.currentMembers = [];
+        setHostCursorIndex(null);
+        setGuestCursors(new Map());
+        setRemoteActiveDigit(null);
+        setRematchRequestedBy(null);
+        stateRef.current.rematchRequestedBy = null;
+        setHintsMap(new Map());
+        updateBrowserUrl('/');
+        if (cur.gameState && cur.gameState.status !== 'solved') {
+            saveSoloGameSnapshot(cur.gameState, roomId, cur.boardBackground?.id || null);
+        }
+    }, [
+        onlineClientRef,
+        setCurrentMembers,
+        setGuestCursors,
+        setHintsMap,
+        setHostCursorIndex,
+        setMode,
+        setMyRole,
+        setOnlineGameId,
+        setRematchRequestedBy,
+        setRemoteActiveDigit,
+        stateRef,
+    ]);
+
+    const closeCompletedCoop = useCallback(() => {
+        const cur = stateRef.current;
+        if (cur.isSpectating || !cur.onlineGameId || cur.gameState.status !== 'solved') return;
+        saveOnlineGameSnapshot(cur.onlineGameId, cur.gameState, null, cur.boardBackground?.id);
+        clearParticipantSession(cur.onlineGameId);
+        detachCoopToSolo(cur);
+    }, [detachCoopToSolo, stateRef]);
+
     const handleCancelRematch = useCallback(() => {
         const cur = stateRef.current;
         if (!cur.onlineGameId) return;
         setRematchRequestedBy(null);
+        cur.rematchRequestedBy = null;
         persistSnapshotIfNeeded(cur.gameState, null);
         onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'new-puzzle-cancel', { role: cur.myRole });
         showFeedback('New puzzle request cancelled.');
@@ -251,9 +304,14 @@ export function useNavigationAndSetup({
 
     const startNewPuzzleConfirmed = useCallback(() => {
         const cur = stateRef.current;
-        const partnerOnline = hasPartnerOnline(cur);
+        const partnerOnline = hasRematchPartner(cur.myRole, cur.currentMembers);
         const isCoopSession = cur.mode === 'online' || partnerOnline;
 
+        if (!partnerOnline && cur.gameState.status === 'solved' && (isCoopSession || cur.gameState.wasMultiplayer)) {
+            closeCompletedCoop();
+            startNewSoloGame();
+            return;
+        }
         if (!isCoopSession) {
             startNewSoloGame();
             return;
@@ -264,7 +322,9 @@ export function useNavigationAndSetup({
                 cur.gameState.variant || inferVariantFromBoardLength(cur.gameState.board?.length),
             );
             resetTicTacToe();
-            const nextState = createSudokuGame({ difficulty: cur.difficulty, variant: targetVariant });
+            const nextState = rememberCoopPlayers(
+                createSudokuGame({ difficulty: cur.difficulty, variant: targetVariant }), cur.currentMembers,
+            );
             const nextBg = selectBoardBackground({ previousId: cur.boardBackground?.id });
             setGameState(nextState);
             setBoardBackground(nextBg);
@@ -277,6 +337,7 @@ export function useNavigationAndSetup({
             setRemoteActiveDigit(null);
             setNotesMode(false);
             setRematchRequestedBy(null);
+            cur.rematchRequestedBy = null;
             setHintsMap(new Map());
             persistSnapshotIfNeeded(nextState, null, nextBg?.id || null);
             onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'new-puzzle-accept', {
@@ -287,12 +348,14 @@ export function useNavigationAndSetup({
             announce('New co-op puzzle started.');
         } else {
             setRematchRequestedBy(cur.myRole);
+            cur.rematchRequestedBy = cur.myRole;
             persistSnapshotIfNeeded(cur.gameState, cur.myRole);
             onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'new-puzzle-request', { role: cur.myRole });
             showFeedback('New puzzle requested. Waiting for your partner.');
         }
     }, [
         announce,
+        closeCompletedCoop,
         onlineClientRef,
         persistSnapshotIfNeeded,
         setActiveDigit,
@@ -314,7 +377,7 @@ export function useNavigationAndSetup({
 
     const handleNewPuzzleAction = useCallback(() => {
         const cur = stateRef.current;
-        const partnerOnline = hasPartnerOnline(cur);
+        const partnerOnline = hasRematchPartner(cur.myRole, cur.currentMembers);
 
         if ((cur.mode === 'online' || partnerOnline) && partnerOnline) {
             startNewPuzzleConfirmed();
@@ -506,40 +569,6 @@ export function useNavigationAndSetup({
         stateRef,
     ]);
 
-    const detachCoopToSolo = useCallback((cur, roomId = null) => {
-        onlineClientRef.current?.leaveGameChannel();
-        onlineClientRef.current?.leaveLobby();
-        setMode('solo');
-        stateRef.current.mode = 'solo';
-        setMyRole('host');
-        stateRef.current.myRole = 'host';
-        setOnlineGameId(roomId);
-        stateRef.current.onlineGameId = roomId;
-        setCurrentMembers([]);
-        stateRef.current.currentMembers = [];
-        setHostCursorIndex(null);
-        setGuestCursors(new Map());
-        setRemoteActiveDigit(null);
-        setRematchRequestedBy(null);
-        setHintsMap(new Map());
-        updateBrowserUrl('/');
-        if (cur.gameState && cur.gameState.status !== 'solved') {
-            saveSoloGameSnapshot(cur.gameState, roomId, cur.boardBackground?.id || null);
-        }
-    }, [
-        onlineClientRef,
-        setCurrentMembers,
-        setGuestCursors,
-        setHintsMap,
-        setHostCursorIndex,
-        setMode,
-        setMyRole,
-        setOnlineGameId,
-        setRematchRequestedBy,
-        setRemoteActiveDigit,
-        stateRef,
-    ]);
-
     const handleContinueSolo = useCallback(() => {
         const cur = stateRef.current;
         if (cur.isSpectating) return;
@@ -562,6 +591,10 @@ export function useNavigationAndSetup({
             accepted: false,
             reason: 'declined',
         });
+        if (cur.gameState.status === 'solved' && (cur.mode === 'online' || hasPartner || cur.gameState.wasMultiplayer)) {
+            closeCompletedCoop();
+            return;
+        }
         if (cur.myRole === 'guest' || (!hasPartner && cur.mode === 'online')) {
             detachCoopToSolo(cur);
             return;
@@ -569,7 +602,18 @@ export function useNavigationAndSetup({
         if (!hasPartner && cur.myRole === 'host') {
             onlineClientRef.current?.leaveLobby();
         }
-    }, [detachCoopToSolo, onlineClientRef, setIncomingJoinRequests, setIsPlayingGame, stateRef]);
+    }, [closeCompletedCoop, detachCoopToSolo, onlineClientRef, setIncomingJoinRequests, setIsPlayingGame, stateRef]);
+
+    const handleAbortGame = useCallback(() => {
+        const { isPlayingGame, isSpectating, mode, myRole, onlineGameId } = stateRef.current;
+        if (!isPlayingGame || isSpectating) return;
+        const isSavedHostGame = myRole === 'host' && onlineGameId && loadSoloGameSnapshot()?.roomId === onlineGameId;
+        if (mode === 'solo' || isSavedHostGame) clearSoloGameSnapshot();
+        clearParticipantSession(onlineGameId);
+        clearOnlineGameSnapshot(onlineGameId);
+        resetTicTacToe();
+        executeSwitchMode('solo');
+    }, [executeSwitchMode, resetTicTacToe, stateRef]);
 
     return {
         switchMode,
@@ -585,5 +629,7 @@ export function useNavigationAndSetup({
         handleResumeFromSetup,
         handleContinueSolo,
         handleBackToSetup,
+        handleAbortGame,
+        closeCompletedCoop,
     };
 }

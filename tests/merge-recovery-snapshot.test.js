@@ -32,6 +32,32 @@ describe('merging bounded recovery snapshots', () => {
         expect(merged.gameState.notes[0]).toEqual([]);
         expect(mergeRecoverySnapshot(null, { gameState: right }, local, false)).toBeNull();
     });
+    it('keeps winning cell authors and merges hint counters without counting repeated snapshots twice', () => {
+        const left = raw();
+        const right = raw();
+        left.board[0] = 1;
+        right.board[0] = 2;
+        left.cellAuthors = Array(36).fill(null);
+        right.cellAuthors = Array(36).fill(null);
+        left.cellAuthors[0] = 'host';
+        right.cellAuthors[0] = 'guest';
+        left.playerContributions = [{ id: 'host', name: 'Host', hintsUsed: 3 }];
+        right.playerContributions = [
+            { id: 'host', name: 'Host', hintsUsed: 2 },
+            { id: 'guest', name: 'Guest', hintsUsed: 1 },
+        ];
+        left.wasMultiplayer = true;
+        const local = { ...revisions(), cells: [[0, { value: [2, 'host'] }]] };
+        const remote = { ...revisions(), cells: [[0, { value: [3, 'guest'] }]] };
+        const merged = mergeRecoverySnapshot(hydrateGameState(left), { gameState: right, stateRevisions: remote }, local, true);
+        expect(merged.gameState.board[0]).toBe(2);
+        expect(merged.gameState.cellAuthors[0]).toBe('guest');
+        expect(merged.gameState.wasMultiplayer).toBe(true);
+        expect(merged.gameState.playerContributions).toEqual([
+            { id: 'guest', name: 'Guest', hintsUsed: 1 },
+            { id: 'host', name: 'Host', hintsUsed: 3 },
+        ]);
+    });
     it.each([0, -1, Infinity, 1.5])('rejects invalid state clocks (%s)', stateClock => {
         expect(validateIncomingGameMessage('cell-update', { index: 0, value: 1, stateClock })).toBe(false);
     });

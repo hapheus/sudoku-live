@@ -34,13 +34,17 @@ export function WatcherInteractions({
     }
 
     return (
-        <section id="watcher-interactions" className="watcher-interactions" aria-label="Spectator Interactions">
+        <section
+            id="watcher-interactions"
+            className={`watcher-interactions${maxDigit === 6 ? ' watcher-interactions--6x6' : ''}`}
+            aria-label="Spectator Interactions"
+        >
             <p id="watcher-hint-status" className="watcher-interactions__hint">
                 {hintStatus}
             </p>
 
             <div className="spectator-pad" role="group" aria-label="Suggest a digit hint">
-                <div className={`spectator-pad__digits ${maxDigit === 6 ? 'spectator-pad__digits--6x6' : ''}`}>
+                <div className="spectator-pad__digits">
                     {digits.map((d) => (
                         <button
                             key={d}

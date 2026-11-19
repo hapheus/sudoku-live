@@ -1,6 +1,31 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { GameSession } from '../src/game-session.ts';
+
+test('snapshots retain bot and guest cell authors and cumulative hint use', () => {
+  const session = new GameSession('easy', '2x3');
+  session.setHost('bot-id', 'BotPlayer');
+  session.rememberPlayers([
+    { id: 'bot-id', name: 'BotPlayer', role: 'host' },
+    { id: 'guest-id', name: 'GuestPlayer', role: 'guest' },
+  ]);
+  assert.equal(session.useHint(), 1);
+  const move = session.advance();
+  assert.ok(move);
+  assert.equal(move.authorId, 'bot-id');
+  assert.equal(move.hintsUsed, 1);
+
+  const snapshot = session.snapshot();
+  const guestCell = snapshot.board.indexOf(0);
+  const hint = { senderId: 'guest-id', playerName: 'GuestPlayer', hintsUsed: 2 };
+  session.recordGuestHint(hint);
+  session.recordGuestHint(hint);
+  assert.ok(session.applyGuestPatch({ ...hint, index: guestCell, value: snapshot.solution[guestCell], owner: 'guest' }));
+  const updated = session.snapshot();
+  assert.equal(updated.cellAuthors[move.index], 'bot-id');
+  assert.equal(updated.cellAuthors[guestCell], 'guest-id');
+  assert.deepEqual(updated.playerContributions.map(({ id, hintsUsed }) => [id, hintsUsed]), [['bot-id', 1], ['guest-id', 2]]);
+});
 import { findConflicts, findLogicalHint } from '../../../src/domain/sudoku-engine.js';
 import { countSolutions, isValidSolvedBoard } from '../../../src/domain/sudoku-generator.js';
 

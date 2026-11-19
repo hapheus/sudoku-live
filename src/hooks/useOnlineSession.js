@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { hasRematchPartner } from '../domain/coop-rematch.js';
+import { rememberCoopPlayers } from '../domain/game-contributions.js';
 import {
     getVariantSpec,
     inferVariantFromBoardLength,
@@ -316,11 +318,29 @@ export function useOnlineSession({
         };
     }, [stateRef, ticTacToe]);
 
+    const recordRoomParticipants = useCallback((members) => {
+        const cur = stateRef.current;
+        const next = rememberCoopPlayers(cur.gameState, members);
+        if (next === cur.gameState) return;
+        stateRef.current.gameState = next;
+        setGameState(next);
+        persistSnapshotIfNeeded(next);
+    }, [persistSnapshotIfNeeded, setGameState, stateRef]);
+
+    const clearRematchWithoutPartner = useCallback(() => {
+        const cur = stateRef.current;
+        if (!cur.rematchRequestedBy || cur.isSpectating || hasRematchPartner(cur.myRole, cur.currentMembers)) return;
+        cur.rematchRequestedBy = null;
+        setRematchRequestedBy(null);
+        saveOnlineGameSnapshot(cur.onlineGameId, cur.gameState, null, cur.boardBackground?.id);
+    }, [setRematchRequestedBy, stateRef]);
+
     const handleGamePresenceChange = useCallback((members) => {
         const resolved = onlineClientRef.current?.getGameMembers() || members || [];
         setCurrentMembers(resolved);
         stateRef.current.currentMembers = resolved;
         ticTacToe?.onMembersChange(resolved);
+        clearRematchWithoutPartner();
 
         const cur = stateRef.current;
         if (cur.isSpectating) {
@@ -330,10 +350,11 @@ export function useOnlineSession({
             }
         }
         if (cur.myRole === 'host' && resolved.length > 1) {
+            recordRoomParticipants(resolved);
             onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'sync', buildSyncPayload());
             syncLobbyProgress();
         }
-    }, [buildSyncPayload, onlineClientRef, setCurrentMembers, setHostJoinPolicy, stateRef, syncLobbyProgress, ticTacToe]);
+    }, [buildSyncPayload, clearRematchWithoutPartner, onlineClientRef, recordRoomParticipants, setCurrentMembers, setHostJoinPolicy, stateRef, syncLobbyProgress, ticTacToe]);
 
     const handleGameMemberJoin = useCallback((member) => {
         const prevMembers = stateRef.current.currentMembers;
@@ -354,6 +375,7 @@ export function useOnlineSession({
             showFeedback('A partner joined your game!');
         }
         if (cur.myRole === 'host') {
+            recordRoomParticipants(nextMembers);
             onlineClientRef.current?.broadcastGameEvent(cur.onlineGameId, 'sync', buildSyncPayload());
             syncLobbyProgress();
         }
@@ -361,6 +383,7 @@ export function useOnlineSession({
         joinRequests,
         buildSyncPayload,
         onlineClientRef,
+        recordRoomParticipants,
         setCurrentMembers,
         setHostJoinPolicy,
         showFeedback,
@@ -381,6 +404,8 @@ export function useOnlineSession({
             setCurrentMembers(remaining);
             ticTacToe?.onMembersChange(remaining);
         }
+
+        clearRematchWithoutPartner();
 
         if (member?.role === 'host') {
             ticTacToe?.onHostLeave();
@@ -414,6 +439,7 @@ export function useOnlineSession({
             syncLobbyProgress();
         }
     }, [
+        clearRematchWithoutPartner,
         joinRequests,
         onlineClientRef,
         setCurrentMembers,

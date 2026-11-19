@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import enMessages from '../locales/en.json';
 
 export function BottomNav({
@@ -7,6 +7,26 @@ export function BottomNav({
     isWatchActive = false,
     messages = enMessages,
 }) {
+    const tabList = useRef(null);
+    const [compact, setCompact] = useState(false);
+
+    useLayoutEffect(() => {
+        if (!window.ResizeObserver) return undefined;
+        const tabs = [...tabList.current.querySelectorAll('.bottom-nav__item')];
+        const labels = tabs.map(tab => tab.querySelector('.bottom-nav__label'));
+        const update = () => {
+            setCompact(tabs.some((tab, index) => {
+                const { paddingLeft, paddingRight } = window.getComputedStyle(tab);
+                const availableWidth = tab.getBoundingClientRect().width - parseFloat(paddingLeft) - parseFloat(paddingRight);
+                return labels[index].getBoundingClientRect().width > availableWidth;
+            }));
+        };
+        const observer = new window.ResizeObserver(update);
+        [...tabs, ...labels].forEach(element => observer.observe(element));
+        update();
+        return () => observer.disconnect();
+    }, []);
+
     const items = [
         {
             id: 'play',
@@ -59,7 +79,7 @@ export function BottomNav({
 
     return (
         <nav className="bottom-nav" aria-label="Primary Navigation">
-            <div className="bottom-nav__list" role="tablist">
+            <div ref={tabList} className={`bottom-nav__list${compact ? ' bottom-nav__list--compact' : ''}`} role="tablist">
                 {items.map((item, idx) => {
                     const isActive = activeTab === item.id;
                     return (
@@ -68,6 +88,7 @@ export function BottomNav({
                             id={`nav-${item.id}`}
                             type="button"
                             role="tab"
+                            aria-label={item.label}
                             aria-selected={isActive}
                             tabIndex={isActive || (activeTab == null && idx === 0) ? 0 : -1}
                             className={`bottom-nav__item ${isActive ? 'bottom-nav__item--active' : ''}`}
@@ -78,7 +99,7 @@ export function BottomNav({
                                 {item.icon}
                                 {item.badge && <span className="bottom-nav__dot" aria-hidden="true" />}
                             </span>
-                            <span className="bottom-nav__label">{item.label}</span>
+                            <span className="bottom-nav__label" aria-hidden="true">{item.label}</span>
                         </button>
                     );
                 })}

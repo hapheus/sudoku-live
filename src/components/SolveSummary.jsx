@@ -1,5 +1,7 @@
 import React from 'react';
 import enMessages from '../locales/en.json';
+import { formatPlayerTag } from '../services/player-name.js';
+import { PlayerTag } from './PlayerTag.jsx';
 
 function formatDuration(seconds) {
     const mins = Math.floor(seconds / 60);
@@ -11,6 +13,7 @@ export function SolveSummary({
     difficulty,
     elapsedSeconds,
     mode,
+    playerResults = [],
     isSpectating,
     restartLabel,
     restartDisabled,
@@ -40,6 +43,27 @@ export function SolveSummary({
                     {`${diffLabel} ${modeLabel} ${messages.finishedIn} ${formatDuration(elapsedSeconds || 0)}`}
                 </p>
             </div>
+            {mode === 'online' && playerResults.length > 0 && (
+                <table className="solve-summary__results">
+                    <caption>{messages.solveContributions}</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">{messages.solvePlayer}</th>
+                            <th scope="col">{messages.solveCells}</th>
+                            <th scope="col">{messages.solveHints}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {playerResults.map(({ id, name, cellsSolved, hintsUsed }) => (
+                            <tr key={id}>
+                                <th scope="row"><PlayerTag tag={formatPlayerTag(name || messages.solvePlayer, id)} /></th>
+                                <td>{cellsSolved}</td>
+                                <td>{hintsUsed}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            )}
             {!isSpectating && (
                 <div className="solve-summary__actions">
                     <button

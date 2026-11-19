@@ -10,36 +10,29 @@ for (const colorScheme of ['dark', 'light'] as const) {
             await page.routeWebSocket(/.*/, socket => socket.close());
             await page.goto('/');
             await page.getByRole('tab', { name: 'Settings', exact: true }).click();
-            const system = page.getByRole('radio', { name: 'System', exact: true });
-            await expect(system).toBeChecked();
+            const appearance = page.getByRole('combobox', { name: 'Appearance' });
+            await expect(appearance).toHaveValue('system');
             await expect(page.locator('html')).toHaveAttribute('data-theme', colorScheme);
             await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', colorScheme === 'dark' ? '#13161b' : '#f6f2ea');
-            const group = page.getByRole('radiogroup', { name: 'Appearance' });
-            for (const label of await group.locator('label').all()) {
-                const box = (await label.boundingBox())!;
-                expect(box.width).toBeGreaterThanOrEqual(44);
-                expect(box.height).toBeGreaterThanOrEqual(44);
-            }
+            const box = (await appearance.boundingBox())!;
+            expect(box.width).toBeGreaterThanOrEqual(44);
+            expect(box.height).toBeGreaterThanOrEqual(44);
             expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
             expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze()).violations).toEqual([]);
-            await expect(group).toHaveScreenshot(`issue48-system-${colorScheme}-${width}x${height}.png`);
+            await expect(appearance).toHaveScreenshot(`issue48-system-${colorScheme}-${width}x${height}.png`);
             const other = colorScheme === 'dark' ? 'light' : 'dark';
             await page.emulateMedia({ colorScheme: other });
             await expect(page.locator('html')).toHaveAttribute('data-theme', other);
             expect(await page.evaluate(() => document.documentElement.style.colorScheme)).toBe(other);
-            // Native radio navigation: System -> Dark -> Light.
-            await system.focus();
-            await page.keyboard.press('ArrowRight');
-            await expect(page.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked();
+            await appearance.selectOption('dark');
             await page.emulateMedia({ colorScheme: 'light' });
             await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-            await page.keyboard.press('ArrowRight');
-            await expect(page.getByRole('radio', { name: 'Light', exact: true })).toBeChecked();
+            await appearance.selectOption('light');
             await page.emulateMedia({ colorScheme: 'dark' });
             await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
             await page.reload();
             await page.getByRole('tab', { name: 'Settings', exact: true }).click();
-            await expect(page.getByRole('radio', { name: 'Light', exact: true })).toBeChecked();
+            await expect(appearance).toHaveValue('light');
         });
     }
 }

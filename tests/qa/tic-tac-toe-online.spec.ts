@@ -26,24 +26,48 @@ for (const autoAccept of [true, false]) {
             const sudokuBoardBox = await host.locator('.sudoku-board').boundingBox();
             const originalBoard = await host.locator('[role="gridcell"]').allTextContents();
             await guest.goto(`${baseURL}/games/${roomId}?watch=1`);
+            await guest.locator('#game-info-btn').click();
             await expect(guest.locator('#connection-status')).toHaveText('Live');
-            await guest.locator('#join-from-watch-btn').click();
+            await guest.keyboard.press('Escape');
+            const back = guest.locator('#exit-watch-btn');
+            const join = guest.locator('#join-from-watch-btn');
+            await expect(back).toHaveAccessibleName('Back to Lobby');
+            const cdp = await guestContext.newCDPSession(guest);
+            await guest.setViewportSize({ width: 480, height: 320 });
+            await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { left: 62 } });
+            await expect(back).toHaveAccessibleName('Back');
+            const actions = guest.locator('.spectator-bar__actions');
+            expect(await actions.evaluate(element => {
+                const [join, back] = Array.from(element.querySelectorAll('button'), button => button.getBoundingClientRect());
+                return join.top === back.top && join.right <= back.left &&
+                    back.right <= element.getBoundingClientRect().right;
+            })).toBe(true);
+            await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { left: 0 } });
+            await guest.setViewportSize({ width: 1280, height: 720 });
+            await expect(back).toHaveAccessibleName('Back to Lobby');
+            await join.click();
             if (!autoAccept) {
                 const admission = host.locator('#join-request-banner');
                 await expect(admission).toBeVisible();
                 expect((await admission.boundingBox())!.x).toBeGreaterThanOrEqual(await host.evaluate(() => innerWidth / 2));
                 await host.getByRole('button', { name: 'Allow', exact: true }).click();
             }
+            await host.locator('#game-info-btn').click();
             await expect(host.locator('#opponent-status')).toContainText('online', { ignoreCase: true });
             if (!autoAccept) {
+                await guest.locator('#game-info-btn').click();
                 await guestContext.setOffline(true);
                 await expect(guest.locator('#connection-status')).not.toHaveText('Live');
                 await guestContext.setOffline(false);
                 await expect(guest.locator('#connection-status')).toHaveText('Live');
                 await expect(host.locator('#opponent-status')).toContainText('online', { ignoreCase: true });
+                await guest.keyboard.press('Escape');
             }
+            await host.keyboard.press('Escape');
             await spectator.goto(`${baseURL}/games/${roomId}?watch=1`);
+            await spectator.locator('#game-info-btn').click();
             await expect(spectator.locator('#connection-status')).toHaveText('Live');
+            await spectator.keyboard.press('Escape');
             const shift = async (page, index, button) => {
                 await page.locator(`[role="gridcell"][data-index="${index}"]`).click();
                 await page.locator(button).click();
@@ -73,6 +97,7 @@ for (const autoAccept of [true, false]) {
             await expect(spectator.locator('[role="gridcell"]')).toHaveCount(81);
             await expect.poll(() => host.locator('[role="gridcell"]').allTextContents()).toEqual(originalBoard);
             await hostContext.close();
+            await guest.locator('#game-info-btn').click();
             await guest.locator('#continue-solo-btn').click();
             await expect(guest.locator('.tic-tac-toe')).toHaveCount(0);
             await shift(guest, 0, '#shift-row-down-btn');

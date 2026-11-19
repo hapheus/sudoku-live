@@ -198,11 +198,17 @@ for (const variant of ['2x3', '3x3']) {
             await play(host);
             const before = await cells(host);
             await guest.goto(`${baseURL}/games/${room}?watch=1`);
+            await guest.locator('#game-info-btn').click();
             await expect(guest.locator('#connection-status')).toHaveText('Live');
+            await guest.keyboard.press('Escape');
             await guest.locator('#join-from-watch-btn').click();
+            await host.locator('#game-info-btn').click();
             await expect(host.locator('#opponent-status')).toContainText('online', { ignoreCase: true });
+            await host.keyboard.press('Escape');
             await spectator.goto(`${baseURL}/games/${room}?watch=1`);
+            await spectator.locator('#game-info-btn').click();
             await expect(spectator.locator('#connection-status')).toHaveText('Live');
+            await spectator.keyboard.press('Escape');
             await expect.poll(() => cells(spectator)).toEqual(before);
             await expect.poll(() => cells(guest)).toEqual(before);
             await host.clock.pauseAt(minuteBefore(0));

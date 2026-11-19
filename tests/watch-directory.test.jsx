@@ -98,6 +98,15 @@ describe('WatchDirectory React component', () => {
         expect(closedBtns[0]).toBeDisabled();
         expect(closedBtns[1]).toBeDisabled();
 
+        const joins = screen.getByRole('combobox', { name: 'Joins' });
+        fireEvent.change(joins, { target: { value: 'closed' } });
+        expect(screen.getByText(/Watching only/)).toBeInTheDocument();
+        expect(screen.queryByText(/Co-op live|Approval needed/)).not.toBeInTheDocument();
+
+        fireEvent.change(joins, { target: { value: 'open' } });
+        expect(screen.getByText(/Approval needed/)).toBeInTheDocument();
+        expect(screen.queryByText(/Watching only|Co-op live/)).not.toBeInTheDocument();
+
         rerender(
             <WatchDirectory
                 rooms={[
@@ -162,29 +171,34 @@ describe('WatchDirectory React component', () => {
         expect(screen.getByText('3×3 • Medium • Open to join • 30/81 • 02:15')).toBeInTheDocument();
         expect(screen.getByText('2×3 • Hard • Co-op live • 18/36 • 01:05')).toBeInTheDocument();
 
-        // Filter by Co-op
-        fireEvent.click(screen.getByRole('button', { name: 'Co-op' }));
+        const joins = screen.getByRole('combobox', { name: 'Joins' });
+        const sizes = screen.getByRole('combobox', { name: 'Sizes' });
+        fireEvent.change(joins, { target: { value: 'coop' } });
         expect(hasTitle('SwiftFox#abcd')).toBe(false);
         expect(hasTitle('CalmOwl#ef01')).toBe(true);
 
         // Filter back to All, then filter by 3×3
-        fireEvent.click(screen.getByRole('button', { name: 'All' }));
-        fireEvent.click(screen.getByRole('button', { name: '3×3' }));
+        fireEvent.change(joins, { target: { value: 'all' } });
+        fireEvent.change(sizes, { target: { value: '3x3' } });
         expect(hasTitle('SwiftFox#abcd')).toBe(true);
         expect(hasTitle('CalmOwl#ef01')).toBe(false);
 
         // Search by name+hex tag
         const searchInput = screen.getByRole('searchbox', { name: 'Search live games' });
-        fireEvent.click(screen.getByRole('button', { name: 'All sizes' }));
+        fireEvent.change(sizes, { target: { value: '2x3' } });
         fireEvent.change(searchInput, { target: { value: 'CalmOwl#ef01' } });
         expect(hasTitle('CalmOwl#ef01')).toBe(true);
         expect(hasTitle('SwiftFox#abcd')).toBe(false);
 
-        // Search by name with no match, then clear filters
+        // Clear both dropdowns and the search after a combination yields no matches.
+        fireEvent.change(joins, { target: { value: 'coop' } });
         fireEvent.change(searchInput, { target: { value: 'NoSuchPlayer' } });
         expect(screen.getByText('No matching live games.')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+        expect(joins).toHaveValue('all');
+        expect(sizes).toHaveValue('all');
+        expect(searchInput).toHaveValue('');
         expect(hasTitle('SwiftFox#abcd')).toBe(true);
         expect(hasTitle('CalmOwl#ef01')).toBe(true);
     });

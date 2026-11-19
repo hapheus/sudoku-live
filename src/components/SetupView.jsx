@@ -1,6 +1,5 @@
 import React from 'react';
 import { APP_STORE_COMING_SOON, APP_STORE_URL } from '../utils/app-routing.js';
-import { IconMusic, IconVolume2, IconVolumeX } from './AppIcons.jsx';
 import { DifficultySelector } from './DifficultySelector.jsx';
 import { VariantSelector } from './VariantSelector.jsx';
 
@@ -9,12 +8,11 @@ const APPLE_LOGO_PATH = 'M16.365 1.43c0 1.14-.493 2.27-1.177 3.08-.744.9-1.99 1.
 export function SetupView({
     variant,
     difficulty,
-    musicEnabled,
     canResumeGame,
     isNativeApp,
     onVariantChange,
     onDifficultyChange,
-    onMusicEnabledChange,
+    onOpenSettings,
     onPlay,
     onResume,
     onOpenLegalPage,
@@ -25,7 +23,6 @@ export function SetupView({
             <div className="split-region split-region--primary">
                 <header className="play-setup__header">
                     <h1 className="play-setup__title">{messages.gameTitle}</h1>
-                    <p className="play-setup__subtitle">{messages.setupSubtitle}</p>
                 </header>
             </div>
             <div className="split-region split-region--secondary">
@@ -40,42 +37,6 @@ export function SetupView({
                         onChange={onDifficultyChange}
                         messages={messages}
                     />
-                    <div id="setup-music-control" className="setup-music-row">
-                        <div className="setup-music-row__label-wrap">
-                            <IconMusic className={`setup-music-row__icon ${musicEnabled ? 'setup-music-row__icon--active' : ''}`} />
-                            <span id="setup-music-label" className="setup-music-row__label">
-                                {messages.settingsMusic || 'Background Music'}
-                            </span>
-                        </div>
-                        <div
-                            className="segmented-options segmented-options--2 setup-music-row__options"
-                            role="radiogroup"
-                            aria-labelledby="setup-music-label"
-                        >
-                            <label className={`segmented-label setup-music-row__option ${musicEnabled ? 'segmented-label--active' : ''}`}>
-                                <input
-                                    type="radio"
-                                    name="sudoku-setup-music"
-                                    value="true"
-                                    checked={Boolean(musicEnabled)}
-                                    onChange={() => onMusicEnabledChange(true)}
-                                />
-                                <IconVolume2 className="settings-icon settings-icon--option" />
-                                <span>{messages.musicOn || 'On'}</span>
-                            </label>
-                            <label className={`segmented-label setup-music-row__option ${!musicEnabled ? 'segmented-label--active' : ''}`}>
-                                <input
-                                    type="radio"
-                                    name="sudoku-setup-music"
-                                    value="false"
-                                    checked={!musicEnabled}
-                                    onChange={() => onMusicEnabledChange(false)}
-                                />
-                                <IconVolumeX className="settings-icon settings-icon--option" />
-                                <span>{messages.musicOff || 'Off'}</span>
-                            </label>
-                        </div>
-                    </div>
                 </div>
 
                 <div className="play-setup__actions">

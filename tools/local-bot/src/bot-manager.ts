@@ -8,14 +8,22 @@ const DEFAULT_NOTES_POLICY: Record<Difficulty, NotesPolicy> = {
   hard: 'always',
   expert: 'always',
 };
+const COOP_GAME_INTERVAL = 5;
 
 export class BotManager {
   private readonly runners: BotRunner[];
 
   constructor(options: RunnerOptions & { slots?: (Difficulty | 'random')[] }) {
     const slots = options.slots ?? Array<Difficulty | 'random'>(3).fill('random');
+    const random = options.random ?? Math.random;
+    let hostedGames = 0;
     this.runners = slots.map(difficulty => new BotRunner(difficulty, {
       ...options,
+      nextCoopGuestCount: () => {
+        hostedGames += 1;
+        if (hostedGames % COOP_GAME_INTERVAL !== 0) return 0;
+        return random() < 0.5 ? 1 : 2;
+      },
       notesPolicy: options.notesPolicy ?? (difficulty === 'random' ? 'random' : DEFAULT_NOTES_POLICY[difficulty]),
     }));
   }

@@ -20,10 +20,13 @@ test('denied storage getters preserve startup, offline play and Settings', async
     await blank.click();
     await page.keyboard.press('1');
     await expect(blank).toHaveText('1');
-    await page.locator('#game-settings-btn').click();
+    await page.locator('#back-to-setup-btn').click();
+    await page.locator('#nav-settings').click();
     await expect(page.locator('#settings-panel')).toBeVisible();
     await page.locator('#player-name-input').fill('OfflinePlayer');
     await page.locator('#nav-play').click();
+    await page.locator('#resume-game-btn').click();
+    await expect(blank).toHaveText('1');
     await expect(page.getByRole('grid')).toBeVisible();
     expect(errors).toEqual([]);
 });

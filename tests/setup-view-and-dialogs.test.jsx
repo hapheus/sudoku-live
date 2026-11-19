@@ -38,12 +38,11 @@ describe('AlertBannerDialog and SetupView', () => {
             <SetupView
                 variant="3x3"
                 difficulty="medium"
-                musicEnabled={false}
                 canResumeGame
                 isNativeApp={false}
                 onVariantChange={vi.fn()}
                 onDifficultyChange={vi.fn()}
-                onMusicEnabledChange={vi.fn()}
+                onOpenSettings={vi.fn()}
                 onPlay={onPlay}
                 onResume={onResume}
                 onOpenLegalPage={vi.fn()}

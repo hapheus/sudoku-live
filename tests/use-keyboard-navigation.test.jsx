@@ -27,7 +27,7 @@ describe('useKeyboardNavigation', () => {
             cellRefs,
             setSelectedIndex: vi.fn(),
             setActiveDigit: vi.fn(),
-            setIsHelpOpen: vi.fn(),
+            onOpenGuide: vi.fn(),
             setNotesMode: vi.fn(),
             broadcastCursor: vi.fn(),
             broadcastActiveDigit: vi.fn(),

@@ -44,7 +44,7 @@ export function useKeyboardNavigation({
     cellRefs,
     setSelectedIndex,
     setActiveDigit,
-    setIsHelpOpen,
+    onOpenGuide,
     setNotesMode,
     broadcastCursor,
     broadcastActiveDigit,
@@ -102,7 +102,7 @@ export function useKeyboardNavigation({
 
             if (e.key === '?' && !e.metaKey && !e.ctrlKey) {
                 e.preventDefault();
-                setIsHelpOpen(true);
+                onOpenGuide();
                 return;
             }
 
@@ -157,7 +157,7 @@ export function useKeyboardNavigation({
         selectedIndex,
         sendSpectatorHint,
         setActiveDigit,
-        setIsHelpOpen,
+        onOpenGuide,
         setNotesMode,
         setSelectedIndex,
         stateRef,

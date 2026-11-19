@@ -1,4 +1,5 @@
 import { hydrateGameState, serializeGameState } from '../domain/sudoku-engine.js';
+import { cloneCellAuthors, mergePlayerContributions } from '../domain/game-contributions.js';
 
 export const newerRevision = (a, b) => Boolean(a && (!b || a[0] > b[0] || (a[0] === b[0] && a[1] > b[1])));
 
@@ -15,6 +16,7 @@ function mergeCell(index, result, left, right, replacement, authoritative) {
         if (field === 'value' && !result.givens[index]) {
             result.board[index] = source.board[index];
             result.cellOwners[index] = source.cellOwners[index];
+            result.cellAuthors[index] = source.cellAuthors?.[index] ?? null;
         }
         if (field === 'notes') result.notes[index] = [...source.notes[index]];
     }
@@ -33,6 +35,9 @@ export function mergeRecoverySnapshot(local, remote, localRevisions, authoritati
     const result = serializeGameState(base);
     result.board = [...base.board]; result.notes = base.notes.map(notes => [...notes]);
     result.cellOwners = [...base.cellOwners];
+    result.cellAuthors = cloneCellAuthors(base.cellAuthors, base.board.length);
+    result.playerContributions = mergePlayerContributions(local.playerContributions, incoming.playerContributions);
+    result.wasMultiplayer = Boolean(local.wasMultiplayer || incoming.wasMultiplayer);
     const localCells = new Map(localRevisions.cells);
     const remoteCells = new Map(revisions.cells);
     const replacement = remoteBaseWins ? revisions.replacement : localRevisions.replacement;

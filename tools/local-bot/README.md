@@ -18,7 +18,11 @@ Start the app and Centrifugo separately. The default backend is
 `ws://127.0.0.1:8081/connection/websocket`. Headless operation only needs Node;
 it does not launch Chromium or require an app server. `npm run build:bot` builds
 explicitly without starting sessions. `npm run bot -- --help` prints options.
-The count is an integer from 1 to 10 and sets independent player slots. Slots
+The count is an integer from 1 to 10 and sets the number of hosted game slots.
+Every fifth newly hosted puzzle is a co-op round, with one or two temporary bot
+guests playing in the same room. These rounds use Auto Accept, and the guest
+connections close when the round ends. Other rounds use the host profile's
+join policy. Slots
 pause during player replacement, so fewer games can be active temporarily.
 Invalid or repeated flags fail before build
 or connection. CLI options take precedence over environment variables.
