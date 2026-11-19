@@ -1014,7 +1014,7 @@ export function App() {
                 />
             </div>
 
-            {!showBottomNav && <NightGhostArtwork active={landscapeLayout} nightGhost={nightGhost} />}
+            {!showBottomNav && landscapeLayout && <NightGhostArtwork nightGhost={nightGhost} />}
         </>
     );
 }

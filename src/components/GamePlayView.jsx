@@ -1,6 +1,7 @@
 import React from 'react';
 import { getPlayerResults } from '../domain/game-contributions.js';
 import { DialogCard } from './DialogCard.jsx';
+import { NightGhostArtwork } from './LandscapeArtwork.jsx';
 import { SolveSummary } from './SolveSummary.jsx';
 import { SpectatorHintsFeed } from './SpectatorHintsFeed.jsx';
 import { StatusBanner } from './StatusBanner.jsx';
@@ -179,6 +180,7 @@ export function GamePlayView({
                         </div>}
                     </div>
                     {!landscapeLayout && toolbar}
+                    {!landscapeLayout && <NightGhostArtwork nightGhost={nightGhost} side="bottom" />}
                 </div>
             </div>
             {!landscapeLayout && info}

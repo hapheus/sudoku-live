@@ -11,6 +11,6 @@ export function LandscapeArtwork({ artwork, active = true, side = 'left', hidden
     );
 }
 
-export function NightGhostArtwork({ active, nightGhost }) {
-    return <LandscapeArtwork artwork={GHOST_ARTWORK} active={active} side="right" hidden={!nightGhost} />;
+export function NightGhostArtwork({ nightGhost, side = 'right' }) {
+    return <LandscapeArtwork artwork={GHOST_ARTWORK} side={side} hidden={!nightGhost} />;
 }
