@@ -3832,13 +3832,15 @@ body {
     }
 }
 
+@media (orientation: landscape) and (min-height: 540px) {
+    .app-container--gameplay {
+        max-width: 960px;
+    }
+}
+
 @media (orientation: landscape) and (min-width: 900px) and (min-height: 540px) {
     .app-container--with-nav {
         max-width: 680px;
-    }
-
-    .app-container--gameplay {
-        max-width: 960px;
     }
 
     .gameplay-stage__side .numpad {

@@ -87,6 +87,21 @@ for (const variant of ['3x3', '2x3']) {
     }
 }
 
+test('gameplay fills the available width at the itch.io embed size', async ({ page }) => {
+    await page.setViewportSize({ width: 880, height: 640 });
+    await page.routeWebSocket(/.*/, socket => socket.close());
+    await page.goto('/');
+    const app = page.locator('#sudoku-app');
+    const setup = await app.boundingBox();
+
+    await page.locator('#start-game-btn').click();
+    await expect(page.locator('.gameplay-stage')).toBeVisible();
+    const gameplay = await app.boundingBox();
+    expect(gameplay!.x).toBe(setup!.x);
+    expect(gameplay!.width).toBe(setup!.width);
+    await assertRegions(page, '.gameplay-stage__board', '.gameplay-stage__controls');
+});
+
 test('cell tool labels fit individually and retain their accessible names', async ({ page }) => {
     await page.setViewportSize({ width: 568, height: 320 });
     await page.addInitScript(() => localStorage.setItem('sudoku_lang', 'de'));
