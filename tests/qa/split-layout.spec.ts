@@ -102,6 +102,53 @@ test('gameplay fills the available width at the itch.io embed size', async ({ pa
     await assertRegions(page, '.gameplay-stage__board', '.gameplay-stage__controls');
 });
 
+test('embedded gameplay adapts to iframe resizing without losing the puzzle', async ({ page }) => {
+    await page.routeWebSocket(/.*/, socket => socket.close());
+    await page.route('**/embed-test', route => route.fulfill({
+        contentType: 'text/html',
+        body: '<iframe src="/" width="880" height="640" style="border:0"></iframe>',
+    }));
+    await page.goto('/embed-test');
+
+    const iframe = page.locator('iframe');
+    const game = iframe.contentFrame();
+    await game.locator('#start-game-btn').click();
+    const grid = game.getByRole('grid');
+    const puzzle = await grid.innerText();
+
+    for (const [width, height] of [[240, 320], [320, 240], [320, 568], [640, 900], [640, 640], [568, 320], [880, 640], [1920, 1080]]) {
+        await test.step(`${width} × ${height}`, async () => {
+            await page.setViewportSize({ width: width + 16, height: height + 16 });
+            await iframe.evaluate((element, size) => {
+                element.setAttribute('width', String(size.width));
+                element.setAttribute('height', String(size.height));
+            }, { width, height });
+
+            await expect.poll(() => game.locator('#sudoku-app').evaluate(app => {
+                const root = document.querySelector('#root')!;
+                const board = app.querySelector('.gameplay-stage__board')!.getBoundingClientRect();
+                const controls = app.querySelector('.gameplay-stage__controls')!.getBoundingClientRect();
+                const grid = app.querySelector('#sudoku-board')!.getBoundingClientRect();
+                const landscape = matchMedia('(orientation: landscape)').matches;
+                return {
+                    fillsWidth: app.clientWidth === root.clientWidth,
+                    fitsViewport: document.documentElement.scrollWidth <= innerWidth,
+                    equalPanes: landscape
+                        ? board.width === controls.width && board.right <= controls.left
+                        : board.height === controls.height && board.bottom <= controls.top,
+                    fitsBoard: grid.width > 0 && Math.abs(grid.width - grid.height) <= 1
+                        && grid.left >= board.left - 1 && grid.right <= board.right + 1
+                        && grid.top >= board.top - 1 && grid.bottom <= board.bottom + 1,
+                };
+            })).toEqual({ fillsWidth: true, fitsViewport: true, equalPanes: true, fitsBoard: true });
+            expect(await grid.innerText()).toBe(puzzle);
+            const digit = game.locator('.numpad-btn[data-digit="1"]');
+            await digit.scrollIntoViewIfNeeded();
+            await expect(digit).toBeInViewport();
+        });
+    }
+});
+
 test('cell tool labels fit individually and retain their accessible names', async ({ page }) => {
     await page.setViewportSize({ width: 568, height: 320 });
     await page.addInitScript(() => localStorage.setItem('sudoku_lang', 'de'));

@@ -17,6 +17,7 @@ import { getOrCreateClientId } from './services/ws-config.js';
 import { ALLOWED_REACTIONS, aggregateHintsByCell } from './utils/watcher-helpers.js';
 import {
     hasUnsavedProgress,
+    isEmbeddedSubpathApp,
     isNativeCapacitorApp,
     parseInitialRoute,
 } from './utils/app-routing.js';
@@ -824,7 +825,11 @@ export function App() {
 
     return (
         <>
-            <div id="sudoku-app" className={`app-container ${showBottomNav ? menuLayout : 'app-container--gameplay'}`}>
+            <div
+                id="sudoku-app"
+                className={`app-container ${showBottomNav ? menuLayout : 'app-container--gameplay'}`}
+                data-embedded={isEmbeddedSubpathApp()}
+            >
                 {showBottomNav && landscapeLayout && <LandscapeArtwork artwork={landscapeArtwork} />}
                 <div className="landscape-screen__pane">
                 {landscapeLayout && primaryNavigation}

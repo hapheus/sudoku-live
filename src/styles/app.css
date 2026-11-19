@@ -4202,6 +4202,26 @@ body {
     }
 }
 
+.app-container[data-embedded="true"] {
+    --board-max-size: 100%;
+    max-width: none;
+}
+
+.app-container[data-embedded="true"] .board-row-axes {
+    contain: size;
+}
+
+/* Short embeds scroll vertically when the toolbar and board need more room. */
+.app-container[data-embedded="true"] .gameplay-stage {
+    min-height: 10rem;
+}
+
+@media (orientation: portrait) {
+    .app-container[data-embedded="true"] .game-screen {
+        min-height: 26rem;
+    }
+}
+
 .settings-panel[hidden] {
     display: none;
 }
