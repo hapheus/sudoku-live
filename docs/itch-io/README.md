@@ -38,6 +38,10 @@ npm run verify:itch
 
 ---
 
+## Capture screenshots
+
+Run `npm run browser:screenshots -- --size 880x640` to capture Setup, Game, Settings and Watch in both themes at the embed size. See [screenshot options](../ios/screenshots/README.md#generate-browser-screenshots) for other resolutions, languages and Watch demo games.
+
 ## Uploading to itch.io
 
 ### Option A: Web Dashboard

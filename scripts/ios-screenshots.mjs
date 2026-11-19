@@ -8,7 +8,7 @@ import path from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { createSudokuGame, fillCandidateNotes, serializeGameState, setCellValue } from '../src/domain/sudoku-engine.js';
+import { localScreenshotBroker, prepareScreenshotPath, screenshotBootstrap, screenshotScenes } from './screenshots/scenes.mjs';
 import { buildCleanXcodeEnv } from './ios-device.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -23,15 +23,6 @@ const usage = 'Usage: npm run ios:screenshots -- <simulator-udid> [--lang en|de]
 
 function xcrun(args, options = {}) {
     return execFileSync('xcrun', args, { env, encoding: 'utf8', timeout: 60_000, ...options });
-}
-
-function seedPuzzle() {
-    let game = createSudokuGame({ variant: '3x3', difficulty: 'hard' });
-    const emptyCells = game.board.flatMap((value, index) => value ? [] : [index]);
-    for (const [index, cell] of emptyCells.entries()) {
-        if (index % 4 === 0) game = setCellValue(game, cell, game.solution[cell], { recordHistory: false });
-    }
-    return JSON.stringify({ gameState: serializeGameState(fillCandidateNotes(game)), roomId: randomUUID() });
 }
 
 function buildCaptureApp(directory, language, wsUrl) {
@@ -58,26 +49,12 @@ function buildCaptureApp(directory, language, wsUrl) {
     const app = path.join(iosProject, 'App');
     const publicDir = path.join(app, 'public');
     const index = path.join(publicDir, 'index.html');
-    const settings = {
-        sudoku_lang: language,
-        sudoku_theme: 'dark',
-        sudoku_variant: '3x3',
-        sudoku_player_name: 'RiverPuzzle',
-        sudoku_solo_snapshot_v1: seedPuzzle(),
-    };
-    const config = {
-        wsUrl: wsUrl ?? 'ws://127.0.0.1:1/connection/websocket',
-    };
-    const bootstrap = `<script>
-window.__APP_CONFIG__ = ${JSON.stringify(config)};
-window.screenshotConfig = { liveWatch: ${Boolean(wsUrl)} };
-for (const [key, value] of Object.entries(${JSON.stringify(settings)})) localStorage.setItem(key, value);
-</script>
+    const bootstrap = `<script>${screenshotBootstrap(language, wsUrl)}</script>
 <script src="/prepare-screenshot.js"></script>
 `;
     const html = fs.readFileSync(index, 'utf8');
     fs.writeFileSync(index, html.replace('<script type="module"', `${bootstrap}<script type="module"`));
-    fs.copyFileSync(path.join(templates, 'prepare.js'), path.join(publicDir, 'prepare-screenshot.js'));
+    fs.copyFileSync(prepareScreenshotPath, path.join(publicDir, 'prepare-screenshot.js'));
     fs.copyFileSync(path.join(templates, 'SceneDelegate.swift'), path.join(app, 'SceneDelegate.swift'));
 
     xcrun(['xcodebuild', '-project', path.join(iosProject, 'App.xcodeproj'), '-scheme', 'App',
@@ -137,12 +114,7 @@ async function main() {
         return;
     }
     if (positionals.length !== 1 || !['de', 'en'].includes(values.lang)) throw new Error(usage);
-    const wsUrl = values['ws-url'] ? new URL(values['ws-url']) : null;
-    if (wsUrl) {
-        if (!['ws:', 'wss:'].includes(wsUrl.protocol) || !['localhost', '127.0.0.1', '[::1]'].includes(wsUrl.hostname)) {
-            throw new Error('Use a loopback WebSocket URL for the private Watch demo.');
-        }
-    }
+    const wsUrl = localScreenshotBroker(values['ws-url']);
 
     const { devices } = JSON.parse(xcrun(['simctl', 'list', 'devices', 'available', '--json']));
     const device = Object.entries(devices)
@@ -157,7 +129,7 @@ async function main() {
     try {
         if (state === 'Shutdown') xcrun(['simctl', 'boot', udid]);
         xcrun(['simctl', 'bootstatus', udid, '-b'], { stdio: 'inherit', timeout: 240_000 });
-        const build = buildCaptureApp(directory, values.lang, wsUrl?.href);
+        const build = buildCaptureApp(directory, values.lang, wsUrl);
         xcrun(['simctl', 'install', udid, build], { timeout: 240_000 });
         appInstalled = true;
         const data = xcrun(['simctl', 'get_app_container', udid, bundleId, 'data']).trim();
@@ -170,31 +142,29 @@ async function main() {
 
         let expectedDisplay;
         let outputDir;
-        for (const theme of ['dark', 'light']) {
-            for (const screen of ['setup', 'game', 'settings', 'watch']) {
-                const reply = await prepare(documents, screen, theme);
-                const display = getDisplay(udid, reply);
-                if (!expectedDisplay) {
-                    expectedDisplay = display;
-                    const prefix = `${name}-${display.id}-${display.orientation}-${values.lang}`.replace(/[^a-zA-Z0-9-]+/g, '-');
-                    fs.mkdirSync(out, { recursive: true });
-                    outputDir = fs.mkdtempSync(path.join(out, `${prefix}-`));
-                } else if (display.id !== expectedDisplay.id || display.orientation !== expectedDisplay.orientation) {
-                    throw new Error('The simulator display or orientation changed during capture. Run again for the new pose.');
-                }
-                const file = path.join(outputDir, `${screen}-${theme}.jpg`);
-                xcrun(['simctl', 'io', udid, 'screenshot', `--display=${display.id}`, '--type=jpeg', '--mask=ignored', file]);
-                const metadata = execFileSync('/usr/bin/sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', file], { encoding: 'utf8' });
-                const width = Number(metadata.match(/pixelWidth: (\d+)/)?.[1]);
-                const height = Number(metadata.match(/pixelHeight: (\d+)/)?.[1]);
-                const nativeSize = (width === reply.width && height === reply.height)
-                    || (width === reply.height && height === reply.width);
-                if (!nativeSize || (width > height) !== reply.landscape) {
-                    fs.unlinkSync(file);
-                    throw new Error('The screenshot does not match the reported display size and orientation.');
-                }
-                console.log(file);
+        for (const { screen, theme } of screenshotScenes) {
+            const reply = await prepare(documents, screen, theme);
+            const display = getDisplay(udid, reply);
+            if (!expectedDisplay) {
+                expectedDisplay = display;
+                const prefix = `${name}-${display.id}-${display.orientation}-${values.lang}`.replace(/[^a-zA-Z0-9-]+/g, '-');
+                fs.mkdirSync(out, { recursive: true });
+                outputDir = fs.mkdtempSync(path.join(out, `${prefix}-`));
+            } else if (display.id !== expectedDisplay.id || display.orientation !== expectedDisplay.orientation) {
+                throw new Error('The simulator display or orientation changed during capture. Run again for the new pose.');
             }
+            const file = path.join(outputDir, `${screen}-${theme}.jpg`);
+            xcrun(['simctl', 'io', udid, 'screenshot', `--display=${display.id}`, '--type=jpeg', '--mask=ignored', file]);
+            const metadata = execFileSync('/usr/bin/sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', file], { encoding: 'utf8' });
+            const width = Number(metadata.match(/pixelWidth: (\d+)/)?.[1]);
+            const height = Number(metadata.match(/pixelHeight: (\d+)/)?.[1]);
+            const nativeSize = (width === reply.width && height === reply.height)
+                || (width === reply.height && height === reply.width);
+            if (!nativeSize || (width > height) !== reply.landscape) {
+                fs.unlinkSync(file);
+                throw new Error('The screenshot does not match the reported display size and orientation.');
+            }
+            console.log(file);
         }
     } finally {
         if (appInstalled) {

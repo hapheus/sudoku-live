@@ -15,6 +15,7 @@ tests
 docs
 test-results
 playwright-report
+artifacts/browser-screenshots
 *.log
 .DS_Store
 ~

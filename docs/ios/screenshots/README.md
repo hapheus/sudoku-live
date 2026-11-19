@@ -35,3 +35,14 @@ npm run ios:screenshots -- <simulator-udid> --lang de \
 ```
 
 Review the generated set before copying selected images into a versioned folder. See [Apple's screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/) for accepted sizes and screenshot limits.
+
+## Generate browser screenshots
+
+Capture the same eight views from the itch.io build in headless Chromium. Run `npx playwright install chromium` once if the browser is missing.
+
+```bash
+npm run browser:screenshots
+npm run browser:screenshots -- --size 1280x720 --lang de
+```
+
+The default viewport is 880 × 640 and each PNG has the requested pixel dimensions. Each run writes a separate set under `artifacts/browser-screenshots/`. Use `--out <directory>` to change the destination or pass the same local `--ws-url` option for live Watch demo games.
