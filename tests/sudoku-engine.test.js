@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { getPlayerResults, recordPlayerContribution } from '../src/domain/game-contributions.js';
 import {
     applyRemoteCellPatch,
     clearAllNotes,
@@ -32,6 +33,29 @@ const SAMPLE_SOLUTION = [
 ];
 
 describe('Sudoku Engine', () => {
+    it('moves cell credit with a shift and restores it on undo without refunding a hint', () => {
+        const puzzle = [...SAMPLE_SOLUTION];
+        puzzle[0] = 0;
+        puzzle[1] = 0;
+        const game = createSudokuGame({ puzzle, solution: SAMPLE_SOLUTION });
+        let state = setCellValue(game, 0, 5, { owner: 'host', authorId: 'first' });
+        state = shiftRow(state, 0, 1);
+        expect(state.cellAuthors[9]).toBe('first');
+        state = recordPlayerContribution(state, { senderId: 'second', playerName: 'Second', hintsUsed: 1 });
+        state = undoLastMove(state);
+        expect(state.cellAuthors[9]).toBeNull();
+        expect(state.cellAuthors[0]).toBe('first');
+        state = setCellValue(state, 1, 3, { owner: 'guest', authorId: 'second' });
+        expect(state.status).toBe('solved');
+        const restored = hydrateGameState(serializeGameState(state));
+        expect(getPlayerResults(restored)).toMatchObject([
+            { id: 'first', cellsSolved: 1, hintsUsed: 0 },
+            { id: 'second', cellsSolved: 1, hintsUsed: 1 },
+        ]);
+        expect(restored.wasMultiplayer).toBe(true);
+        expect(getPlayerResults(game)).toEqual([]);
+    });
+
     it('prevents modifying given clue cells', () => {
         const puzzle = [...SAMPLE_SOLUTION];
         puzzle[0] = 0;

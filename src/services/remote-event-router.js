@@ -1,4 +1,5 @@
 import { applyRemoteCellPatch, hydrateGameState } from '../domain/sudoku-engine.js';
+import { HINT_USED_EVENT, recordPlayerContribution } from '../domain/game-contributions.js';
 import { getBoardBackgroundById, selectBoardBackground } from './board-backgrounds.js';
 import { normalizeJoinPolicy } from './join-settings.js';
 import { validateIncomingGameMessage } from './message-security.js';
@@ -36,6 +37,14 @@ function resolveSyncedBackground(ctx, cur, boardBackgroundId) {
     ctx.setBoardBackground(resolvedBg);
     ctx.stateRef.current.boardBackground = resolvedBg;
     return resolvedBg;
+}
+
+function contributionsDiffer(local, remote) {
+    return (Array.isArray(remote.cellAuthors) && remote.cellAuthors.some(
+        (author, index) => author !== (local.cellAuthors?.[index] ?? null),
+    )) || (Array.isArray(remote.playerContributions) &&
+        JSON.stringify(remote.playerContributions) !== JSON.stringify(local.playerContributions))
+        || Boolean(remote.wasMultiplayer) !== Boolean(local.wasMultiplayer);
 }
 
 export function createRemoteEventRouter(ctx) {
@@ -295,6 +304,7 @@ export function createRemoteEventRouter(ctx) {
             boardsDiffer
             || notesDiffer
             || ownersDiffer
+            || contributionsDiffer(cur.gameState, data.gameState)
             || remoteFilled !== localFilled
             || remoteInitial !== localInitial
             || data.gameState.status !== cur.gameState.status
@@ -334,6 +344,13 @@ export function createRemoteEventRouter(ctx) {
         'join-cancel': handleJoinCancel,
         'join-response': handleJoinResponse,
         'cell-update': handleCellUpdate,
+        [HINT_USED_EVENT]: (data, cur) => {
+            const nextState = recordPlayerContribution(cur.gameState, data);
+            if (nextState === cur.gameState) return;
+            ctx.setGameState(nextState);
+            ctx.stateRef.current.gameState = nextState;
+            ctx.persistSnapshotIfNeeded(nextState);
+        },
         cursor: handleCursor,
         'active-digit': (data, cur) => {
             const myClientId = ctx.onlineClientRef.current?.clientId;

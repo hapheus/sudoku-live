@@ -85,6 +85,57 @@ for (const { variant, compact } of [
     });
 }
 
+test('compact Duo landscape scales board digits, notes and hint badges to fit', async ({ page, context }) => {
+    const cdp = await context.newCDPSession(page);
+    await rotate(cdp, 90, false);
+    await page.addInitScript(() => localStorage.setItem('sudoku_lang', 'en'));
+    await page.routeWebSocket(/.*/, socket => socket.close());
+    await page.goto('/');
+    await page.getByText('9×9', { exact: true }).click();
+    await page.locator('#start-game-btn').click();
+    const emptyCells = page.locator('.sudoku-cell:not(.sudoku-cell--given)');
+    await emptyCells.first().click();
+    await page.locator('#notes-btn').click();
+    await page.keyboard.press('1');
+    const board = page.getByRole('grid');
+
+    // Add the badge markup here so this layout check can run without an online room.
+    await emptyCells.nth(1).evaluate(cell => {
+        const badge = document.createElement('span');
+        badge.className = 'sudoku-cell__hint-badge';
+        badge.textContent = '9';
+        cell.append(badge);
+    });
+    const measure = () => board.evaluate(grid => {
+        const digit = grid.querySelector<HTMLElement>('.sudoku-cell__digit')!;
+        const note = [...grid.querySelectorAll<HTMLElement>('.sudoku-cell__note')]
+            .find(element => element.textContent!.trim())!;
+        const badge = grid.querySelector<HTMLElement>('.sudoku-cell__hint-badge')!;
+        const cell = digit.parentElement!.getBoundingClientRect();
+        const hintCell = badge.parentElement!.getBoundingClientRect();
+        const hint = badge.getBoundingClientRect();
+        return {
+            digitSize: parseFloat(getComputedStyle(digit).fontSize),
+            noteSize: parseFloat(getComputedStyle(note).fontSize),
+            hintSize: hint.height,
+            cellHeight: cell.height,
+            noteHeight: note.getBoundingClientRect().height,
+            hintFits: hint.top >= hintCell.top && hint.bottom <= hintCell.bottom &&
+                hint.left >= hintCell.left && hint.right <= hintCell.right,
+        };
+    });
+    const larger = await measure();
+    for (const angle of [90, 270] as const) {
+        await rotate(cdp, angle, true);
+        await expect.poll(async () => {
+            const compact = await measure();
+            return compact.digitSize < larger.digitSize && compact.digitSize < compact.cellHeight &&
+                compact.noteSize < larger.noteSize && compact.noteSize <= compact.noteHeight &&
+                compact.hintSize < larger.hintSize && compact.hintFits;
+        }).toBe(true);
+    }
+});
+
 test('portrait gameplay panes remain exactly equal around an off-center hinge and asymmetric safe areas', async ({ page, context }) => {
     const cdp = await context.newCDPSession(page);
     await cdp.send('Emulation.setDeviceMetricsOverride', {
@@ -123,4 +174,31 @@ test('portrait gameplay panes remain exactly equal around an off-center hinge an
     await assertHinge('.gameplay-stage__board', '.gameplay-stage__controls');
     await page.locator('#notes-btn').click();
     await assertHinge('.gameplay-stage__board', '.gameplay-stage__controls');
+});
+
+test('navigation shows icons only when the localized tab labels no longer fit', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 700 });
+    await page.addInitScript(() => localStorage.setItem('sudoku_lang', 'de'));
+    await page.routeWebSocket(/.*/, socket => socket.close());
+    await page.goto('/');
+
+    const tabs = ['Spielen', 'Zuschauen', 'Einstellungen'].map(name => page.getByRole('tab', { name, exact: true }));
+    for (const tab of tabs) await expect(tab.locator('.bottom-nav__label')).toBeVisible();
+
+    await page.setViewportSize({ width: 260, height: 700 });
+    for (const tab of tabs) {
+        await expect(tab.locator('.bottom-nav__label')).toBeHidden();
+        await expect(tab.locator('svg')).toBeVisible();
+    }
+    await tabs[2].click();
+    await expect(tabs[2]).toHaveAttribute('aria-selected', 'true');
+
+    const language = page.locator('.settings-language select');
+    await language.selectOption('en');
+    await expect(page.getByRole('tab', { name: 'Settings' }).locator('.bottom-nav__label')).toBeVisible();
+    await language.selectOption('de');
+    await expect(tabs[2].locator('.bottom-nav__label')).toBeHidden();
+
+    await page.setViewportSize({ width: 390, height: 700 });
+    for (const tab of tabs) await expect(tab.locator('.bottom-nav__label')).toBeVisible();
 });

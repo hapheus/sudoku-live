@@ -37,6 +37,10 @@ Open `http://localhost:8000` in your browser.
   docker compose up -d centrifugo
   npm run dev
   ```
+  To use another WebSocket endpoint with the local Vite app:
+  ```bash
+  npm run dev -- --ws-url wss://sudoku-ws.fraha.dev/connection/websocket
+  ```
 - **Native iOS (Capacitor 8 + Fastlane):**
   ```bash
   npm run ios:preflight   # Check Capacitor, Xcode, and Fastlane setup

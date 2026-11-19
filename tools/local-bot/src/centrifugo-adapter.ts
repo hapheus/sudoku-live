@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
+import { HINT_USED_EVENT } from '../../../src/domain/game-contributions.js';
 import type { LogicalHint } from './types.ts';
 import { OnlineGameClient } from '../../../src/services/online-game-client.js';
 import { generateRandomPlayerName } from '../../../src/services/player-name.js';
 import { buildProtocolMetadata } from '../../../src/services/multiplayer-protocol.js';
-import type { GameSession } from './game-session.ts';
+import type { BotPlayer, GameSession } from './game-session.ts';
 import type { BotJoinPolicy } from './player-profile.ts';
 
 export interface HintPreviewPayload {
@@ -30,17 +31,20 @@ function buildHintPreviewPayload(hint: LogicalHint): HintPreviewPayload {
 
 export class CentrifugoAdapter {
   private readonly online: OnlineGameClient;
+  private readonly wsUrl: string;
+  private readonly defaultJoinPolicy: BotJoinPolicy;
+  private guests: OnlineGameClient[] = [];
   private revision = 0;
   private syncedRevision = -1;
   private hostCursorIndex: number | null = null;
   private hostActiveDigit: number | null = null;
   private hostHintPreview: HintPreviewPayload | null = null;
   private events: { type: string; data: Record<string, unknown> }[] = [];
-  private readonly joinPolicy: BotJoinPolicy;
+  private joinPolicy: BotJoinPolicy;
   private guestCount = 0;
   private joinReservedUntil = 0;
 
-  get hasGuests() { return this.guestCount > 0; }
+  get hasGuests() { return this.guests.length > 0 || this.guestCount > 0; }
   get shiftsAllowed() { return !this.hasGuests && Date.now() >= this.joinReservedUntil; }
 
   get needsSync() { return this.revision !== this.syncedRevision; }
@@ -58,13 +62,15 @@ export class CentrifugoAdapter {
   }
 
   get connected() {
-    return this.online.client?.state === 'connected' && this.online.gameChannel?.state === 'subscribed'
-      && this.online.lobbyChannel?.state === 'subscribed';
+    return [this.online, ...this.guests].every(client => client.client?.state === 'connected'
+      && client.gameChannel?.state === 'subscribed') && this.online.lobbyChannel?.state === 'subscribed';
   }
 
   get playerName() { return this.online.playerName; }
 
   constructor(wsUrl: string, joinPolicy: BotJoinPolicy = 'auto', previousName?: string) {
+    this.wsUrl = wsUrl;
+    this.defaultJoinPolicy = joinPolicy;
     this.joinPolicy = joinPolicy;
     this.online = new OnlineGameClient({ wsConfig: { wsUrl } });
     // Browser session storage is shared across clients in one Node process.
@@ -73,11 +79,49 @@ export class CentrifugoAdapter {
     do { this.online.playerName = generateRandomPlayerName(); } while (this.online.playerName === previousName);
   }
 
-  private publish(channel: { publish(data: unknown): Promise<unknown> }, payload: { type: string; data: Record<string, unknown> }) {
-    return channel.publish({ ...payload, data: this.online.buildOutgoingEnvelope(payload.data) });
+  private publish(channel: { publish(data: unknown): Promise<unknown> }, payload: { type: string; data: Record<string, unknown> },
+    client = this.online) {
+    return channel.publish({ ...payload, data: client.buildOutgoingEnvelope(payload.data) });
   }
 
-  async open(session: GameSession) {
+  playerAt(moveIndex: number): BotPlayer {
+    const players = [this.online, ...this.guests];
+    const client = players[moveIndex % players.length];
+    return { senderId: client.clientId, playerName: client.playerName, role: client === this.online ? 'host' : 'guest' };
+  }
+
+  private clientFor(senderId?: string) {
+    return this.guests.find(client => client.clientId === senderId) || this.online;
+  }
+
+  private closeGuests() {
+    for (const guest of this.guests) guest.disconnect();
+    this.guests = [];
+  }
+
+  private async joinGuests(session: GameSession, count: number) {
+    try {
+      for (let index = 0; index < count; index++) {
+        const guest = new OnlineGameClient({ wsConfig: { wsUrl: this.wsUrl }, playerName: generateRandomPlayerName() });
+        guest.clientId = randomUUID();
+        this.guests.push(guest);
+        guest.ensureClient().on('error', () => {});
+        const room = guest.joinGameChannel(session.id, { role: 'guest', gameMode: 'online' });
+        await room.ready(5_000);
+      }
+      session.rememberPlayers([this.online, ...this.guests].map((client, index) => ({
+        id: client.clientId, name: client.playerName, role: index === 0 ? 'host' : 'guest',
+      })));
+    } catch (error) {
+      this.closeGuests();
+      throw error;
+    }
+  }
+
+  async open(session: GameSession, coopGuests = 0) {
+    this.closeGuests();
+    this.joinPolicy = coopGuests ? 'auto' : this.defaultJoinPolicy;
+    session.setHost(this.online.clientId, this.online.playerName);
     this.hostCursorIndex = session.preview()?.index ?? null;
     this.hostActiveDigit = null;
     this.hostHintPreview = null;
@@ -91,10 +135,12 @@ export class CentrifugoAdapter {
       this.online.updateGameJoinPolicy(this.joinPolicy);
       this.revision++;
     };
-    const room = this.online.joinGameChannel(session.id, { role: 'host', gameMode: 'solo', joinPolicy: this.joinPolicy,
+    const room = this.online.joinGameChannel(session.id, { role: 'host', gameMode: coopGuests ? 'online' : 'solo', joinPolicy: this.joinPolicy,
       onPresenceChange: updateGuests, onMemberJoin: updateGuests, onMemberLeave: updateGuests,
       onEvent: (type, data) => {
-        if ((type === 'join-request' || type === 'cell-update') && this.events.length < 256) this.events.push({ type, data });
+        if (this.guests.some(guest => guest.clientId === data.senderId)) return;
+        if ((type === 'join-request' || type === 'cell-update' || type === HINT_USED_EVENT)
+          && this.events.length < 256) this.events.push({ type, data });
       },
     });
     room.on('subscribed', () => { this.revision++; });
@@ -104,6 +150,10 @@ export class CentrifugoAdapter {
       totalCells: session.snapshot().board.length, filledCount: session.filledCount, joinPolicy: this.joinPolicy });
     lobby.on('subscribed', () => { this.revision++; });
     await this.sync(session);
+    if (coopGuests) {
+      await this.joinGuests(session, coopGuests);
+      await this.sync(session);
+    }
   }
 
   private metadata(session: GameSession, status = session.solved ? 'solved' : 'in_progress') {
@@ -116,6 +166,7 @@ export class CentrifugoAdapter {
 
   async receive(session: GameSession): Promise<Set<number>> {
     const changed = new Set<number>();
+    session.rememberPlayers(this.online.getGameMembers() || []);
     // Drain only the current bounded batch; WebSocket callbacks never mutate RAM
     // while an awaited bot publication is still in flight.
     const batch = this.events.slice();
@@ -139,8 +190,12 @@ export class CentrifugoAdapter {
     // Apply patches only after every awaited response has succeeded. A failed
     // response must not drop earlier edits or hide them from pending-move logic.
     for (const { type, data } of batch) {
-      if (type === 'cell-update' && this.joinPolicy === 'auto' && (this.hasGuests || Date.now() < this.joinReservedUntil)
-        && session.applyGuestPatch(data)) {
+      if (this.joinPolicy !== 'auto' || (!this.hasGuests && Date.now() >= this.joinReservedUntil)) continue;
+      if (type === HINT_USED_EVENT) {
+        session.recordGuestHint(data);
+        this.revision++;
+      }
+      if (type === 'cell-update' && session.applyGuestPatch(data)) {
         changed.add(Number(data.index));
         this.revision++;
       }
@@ -165,11 +220,12 @@ export class CentrifugoAdapter {
   }
 
   async move(move: NonNullable<ReturnType<GameSession['advance']>>) {
-    const room = this.online.gameChannel;
+    const client = this.clientFor(move.authorId);
+    const room = client.gameChannel;
     if (!room) throw new Error('Room not initialized');
     await room.ready(5_000);
-    this.online.rememberEvent(move.eventId);
-    await this.publish(room, { type: 'cell-update', data: move });
+    client.rememberEvent(move.eventId);
+    await this.publish(room, { type: 'cell-update', data: move }, client);
   }
 
   async fillCandidates(updates: ReturnType<GameSession['fillCandidates']>) {
@@ -184,27 +240,36 @@ export class CentrifugoAdapter {
     this.revision++;
   }
 
-  async cursor(index: number | null, digit: number | null = null) {
-    const room = this.online.gameChannel;
+  async cursor(index: number | null, digit: number | null = null, senderId?: string) {
+    const client = this.clientFor(senderId);
+    const room = client.gameChannel;
     if (!room) throw new Error('Room not initialized');
-    this.hostCursorIndex = index;
-    this.hostActiveDigit = digit;
+    if (client === this.online) {
+      this.hostCursorIndex = index;
+      this.hostActiveDigit = digit;
+    }
     await room.ready(5_000);
-    const sender = { senderId: this.online.clientId, role: 'host' };
-    await this.publish(room, { type: 'cursor', data: { ...sender, index, eventId: randomUUID() } });
-    await this.publish(room, { type: 'active-digit', data: { ...sender, digit, eventId: randomUUID() } });
+    const sender = { senderId: client.clientId, role: client === this.online ? 'host' : 'guest' };
+    await this.publish(room, { type: 'cursor', data: { ...sender, index, eventId: randomUUID() } }, client);
+    await this.publish(room, { type: 'active-digit', data: { ...sender, digit, eventId: randomUUID() } }, client);
   }
 
-  async hintHighlight(hint: LogicalHint, mode: 'preview' | 'solve') {
-    const room = this.online.gameChannel;
+  async hintHighlight(hint: LogicalHint, mode: 'preview' | 'solve', hintsUsed?: number, senderId?: string) {
+    const client = this.clientFor(senderId);
+    const room = client.gameChannel;
     if (!room) throw new Error('Room not initialized');
-    this.hostHintPreview = mode === 'preview' ? buildHintPreviewPayload(hint) : null;
+    if (client === this.online) this.hostHintPreview = mode === 'preview' ? buildHintPreviewPayload(hint) : null;
     await room.ready(5_000);
+    if (hintsUsed !== undefined) {
+      await this.publish(room, {
+        type: HINT_USED_EVENT, data: { playerName: client.playerName, hintsUsed },
+      }, client);
+    }
     await this.publish(room, {
       type: 'hint-highlight',
       data: {
-        senderId: this.online.clientId,
-        role: 'host',
+        senderId: client.clientId,
+        role: client === this.online ? 'host' : 'guest',
         mode,
         index: hint.index,
         digit: hint.digit ?? null,
@@ -214,7 +279,7 @@ export class CentrifugoAdapter {
         contextEntries: Array.from(hint.contextDelays.entries()),
         eventId: randomUUID(),
       },
-    });
+    }, client);
   }
 
   async clearHintHighlight() {
@@ -239,6 +304,7 @@ export class CentrifugoAdapter {
   }
 
   close() {
+    this.closeGuests();
     this.hostCursorIndex = null;
     this.hostActiveDigit = null;
     this.hostHintPreview = null;

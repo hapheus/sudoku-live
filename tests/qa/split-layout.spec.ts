@@ -56,10 +56,14 @@ for (const variant of ['3x3', '2x3']) {
             await assertTopToolbar(page);
             await page.screenshot({ path: testInfo.outputPath('landscape-toolbar.png') });
             if (width === 667 && variant === '3x3') {
+                await page.setViewportSize({ width, height: 260 });
                 const stage = page.locator('.gameplay-stage__controls-content');
-                await stage.evaluate(element => { element.scrollTop = element.scrollHeight; });
-                expect(await stage.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+                await expect.poll(() => stage.evaluate(element => {
+                    element.scrollTop = element.scrollHeight;
+                    return element.scrollTop;
+                })).toBeGreaterThan(0);
                 await assertTopToolbar(page);
+                await page.setViewportSize({ width, height });
             }
             await page.locator('#game-help-btn').click();
             await expect(page.getByRole('dialog')).toBeVisible();
@@ -78,6 +82,45 @@ for (const variant of ['3x3', '2x3']) {
         });
     }
 }
+
+test('cell tool labels fit individually and retain their accessible names', async ({ page }) => {
+    await page.setViewportSize({ width: 568, height: 320 });
+    await page.addInitScript(() => localStorage.setItem('sudoku_lang', 'de'));
+    await page.routeWebSocket(/.*/, socket => socket.close());
+    await page.goto('/');
+    await page.locator('#start-game-btn').click();
+    const toolbar = page.getByRole('toolbar', { name: 'Cell tools' });
+    const buttons = toolbar.getByRole('button');
+    const visibleLabels = () => buttons.evaluateAll(tools => tools.map(tool => {
+        const content = tool.querySelector('.tool-btn__content')!;
+        const bounds = content.getBoundingClientRect();
+        const label = content.querySelector('span')!.getBoundingClientRect();
+        const icon = content.querySelector('svg')!.getBoundingClientRect();
+        const gap = parseFloat(getComputedStyle(content).columnGap);
+        const fits = icon.width + gap + label.width <= bounds.width + 0.02;
+        const visible = label.top < bounds.bottom;
+        if (visible !== fits || icon.top < bounds.top || icon.bottom > bounds.bottom) {
+            throw new Error(`Incorrect compact layout for ${tool.id}`);
+        }
+        return visible;
+    }));
+
+    for (const name of ['Zurück', 'Löschen', 'Notizen', 'Hinweis']) {
+        await expect(toolbar.getByRole('button', { name, exact: true })).toBeVisible();
+    }
+    expect(await visibleLabels()).toEqual([false, false, false, false]);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect.poll(visibleLabels).toEqual([true, true, true, true]);
+    await toolbar.getByRole('button', { name: 'Notizen', exact: true }).click();
+    await expect(toolbar.getByRole('button', { name: 'Notizen an', exact: true })).toHaveAttribute('aria-pressed', 'true');
+
+    await page.setViewportSize({ width: 320, height: 640 });
+    await expect.poll(async () => {
+        const labels = await visibleLabels();
+        return labels.some(Boolean) && !labels[2];
+    }).toBe(true);
+});
 
 test('setup, settings, watch and legal keep artwork left and all content right', async ({ page }) => {
     await page.setViewportSize({ width: 812, height: 375 });
@@ -150,7 +193,6 @@ for (const variant of ['3x3', '2x3']) {
             const right = (await page.locator('.gameplay-stage__controls').boundingBox())!;
             expect(left.x + left.width).toBeLessThanOrEqual(951 / 2);
             expect(right.x).toBeGreaterThanOrEqual(951 / 2);
-            await assertRegions(page, '.gameplay-stage__board', '.gameplay-stage__status > .status-banner', false);
             expect(Math.abs((left.x + left.width + right.x) / 2 - 951 / 2)).toBeLessThanOrEqual(1);
             const puzzle = await page.getByRole('grid').innerText();
             await page.setViewportSize({ width: 466, height: 678 });

@@ -123,7 +123,7 @@ export function WatchDirectory({
     messages = enMessages,
 }) {
     const [searchQuery, setSearchQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'open' | 'coop'
+    const [statusFilter, setStatusFilter] = useState('all');
     const [variantFilter, setVariantFilter] = useState('all'); // 'all' | '3x3' | '2x3'
 
     const difficultyLabels = useMemo(() => ({
@@ -160,6 +160,9 @@ export function WatchDirectory({
             return false;
         }
         if (statusFilter === 'coop' && !hasGuest) {
+            return false;
+        }
+        if (statusFilter === 'closed' && (hasGuest || joinPolicy !== 'disabled')) {
             return false;
         }
         if (variantFilter !== 'all' && spec.id !== variantFilter) {
@@ -203,140 +206,120 @@ export function WatchDirectory({
     };
 
     return (
-        <section id="watch-directory" className="watch-box split-layout" aria-label={messages.watchTitle}>
-            <div className="split-region split-region--primary">
-                <div className="watch-box__header">
-                    <h2 className="watch-box__title">{messages.watchTitle}</h2>
-                    <div className="watch-box__actions">
-                        <span className={`connection-badge connection-badge--${connectionStatus}`} aria-live="polite">
-                            {connectionLabels[connectionStatus] || connectionStatus}
-                        </span>
-                        {canReconnect && onReconnect && (
-                            <button
-                                type="button"
-                                className="connection-retry-btn"
-                                onClick={onReconnect}
-                            >
-                                Reconnect
-                            </button>
-                        )}
+        <section id="watch-directory" className="watch-box" aria-label={messages.watchTitle}>
+            <div className="watch-box__header">
+                <h2 className="watch-box__title">{messages.watchTitle}</h2>
+                <div className="watch-box__actions">
+                    <span className={`connection-badge connection-badge--${connectionStatus}`} aria-live="polite">
+                        {connectionLabels[connectionStatus] || connectionStatus}
+                    </span>
+                    {canReconnect && onReconnect && (
                         <button
                             type="button"
-                            id="refresh-live-games-btn"
-                            className="watch-box__refresh-btn"
-                            onClick={onRefresh}
+                            className="connection-retry-btn"
+                            onClick={onReconnect}
                         >
-                            {messages.watchRefresh}
+                            Reconnect
                         </button>
-                    </div>
+                    )}
                 </div>
-                {pendingJoinGameId && (
-                    <div className="join-pending-banner" role="status">
-                        <span className="join-pending-banner__text">
-                            {messages.joinPendingLabel || 'Waiting for host approval...'}
-                        </span>
-                        {onCancelJoinRequest && (
+            </div>
+            {pendingJoinGameId && (
+                <div className="join-pending-banner" role="status">
+                    <span className="join-pending-banner__text">
+                        {messages.joinPendingLabel || 'Waiting for host approval...'}
+                    </span>
+                    {onCancelJoinRequest && (
+                        <button
+                            type="button"
+                            className="join-pending-banner__cancel-btn"
+                            onClick={onCancelJoinRequest}
+                        >
+                            {messages.cancelJoinRequest || 'Cancel'}
+                        </button>
+                    )}
+                </div>
+            )}
+            <div className="watch-filters">
+                <label htmlFor="watch-search-input" className="sr-only">
+                    {messages.watchSearchLabel || 'Search live games'}
+                </label>
+                <input
+                    id="watch-search-input"
+                    type="search"
+                    className="watch-filters__search"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={messages.watchSearchPlaceholder || 'Search by player, room, or difficulty...'}
+                />
+                <div className="watch-filters__field">
+                    <label htmlFor="watch-joins-filter">{messages.watchFilterJoins || 'Joins'}</label>
+                    <select
+                        id="watch-joins-filter"
+                        className="watch-filters__select"
+                        value={statusFilter}
+                        onChange={(event) => setStatusFilter(event.target.value)}
+                    >
+                        <option value="all">{messages.watchFilterAll || 'All'}</option>
+                        <option value="open">{messages.watchFilterOpen || 'Open'}</option>
+                        <option value="coop">{messages.watchFilterCoop || 'CoOps'}</option>
+                        <option value="closed">{messages.watchFilterClosed || 'Closed'}</option>
+                    </select>
+                </div>
+                <div className="watch-filters__field">
+                    <label htmlFor="watch-sizes-filter">{messages.watchFilterSizes || 'Sizes'}</label>
+                    <select
+                        id="watch-sizes-filter"
+                        className="watch-filters__select"
+                        value={variantFilter}
+                        onChange={(event) => setVariantFilter(event.target.value)}
+                    >
+                        <option value="all">{messages.watchFilterAll || 'All'}</option>
+                        <option value="3x3">3x3</option>
+                        <option value="2x3">2x3</option>
+                    </select>
+                </div>
+            </div>
+            <div id="live-games-list" className="live-games-list" role={filteredGames.length > 0 ? 'feed' : undefined}>
+                {liveGames.length === 0 && (
+                    <div className="watch-empty">
+                        <p className="live-game-card__meta">
+                            {canReconnect
+                                ? 'Not connected to the live server right now.'
+                                : messages.watchEmpty}
+                        </p>
+                        <p className="watch-empty__sub">
+                            {messages.watchEmptySub}
+                        </p>
+                    </div>
+                )}
+                {liveGames.length > 0 && filteredGames.length === 0 && (
+                    <div className="watch-empty">
+                        <p className="live-game-card__meta">
+                            {messages.watchNoMatches || 'No matching live games.'}
+                        </p>
+                        {hasActiveFilters && (
                             <button
                                 type="button"
-                                className="join-pending-banner__cancel-btn"
-                                onClick={onCancelJoinRequest}
+                                className="watch-box__refresh-btn"
+                                onClick={clearFilters}
                             >
-                                {messages.cancelJoinRequest || 'Cancel'}
+                                {messages.watchClearFilters || 'Clear filters'}
                             </button>
                         )}
                     </div>
                 )}
-                <div className="watch-filters">
-                    <div className="watch-filters__search-wrap">
-                        <label htmlFor="watch-search-input" className="sr-only">
-                            {messages.watchSearchLabel || 'Search live games'}
-                        </label>
-                        <input
-                            id="watch-search-input"
-                            type="search"
-                            className="watch-filters__search"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder={messages.watchSearchPlaceholder || 'Search by player, room, or difficulty...'}
-                        />
-                    </div>
-                    <div className="watch-filters__chips" role="group" aria-label={messages.watchSearchLabel || 'Filter live games'}>
-                        {[
-                            { id: 'all', label: messages.watchFilterAll || 'All' },
-                            { id: 'open', label: messages.watchFilterOpen || 'Open' },
-                            { id: 'coop', label: messages.watchFilterCoop || 'Co-op' },
-                        ].map((opt) => (
-                            <button
-                                key={opt.id}
-                                type="button"
-                                className={`watch-filter-chip ${statusFilter === opt.id ? 'watch-filter-chip--active' : ''}`}
-                                aria-pressed={statusFilter === opt.id}
-                                onClick={() => setStatusFilter(opt.id)}
-                            >
-                                {opt.label}
-                            </button>
-                        ))}
-                        <span className="watch-filters__sep" aria-hidden="true" />
-                        {[
-                            { id: 'all', label: messages.watchFilterVariantAll || 'All sizes' },
-                            { id: '3x3', label: '3×3' },
-                            { id: '2x3', label: '2×3' },
-                        ].map((opt) => (
-                            <button
-                                key={opt.id}
-                                type="button"
-                                className={`watch-filter-chip ${variantFilter === opt.id ? 'watch-filter-chip--active' : ''}`}
-                                aria-pressed={variantFilter === opt.id}
-                                onClick={() => setVariantFilter(opt.id)}
-                            >
-                                {opt.label}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            </div>
-            <div className="split-region split-region--secondary">
-                <div id="live-games-list" className="live-games-list" role={filteredGames.length > 0 ? 'feed' : undefined}>
-                    {liveGames.length === 0 && (
-                        <div className="watch-empty">
-                            <p className="live-game-card__meta">
-                                {canReconnect
-                                    ? 'Not connected to the live server right now.'
-                                    : messages.watchEmpty}
-                            </p>
-                            <p className="watch-empty__sub">
-                                {messages.watchEmptySub}
-                            </p>
-                        </div>
-                    )}
-                    {liveGames.length > 0 && filteredGames.length === 0 && (
-                        <div className="watch-empty">
-                            <p className="live-game-card__meta">
-                                {messages.watchNoMatches || 'No matching live games.'}
-                            </p>
-                            {hasActiveFilters && (
-                                <button
-                                    type="button"
-                                    className="watch-box__refresh-btn"
-                                    onClick={clearFilters}
-                                >
-                                    {messages.watchClearFilters || 'Clear filters'}
-                                </button>
-                            )}
-                        </div>
-                    )}
-                    {filteredGames.map((game) => (
-                        <WatchGameCard
-                            key={game.game_id}
-                            game={game}
-                            difficultyLabels={difficultyLabels}
-                            pendingJoinGameId={pendingJoinGameId}
-                            onJoinGame={onJoinGame}
-                            onWatchGame={onWatchGame}
-                            messages={messages}
-                        />
-                    ))}
-                </div>
+                {filteredGames.map((game) => (
+                    <WatchGameCard
+                        key={game.game_id}
+                        game={game}
+                        difficultyLabels={difficultyLabels}
+                        pendingJoinGameId={pendingJoinGameId}
+                        onJoinGame={onJoinGame}
+                        onWatchGame={onWatchGame}
+                        messages={messages}
+                    />
+                ))}
             </div>
         </section>
     );

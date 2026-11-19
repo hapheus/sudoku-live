@@ -1,5 +1,7 @@
+import { HINT_USED_EVENT } from '../domain/game-contributions.js';
+
 const PLAYER_ACTIONS = new Set([
-    'cell-update', 'cursor', 'active-digit', 'sync', 'ping', 'hint-highlight',
+    'cell-update', HINT_USED_EVENT, 'cursor', 'active-digit', 'sync', 'ping', 'hint-highlight',
     'new-puzzle-request', 'new-puzzle-accept', 'new-puzzle-decline', 'new-puzzle-cancel',
     'fist-bump', 'retro-mode', 'tic-tac-toe-shift', 'tic-tac-toe-move',
 ]);

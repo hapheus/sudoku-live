@@ -23,7 +23,6 @@ export function SetupView({
             <div className="split-region split-region--primary">
                 <header className="play-setup__header">
                     <h1 className="play-setup__title">{messages.gameTitle}</h1>
-                    <p className="play-setup__subtitle">{messages.setupSubtitle}</p>
                 </header>
             </div>
             <div className="split-region split-region--secondary">
@@ -59,16 +58,6 @@ export function SetupView({
                             {messages.resumePuzzle}
                         </button>
                     )}
-                    <a
-                        href="#settings-panel"
-                        className="play-setup__music-link"
-                        onClick={(event) => {
-                            event.preventDefault();
-                            onOpenSettings();
-                        }}
-                    >
-                        {messages.settingsMusic || 'Background Music'}
-                    </a>
                 </div>
 
                 {!isNativeApp && (

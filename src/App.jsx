@@ -3,6 +3,7 @@ import { LandscapeArtwork, NightGhostArtwork } from './components/LandscapeArtwo
 import { selectLandscapeArtwork } from './services/landscape-artwork.js';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createCoopFistBumpTracker } from './domain/coop-fist-bump.js';
+import { COMPLETED_COOP_GRACE_MS, hasRematchPartner } from './domain/coop-rematch.js';
 import { advanceKonamiState, createKonamiState } from './domain/konami-code.js';
 import {
     formatCellCoord,
@@ -32,6 +33,7 @@ import { useOnlineSession } from './hooks/useOnlineSession.js';
 import { useTicTacToe } from './hooks/useTicTacToe.js';
 import { SessionNotices } from './components/SessionNotices.jsx';
 import { GamePlayView } from './components/GamePlayView.jsx';
+import { GameToolbar } from './components/GameToolbar.jsx';
 import { SetupView } from './components/SetupView.jsx';
 import { WatchDirectory } from './components/WatchDirectory.jsx';
 import { PlayerControls } from './components/PlayerControls.jsx';
@@ -39,32 +41,29 @@ import { WatcherInteractions } from './components/WatcherInteractions.jsx';
 import { HelpDialog } from './components/HelpDialog.jsx';
 import { BottomNav } from './components/BottomNav.jsx';
 import { SettingsPanel } from './components/SettingsPanel.jsx';
+import { SpectatorBackButton } from './components/SpectatorBackButton.jsx';
 import { LegalPage } from './components/LegalPage.jsx';
 
-function getRestartState(messages, isCoopSession, partnerOnline, gameState, rematchRequestedBy, myRole) {
-    let restartLabel = messages.newPuzzle;
-    let restartDisabled = false;
-    const isWaitingForRematch = isCoopSession && Boolean(rematchRequestedBy && rematchRequestedBy === myRole);
-    if (isCoopSession) {
-        if (!partnerOnline && gameState.status !== 'solved') {
-            restartLabel = messages.newPuzzle;
-        } else if (isWaitingForRematch) {
-            restartLabel = messages.waitingPartner;
-            restartDisabled = true;
-        } else if (rematchRequestedBy) {
-            restartLabel = messages.acceptNewPuzzle;
-        }
+function getRestartState(messages, partnerOnline, rematchRequestedBy, myRole) {
+    if (!partnerOnline || !rematchRequestedBy) {
+        return { restartLabel: messages.newPuzzle, restartDisabled: false, isWaitingForRematch: false };
     }
-
-    return { restartLabel, restartDisabled, isWaitingForRematch };
+    const isWaitingForRematch = rematchRequestedBy === myRole;
+    const restartLabel = isWaitingForRematch ? messages.waitingPartner : messages.acceptNewPuzzle;
+    return { restartLabel, restartDisabled: isWaitingForRematch, isWaitingForRematch };
 }
 
 export function App() {
     const isNativeApp = isNativeCapacitorApp();
     const landscapeLayout = useLandscapeLayout();
     const [landscapeArtwork] = useState(() => selectLandscapeArtwork());
-    const settingsGuideOpenerRef = useRef(null);
-    const closeGuide = useCallback(() => setIsHelpOpen(false), []);
+    const guideOpenerRef = useRef(null);
+    const gameInfoOpenerRef = useRef(null);
+    const closePanel = useCallback(() => setOpenPanel(null), []);
+    const openGuide = useCallback((event) => {
+        guideOpenerRef.current = event?.currentTarget || document.activeElement;
+        setOpenPanel('guide');
+    }, []);
     const initialRoute = useMemo(() => parseInitialRoute(), []);
 
     const [legalPage, setLegalPage] = useState(() => (
@@ -126,7 +125,9 @@ export function App() {
     const [currentMembers, setCurrentMembers] = useState([]);
     const [activeLobbyRooms, setActiveLobbyRooms] = useState([]);
     const [connectionStatus, setConnectionStatus] = useState('disconnected');
-    const [isHelpOpen, setIsHelpOpen] = useState(false);
+    const [openPanel, setOpenPanel] = useState(null);
+    const isHelpOpen = openPanel === 'guide';
+    const isGameInfoOpen = openPanel === 'info';
     const [pendingConfirm, setPendingConfirm] = useState(null);
     const [incomingJoinRequests, setIncomingJoinRequests] = useState([]);
     const incomingJoinRequest = incomingJoinRequests[0] || null;
@@ -528,6 +529,8 @@ export function App() {
         handleResumeFromSetup,
         handleContinueSolo,
         handleBackToSetup,
+        handleAbortGame,
+        closeCompletedCoop,
     } = useNavigationAndSetup({
         isNativeApp,
         stateRef,
@@ -572,7 +575,7 @@ export function App() {
     });
 
     useKeyboardNavigation({
-        isHelpOpen,
+        isHelpOpen: isHelpOpen || isGameInfoOpen,
         pendingConfirm,
         navTab,
         isPlayingGame: isPlayingGame && !ticTacToe.challenge.game,
@@ -582,7 +585,7 @@ export function App() {
         cellRefs,
         setSelectedIndex,
         setActiveDigit,
-        setIsHelpOpen,
+        onOpenGuide: openGuide,
         setNotesMode,
         broadcastCursor,
         broadcastActiveDigit,
@@ -607,6 +610,19 @@ export function App() {
         (m) => (m.role === 'host' || m.role === 'guest') && (myClientId && m.id ? m.id !== myClientId : m.role !== myRole),
     );
     const isCoopSession = !isSpectating && (mode === 'online' || partnerOnline || myRole === 'guest');
+    const rematchPartnerOnline = hasRematchPartner(myRole, currentMembers);
+    const completedCoop = isPlayingGame && !isSpectating && Boolean(onlineGameId)
+        && gameState.status === 'solved' && (isCoopSession || gameState.wasMultiplayer);
+    const completedCoopWithoutPartner = completedCoop && currentMembers.length > 0 && !rematchPartnerOnline;
+
+    useEffect(() => {
+        if (!completedCoop) return undefined;
+        const timeout = setTimeout(closeCompletedCoop, COMPLETED_COOP_GRACE_MS);
+        return () => clearTimeout(timeout);
+    }, [closeCompletedCoop, completedCoop, onlineGameId]);
+    useEffect(() => {
+        if (completedCoopWithoutPartner) closeCompletedCoop();
+    }, [closeCompletedCoop, completedCoopWithoutPartner]);
     const hostOnline = currentMembers.some((m) => m.role === 'host');
     const canJoinSpectated = isSpectating && hostOnline && hostJoinPolicy !== 'disabled' && gameState.status !== 'solved' && !ticTacToe.challenge.game && Boolean(onlineGameId);
     const canResumeGame = !isSpectating && mode !== 'watch' && (hasUnsavedProgress(gameState) || isCoopSession);
@@ -626,11 +642,12 @@ export function App() {
     const activeBoardVariant = gameState.variant || inferVariantFromBoardLength(gameState.board?.length);
 
     const { restartLabel, restartDisabled, isWaitingForRematch } = getRestartState(
-        messages, isCoopSession, partnerOnline, gameState, rematchRequestedBy, myRole,
+        messages, rematchPartnerOnline, rematchRequestedBy, myRole,
     );
 
     const showLegalPage = !isNativeApp && Boolean(legalPage);
-    const showBottomNav = showLegalPage || !((navTab === 'play' && isPlayingGame) || (navTab === 'watch' && isSpectating));
+    const showGame = !showLegalPage && ((navTab === 'play' && isPlayingGame) || (navTab === 'watch' && isSpectating));
+    const showBottomNav = !showGame;
     const showGlobalRetroBar = isRetroMode && (showLegalPage || navTab !== 'play' || !isPlayingGame);
 
     const inlineGuide = landscapeLayout && !showBottomNav && isHelpOpen;
@@ -647,10 +664,12 @@ export function App() {
             messages={messages}
         />
     );
-    const sharedGameViewProps = {
+    const gameViewProps = {
         landscapeLayout,
         notices: sessionNotices,
-        guide: inlineGuide ? <HelpDialog isOpen panel onClose={closeGuide} messages={messages} /> : null,
+        guide: inlineGuide ? (
+            <HelpDialog isOpen panel onClose={closePanel} returnFocusRef={guideOpenerRef} messages={messages} />
+        ) : null,
         connectionStatus: connectionStatus,
         mode: mode,
         myRole: myRole,
@@ -661,7 +680,10 @@ export function App() {
         ticTacToeGame: ticTacToe.challenge.game,
         onTicTacToeMove: ticTacToe.onMove,
         onReconnect: handleReconnect,
-        onContinueSolo: handleContinueSolo,
+        onContinueSolo: () => {
+            closePanel();
+            handleContinueSolo();
+        },
         selectedIndex: selectedIndex,
         hintsByCell: hintsByCell,
         floatingReactions: floatingReactions,
@@ -678,7 +700,10 @@ export function App() {
         restartLabel: restartLabel,
         restartDisabled: restartDisabled,
         onPlayAgain: handleNewPuzzleAction,
-        onBackToSetup: handleBackToSetup,
+        onBackToSetup: () => {
+            closePanel();
+            handleBackToSetup();
+        },
         activeBoardVariant: activeBoardVariant,
         onSelectHint: (idx) => {
                             focusCell(idx);
@@ -687,12 +712,109 @@ export function App() {
         messages: messages,
     };
 
+    const toolbarStart = isSpectating ? (
+        hostJoinPolicy !== 'disabled' && (
+            <span>
+                <strong>{messages.spectatingBar}</strong> — {messages.spectatingReadOnly}
+            </span>
+        )
+    ) : (
+        myRole !== 'guest' && (
+            <button
+                type="button"
+                id="back-to-setup-btn"
+                className="game-top-bar__back-btn"
+                onClick={gameViewProps.onBackToSetup}
+            >
+                <span aria-hidden="true">←</span>
+                <span>{messages.backToSetup}</span>
+            </button>
+        )
+    );
+    const toolbarActions = isSpectating ? (
+        <div className="spectator-bar__actions">
+            {canJoinSpectated && (
+                pendingJoinRequest?.gameId === onlineGameId ? (
+                    <button
+                        type="button"
+                        id="cancel-join-from-watch-btn"
+                        className="spectator-bar__back-btn"
+                        onClick={cancelPendingJoinRequest}
+                    >
+                        {`${messages.watchJoinPending || 'Waiting...'} (${messages.cancelJoinRequest || 'Cancel'})`}
+                    </button>
+                ) : (
+                    <button
+                        type="button"
+                        id="join-from-watch-btn"
+                        className="spectator-bar__join-btn"
+                        disabled={Boolean(pendingJoinRequest)}
+                        onClick={() => {
+                            closePanel();
+                            joinWatchGame(onlineGameId);
+                        }}
+                    >
+                        {messages.joinGame}
+                    </button>
+                )
+            )}
+            <SpectatorBackButton
+                label={messages.backToLobby}
+                shortLabel={messages.backToSetup}
+                onClick={() => {
+                    closePanel();
+                    exitSpectating();
+                }}
+            />
+        </div>
+    ) : (
+        gameState.status !== 'solved' && (
+            <>
+                <div className="game-top-bar__puzzle-actions">
+                    <button
+                        type="button"
+                        id="restart-btn"
+                        className="btn-secondary game-top-bar__new-btn"
+                        disabled={restartDisabled}
+                        onClick={() => {
+                            closePanel();
+                            handleNewPuzzleAction();
+                        }}
+                    >
+                        {restartLabel}
+                    </button>
+                    <button
+                        type="button"
+                        id="abort-game-btn"
+                        className="btn-secondary game-top-bar__new-btn"
+                        onClick={() => {
+                            closePanel();
+                            handleAbortGame();
+                        }}
+                    >
+                        {messages.abortGame}
+                    </button>
+                </div>
+                {isWaitingForRematch && (
+                    <button
+                        type="button"
+                        id="cancel-restart-btn"
+                        className="btn-secondary"
+                        onClick={handleCancelRematch}
+                    >
+                        {messages.cancelRequest}
+                    </button>
+                )}
+            </>
+        )
+    );
+
     const primaryNavigation = showBottomNav && (
         <BottomNav
             activeTab={showLegalPage ? null : navTab}
             isWatchActive={mode === 'watch' || isSpectating}
             onSelectTab={(tab) => {
-                closeGuide();
+                closePanel();
                 handleSelectNavTab(tab);
             }}
             messages={messages}
@@ -755,91 +877,50 @@ export function App() {
                     />
                 )}
 
-                {!showLegalPage && navTab === 'play' && isPlayingGame && (
+                {showGame && (
                     <GamePlayView
-                        mainClassName="game-screen"
-                        mainAriaLabel={messages.gameTitle}
+                        {...gameViewProps}
+                        mainAriaLabel={isSpectating ? messages.navWatch : messages.gameTitle}
+                        isSpectating={isSpectating}
                         topBar={(
-                            <div className="game-top-bar">
-                                {myRole !== 'guest' ? (
-                                    <button
-                                        type="button"
-                                        id="back-to-setup-btn"
-                                        className="game-top-bar__back-btn"
-                                        onClick={handleBackToSetup}
-                                    >
-                                        <span aria-hidden="true">←</span>
-                                        <span>{messages.backToSetup}</span>
-                                    </button>
-                                ) : <span />}
-
-                                <div className="game-top-bar__actions">
-                                    <button
-                                        type="button"
-                                        id="game-help-btn"
-                                        className="game-top-bar__icon-btn"
-                                        aria-label={isHelpOpen ? messages.closeGuide : messages.openGuide}
-                                        title={isHelpOpen ? messages.closeGuide : messages.openGuide}
-                                        aria-expanded={isHelpOpen}
-                                        aria-controls={isHelpOpen ? 'help-dialog' : undefined}
-                                        onClick={() => setIsHelpOpen(open => !open)}
-                                    >
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                            <circle cx="12" cy="12" r="10" />
-                                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                                            <path d="M12 17h.01" />
-                                        </svg>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        id="game-settings-btn"
-                                        className="game-top-bar__icon-btn"
-                                        aria-label={messages.navSettings || 'Settings'}
-                                        title={messages.navSettings || 'Settings'}
-                                        onClick={() => handleSelectNavTab('settings')}
-                                    >
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Z" />
-                                            <circle cx="12" cy="12" r="3" />
-                                        </svg>
-                                    </button>
-                                    {gameState.status !== 'solved' && (
-                                        <>
-                                            <button
-                                                type="button"
-                                                id="restart-btn"
-                                                className="btn-secondary game-top-bar__new-btn"
-                                                disabled={restartDisabled}
-                                                onClick={handleNewPuzzleAction}
-                                            >
-                                                {restartLabel}
-                                            </button>
-                                            {isWaitingForRematch && (
-                                                <button
-                                                    type="button"
-                                                    id="cancel-restart-btn"
-                                                    className="btn-secondary"
-                                                    onClick={handleCancelRematch}
-                                                >
-                                                    {messages.cancelRequest}
-                                                </button>
-                                            )}
-                                        </>
-                                    )}
-                                </div>
-                            </div>
+                            <GameToolbar
+                                isSpectating={isSpectating}
+                                start={toolbarStart}
+                                isGameInfoOpen={isGameInfoOpen}
+                                gameInfoOpenerRef={gameInfoOpenerRef}
+                                onToggleInfo={() => setOpenPanel(panel => panel === 'info' ? null : 'info')}
+                                isHelpOpen={isHelpOpen}
+                                onToggleGuide={isHelpOpen ? closePanel : openGuide}
+                                messages={messages}
+                            >
+                                {toolbarActions}
+                            </GameToolbar>
                         )}
-                        {...sharedGameViewProps}
-
-                        isSpectating={false}
-
-                        activeDigit={activeDigit}
-
-                        playerCursorIndex={null}
-                        partnerCursorIndices={playPartnerCursorIndices}
-
-                        onApplyHint={applySpectatorHint}
-                        bottomControls={(
+                        showGameInfo={isGameInfoOpen}
+                        onCloseGameInfo={closePanel}
+                        gameInfoOpenerRef={gameInfoOpenerRef}
+                        activeDigit={isSpectating && selectedIndex === null ? remoteActiveDigit : activeDigit}
+                        playerCursorIndex={isSpectating ? hostCursorIndex : null}
+                        partnerCursorIndices={isSpectating ? watchPartnerCursorIndices : playPartnerCursorIndices}
+                        onApplyHint={isSpectating ? undefined : applySpectatorHint}
+                        bottomControls={isSpectating ? (
+                            <WatcherInteractions
+                                selectedIndex={selectedIndex}
+                                board={gameState.board}
+                                variant={activeBoardVariant}
+                                onSendHint={sendSpectatorHint}
+                                onSendReaction={(emoji) => {
+                                    if (!onlineGameId) return;
+                                    triggerFloatingReaction(emoji);
+                                    onlineClientRef.current?.sendWhisperEvent('reaction', {
+                                        emoji,
+                                        senderId: onlineClientRef.current?.clientId,
+                                    });
+                                    announce(`Sent ${emoji} reaction.`);
+                                }}
+                                messages={messages}
+                            />
+                        ) : (
                             <PlayerControls
                                 board={gameState.board}
                                 variant={activeBoardVariant}
@@ -867,7 +948,6 @@ export function App() {
                                 messages={messages}
                             />
                         )}
-
                     />
                 )}
 
@@ -882,83 +962,6 @@ export function App() {
                         pendingJoinGameId={pendingJoinRequest?.gameId || null}
                         onCancelJoinRequest={cancelPendingJoinRequest}
                         messages={messages}
-                    />
-                )}
-
-                {!showLegalPage && navTab === 'watch' && isSpectating && (
-                    <GamePlayView
-                        mainClassName="watch-screen"
-                        mainAriaLabel={messages.navWatch}
-                        topBar={(
-                            <div id="spectator-bar" className="spectator-bar">
-                                {hostJoinPolicy !== 'disabled' && (
-                                    <span>
-                                        <strong>{messages.spectatingBar}</strong> — {messages.spectatingReadOnly}
-                                    </span>
-                                )}
-                                <div className="spectator-bar__actions">
-                                    {canJoinSpectated && (
-                                        pendingJoinRequest?.gameId === onlineGameId ? (
-                                            <button
-                                                type="button"
-                                                id="cancel-join-from-watch-btn"
-                                                className="spectator-bar__back-btn"
-                                                onClick={cancelPendingJoinRequest}
-                                            >
-                                                {`${messages.watchJoinPending || 'Waiting...'} (${messages.cancelJoinRequest || 'Cancel'})`}
-                                            </button>
-                                        ) : (
-                                            <button
-                                                type="button"
-                                                id="join-from-watch-btn"
-                                                className="spectator-bar__join-btn"
-                                                disabled={Boolean(pendingJoinRequest)}
-                                                onClick={() => joinWatchGame(onlineGameId)}
-                                            >
-                                                {messages.joinGame}
-                                            </button>
-                                        )
-                                    )}
-                                    <button
-                                        type="button"
-                                        id="exit-watch-btn"
-                                        className="spectator-bar__back-btn"
-                                        onClick={exitSpectating}
-                                    >
-                                        {messages.backToLobby}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                        {...sharedGameViewProps}
-
-                        isSpectating
-
-                        activeDigit={selectedIndex === null ? remoteActiveDigit : activeDigit}
-
-                        playerCursorIndex={hostCursorIndex}
-                        partnerCursorIndices={watchPartnerCursorIndices}
-
-                        onApplyHint={() => {}}
-                        bottomControls={(
-                            <WatcherInteractions
-                                selectedIndex={selectedIndex}
-                                board={gameState.board}
-                                variant={activeBoardVariant}
-                                onSendHint={sendSpectatorHint}
-                                onSendReaction={(emoji) => {
-                                    if (!onlineGameId) return;
-                                    triggerFloatingReaction(emoji);
-                                    onlineClientRef.current?.sendWhisperEvent('reaction', {
-                                        emoji,
-                                        senderId: onlineClientRef.current?.clientId,
-                                    });
-                                    announce(`Sent ${emoji} reaction.`);
-                                }}
-                                messages={messages}
-                            />
-                        )}
-
                     />
                 )}
 
@@ -986,14 +989,11 @@ export function App() {
                             onChangeMusicVolume={handleMusicVolumeChange}
                             onChangeSoundEnabled={handleSoundEnabledChange}
                             onChangeSoundVolume={handleSoundVolumeChange}
-                            onOpenGuide={(event) => {
-                                settingsGuideOpenerRef.current = event?.currentTarget || document.activeElement;
-                                setIsHelpOpen(true);
-                            }}
+                            onOpenGuide={openGuide}
                             messages={messages}
                         />
                         {settingsGuide && (
-                            <HelpDialog isOpen panel onClose={closeGuide} returnFocusRef={settingsGuideOpenerRef} messages={messages} />
+                            <HelpDialog isOpen panel onClose={closePanel} returnFocusRef={guideOpenerRef} messages={messages} />
                         )}
                     </>
                 )}
@@ -1003,8 +1003,8 @@ export function App() {
                 </div>
                 <HelpDialog
                     isOpen={isHelpOpen && !inlineGuide && !settingsGuide}
-                    returnFocusRef={settingsGuideOpenerRef}
-                    onClose={closeGuide}
+                    returnFocusRef={guideOpenerRef}
+                    onClose={closePanel}
                     messages={messages}
                 />
             </div>

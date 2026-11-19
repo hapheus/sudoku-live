@@ -107,9 +107,21 @@ for (const theme of ['dark', 'light']) {
             // Watch screen
             await page.getByRole('tab', { name: 'Watch', exact: true }).click();
             await expect(page.getByRole('searchbox', { name: 'Search live games' })).toBeVisible();
-            await expect(page.getByRole('button', { name: 'All', exact: true })).toBeVisible();
-            await expect(page.getByRole('button', { name: 'Open', exact: true })).toBeVisible();
-            await expect(page.getByRole('button', { name: 'Co-op', exact: true })).toBeVisible();
+            const joins = page.getByRole('combobox', { name: 'Joins' });
+            const sizes = page.getByRole('combobox', { name: 'Sizes' });
+            await expect(joins).toBeVisible();
+            await expect(sizes).toBeVisible();
+            await expect(joins.getByRole('option')).toHaveText(['All', 'Open', 'CoOps', 'Closed']);
+            await expect(sizes.getByRole('option')).toHaveText(['All', '3x3', '2x3']);
+            const watch = page.locator('#watch-directory');
+            expect(await watch.evaluate(directory => {
+                const pane = directory.parentElement!.getBoundingClientRect();
+                const selectors = ['#watch-search-input', '#watch-joins-filter', '#watch-sizes-filter', '.watch-empty'];
+                return selectors.every(selector => {
+                    const bounds = directory.querySelector(selector)!.getBoundingClientRect();
+                    return Math.abs(bounds.left - pane.left) <= 1 && Math.abs(bounds.right - pane.right) <= 1;
+                });
+            })).toBe(true);
             expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
             await checkAccessibility(page, testInfo, `watch-${theme}-${width}x${height}`);
 

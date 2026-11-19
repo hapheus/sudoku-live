@@ -1,12 +1,21 @@
 import type { LogicalHint } from './types.ts';
 import { randomUUID } from 'node:crypto';
 import {
+  isContributionName, isContributionPlayerId, isHintCount, nextHintCount, recordPlayerContribution, rememberCoopPlayers,
+} from '../../../src/domain/game-contributions.js';
+import {
   createSudokuGame, serializeGameState, setCellValue, fillCandidateNotes, findLogicalHint,
   getCandidateDigits, getPeerIndices, shiftRow, shiftCol, shiftBand, shiftStack, applyRemoteCellPatch,
 } from '../../../src/domain/sudoku-engine.js';
 
 export type Difficulty = 'easy' | 'medium' | 'hard' | 'expert';
 export type Variant = '3x3' | '2x3';
+
+export interface BotPlayer {
+  senderId: string;
+  playerName: string;
+  role: 'host' | 'guest';
+}
 
 interface PlannedMove {
   index: number;
@@ -125,10 +134,34 @@ export class GameSession {
   private focus: number | null = null;
   private readonly random: () => number;
   private planned: PlannedMove | null = null;
+  private host: BotPlayer | null = null;
 
   constructor(difficulty: Difficulty, variant: Variant, random: () => number = Math.random) {
     this.random = random;
     this.state = createSudokuGame({ difficulty, variant });
+  }
+
+  setHost(senderId: string, playerName: string) {
+    this.host = { senderId, playerName, role: 'host' };
+  }
+
+  rememberPlayers(members: { id: string; role: string; name?: string }[]) {
+    this.state = rememberCoopPlayers(this.state, members);
+  }
+
+  recordGuestHint(data: Record<string, unknown>) {
+    if (typeof data.senderId !== 'string' || typeof data.hintsUsed !== 'number') return;
+    this.state = recordPlayerContribution(this.state, {
+      senderId: data.senderId, playerName: isContributionName(data.playerName) ? data.playerName : undefined,
+      hintsUsed: data.hintsUsed,
+    });
+  }
+
+  useHint(player = this.host) {
+    if (!player) return undefined;
+    const hintsUsed = nextHintCount(this.state, player.senderId);
+    this.state = recordPlayerContribution(this.state, { ...player, hintsUsed });
+    return hintsUsed;
   }
 
   get solved() { return this.state.status === 'solved'; }
@@ -168,8 +201,12 @@ export class GameSession {
     if (!hasValue && this.state.board[index] !== 0) return false;
     if (hasNotes && (!Array.isArray(notes) || notes.some(note => !Number.isInteger(note) || note < 1 || note > size))) return false;
     this.state = applyRemoteCellPatch(this.state, {
-      index, value: hasValue ? value as number : this.state.board[index],
+      index, value: hasValue ? value as number : null,
       notes: Array.isArray(notes) ? [...new Set<number>(notes)] : null, owner: 'guest',
+      senderId: typeof data.senderId === 'string' ? data.senderId : undefined,
+      authorId: data.authorId === null || isContributionPlayerId(data.authorId) ? data.authorId : undefined,
+      playerName: isContributionName(data.playerName) ? data.playerName : undefined,
+      hintsUsed: isHintCount(data.hintsUsed) ? data.hintsUsed : undefined,
     });
     this.planned = null;
     return true;
@@ -241,14 +278,22 @@ export class GameSession {
     };
   }
 
-  advance() {
+  advance(player = this.host) {
     const move = this.preview();
     if (!move) return null;
     const { index, value } = move;
     this.planned = null;
-    this.state = setCellValue(this.state, index, value, { recordHistory: false, owner: 'host' });
+    this.state = setCellValue(this.state, index, value, {
+      recordHistory: false, owner: player?.role ?? 'host', authorId: player?.senderId ?? null,
+    });
     this.focus = index;
-    return { index, value, notes: [], owner: 'host', eventId: randomUUID() };
+    const contribution = this.state.playerContributions.find(({ id }) => id === player?.senderId);
+    return {
+      index, value, notes: [], owner: player?.role ?? 'host', eventId: randomUUID(),
+      ...(player ? {
+        authorId: player.senderId, playerName: player.playerName, hintsUsed: contribution?.hintsUsed ?? 0,
+      } : {}),
+    };
   }
 
   shift() {

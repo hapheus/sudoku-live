@@ -1,4 +1,5 @@
 import { validateGhostSwap } from '../domain/night-ghost.js';
+import { HINT_USED_EVENT, isContributionName, isContributionPlayerId, isHintCount } from '../domain/game-contributions.js';
 import { ALLOWED_REACTIONS } from '../utils/watcher-helpers.js';
 import { isBoundedString, optional, validateContextEntries, validateNetworkChallenge, validateNetworkEnvelope, validateShift, validateSnapshotPayload } from './network-payloads.js';
 import { isValidGameId } from './ws-config.js';
@@ -15,6 +16,7 @@ const VALID_GAME_TYPES = new Set([
     'init',
     'sync',
     'cell-update',
+    HINT_USED_EVENT,
     'cursor',
     'active-digit',
     'hint',
@@ -59,7 +61,9 @@ function validateCellUpdate(data, totalCells, maxDigit) {
     if (data.owner !== undefined && data.owner !== null && data.owner !== 'host' && data.owner !== 'guest') {
         return false;
     }
-    return true;
+    return optional(data.authorId, (id) => id === null || isContributionPlayerId(id))
+        && optional(data.playerName, isContributionName)
+        && optional(data.hintsUsed, isHintCount);
 }
 
 function validateCursor(data, totalCells) {
@@ -134,6 +138,9 @@ export function validateIncomingGameMessage(type, data, totalCells = 81, maxDigi
     switch (type) {
     case 'cell-update':
         return validateCellUpdate(data, totalCells, maxDigit);
+    case HINT_USED_EVENT:
+        return isContributionPlayerId(data.senderId) && isHintCount(data.hintsUsed)
+            && optional(data.playerName, isContributionName);
     case 'cursor':
         return validateCursor(data, totalCells);
     case 'active-digit':

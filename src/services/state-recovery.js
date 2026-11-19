@@ -1,4 +1,5 @@
 import { hydrateGameState, applyRemoteCellPatch, serializeGameState } from '../domain/sudoku-engine.js';
+import { HINT_USED_EVENT, mergePlayerContributions, recordPlayerContribution } from '../domain/game-contributions.js';
 import { mergeRecoverySnapshot, newerRevision } from './merge-recovery-snapshot.js';
 const CELL_EVENT = 'cell-update';
 const actorOf = (data) => data.stateActor || data.senderId;
@@ -13,7 +14,7 @@ const newer = newerRevision;
 const MUTATIONS = new Set(['init', 'sync', CELL_EVENT, REMATCH_EVENT, 'new-puzzle-request', 'new-puzzle-cancel']);
 
 function generationMatches(type, data, generation, advances) {
-    if (!MUTATIONS.has(type) && !data.gameState) return true;
+    if (!MUTATIONS.has(type) && type !== HINT_USED_EVENT && !data.gameState) return true;
     if (type === REMATCH_EVENT) return (generation === null && data.puzzleGeneration == null)
         || data.puzzleGeneration === data.eventId;
     return generation === null || data.puzzleGeneration === generation || advances;
@@ -33,6 +34,7 @@ export function createStateRecovery() {
     const cells = new Map();
     const updateLocalState = (type, data, stamp) => {
         if (isStateFrame(type, data)) localState = hydrateGameState(data.gameState);
+        else if (type === HINT_USED_EVENT && localState) localState = recordPlayerContribution(localState, data);
         else if (type === CELL_EVENT && localState) {
             const before = localState.notes;
             localState = applyRemoteCellPatch(localState, data);
@@ -89,9 +91,16 @@ export function createStateRecovery() {
                     [...seen].map(([id, seq]) => [id, Math.max(seq, data.stateVector?.[id] || 0)])),
                 } };
             }
+            if (isStateFrame(type, data) && type !== REMATCH_EVENT && localState && data.puzzleGeneration === generation) {
+                return { ...data, gameState: {
+                    ...data.gameState,
+                    playerContributions: mergePlayerContributions(localState.playerContributions, data.gameState.playerContributions),
+                    wasMultiplayer: Boolean(localState.wasMultiplayer || data.gameState.wasMultiplayer),
+                } };
+            }
             if (type !== CELL_EVENT || !stampOf(data)) return data;
             const projected = { ...data };
-            if (!writable(data, 'value')) { projected.value = null; delete projected.owner; }
+            if (!writable(data, 'value')) { projected.value = null; delete projected.owner; delete projected.authorId; }
             if (!writable(data, 'notes')) delete projected.notes;
             return projected;
         },
@@ -100,7 +109,12 @@ export function createStateRecovery() {
         revisions,
         snapshot(fallback) {
             if (!localState) return fallback;
-            return { ...serializeGameState(localState), elapsedSeconds: Math.max(localState.elapsedSeconds || 0, fallback?.elapsedSeconds || 0) };
+            return {
+                ...serializeGameState(localState),
+                elapsedSeconds: Math.max(localState.elapsedSeconds || 0, fallback?.elapsedSeconds || 0),
+                playerContributions: mergePlayerContributions(localState.playerContributions, fallback?.playerContributions),
+                wasMultiplayer: Boolean(localState.wasMultiplayer || fallback?.wasMultiplayer),
+            };
         },
         nextClock: () => ++clock,
         supersede(type, data) {

@@ -43,11 +43,38 @@ async function checkAccessibility(page: Page, testInfo: TestInfo, state: string)
 }
 
 async function capture(page: Page, testInfo: TestInfo, name: string) {
-    // Only the live elapsed-time text is masked; layout and other telemetry are checked.
-    const options = { mask: [page.locator('#sudoku-timer')], fullPage: true };
+    const options = { fullPage: true };
     await page.screenshot({ ...options, path: testInfo.outputPath(`${name}.png`) });
     await expect.soft(page).toHaveScreenshot(`${name}.png`, options);
 }
+
+test('setup centers vertically when it fits and scrolls from the top when it does not', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openFixture(page);
+    const setup = page.locator('#play-setup');
+    const gaps = () => setup.evaluate(element => {
+        const bounds = element.getBoundingClientRect();
+        const pane = element.parentElement!.getBoundingClientRect();
+        return { top: bounds.top - pane.top, bottom: pane.bottom - bounds.bottom };
+    });
+
+    for (const [width, height] of [[390, 844], [1280, 800]]) {
+        await page.setViewportSize({ width, height });
+        await expect.poll(async () => {
+            const { top, bottom } = await gaps();
+            return top > 12 && Math.abs(top - bottom) <= 1;
+        }).toBe(true);
+    }
+
+    await page.setViewportSize({ width: 568, height: 320 });
+    await expect.poll(async () => {
+        const { top, bottom } = await gaps();
+        return top >= 0 && top < 12 && bottom < 0;
+    }).toBe(true);
+    const legal = setup.locator('#impressum-link');
+    await legal.scrollIntoViewIfNeeded();
+    await expect(legal).toBeInViewport();
+});
 
 for (const language of ['en', 'de']) {
     test(`title and difficulty choices stay on one line in narrow setup panes (${language})`, async ({ page }) => {
@@ -111,7 +138,7 @@ for (const theme of ['dark', 'light']) {
             await expect(page.getByRole('radio')).toHaveCount(0);
             await expect(page.getByRole('tab')).toHaveCount(0);
             await expect(page.locator('#game-help-btn')).toBeVisible();
-            await expect(page.locator('#game-settings-btn')).toBeVisible();
+            await expect(page.getByRole('button', { name: 'Settings', exact: true })).toHaveCount(0);
             expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
             if (height >= 640) {
                 expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1)).toBe(true);
@@ -224,14 +251,14 @@ test('web start screen exposes App Store Coming Soon badge, Privacy Policy, and 
     await expect(page.locator('#play-setup')).toBeVisible();
 });
 
-test('the Start music link opens Settings, where music is opt-in and persists across reload', async ({ page }) => {
+test('music is opt-in from Settings and persists across reload', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openFixture(page, 'dark');
 
-    const musicLink = page.getByRole('link', { name: 'Background Music' });
+    const settingsTab = page.getByRole('tab', { name: 'Settings', exact: true });
     const settingsMusicGroup = page.getByRole('radiogroup', { name: 'Background Music' });
     await expect(settingsMusicGroup).toHaveCount(0);
-    await musicLink.focus();
+    await settingsTab.focus();
     await page.keyboard.press('Enter');
     await expect(page.getByRole('tab', { name: 'Settings', exact: true })).toHaveAttribute('aria-selected', 'true');
     await expect(settingsMusicGroup.locator('input[value="false"]')).toBeChecked();
@@ -240,6 +267,6 @@ test('the Start music link opens Settings, where music is opt-in and persists ac
     await expect(page.getByRole('slider', { name: 'Volume: Background Music' })).toBeEnabled();
 
     await page.reload();
-    await musicLink.click();
+    await settingsTab.click();
     await expect(settingsMusicGroup.locator('input[value="true"]')).toBeChecked();
 });

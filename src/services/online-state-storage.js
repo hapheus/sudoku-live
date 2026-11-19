@@ -26,6 +26,10 @@ export function saveParticipantSession(gameId, role) {
     setStorageItem(`${ROLE_KEY_PREFIX}${gameId}`, role, getDefaultStorage('session'));
 }
 
+export function clearParticipantSession(gameId) {
+    if (gameId) removeStorageItem(`${ROLE_KEY_PREFIX}${gameId}`, getDefaultStorage('session'));
+}
+
 function loadHydratedSnapshot(key, storage) {
     const parsed = loadJson(key, null, storage);
     const gameState = hydrateGameState(parsed?.gameState);
@@ -56,6 +60,10 @@ export function saveOnlineGameSnapshot(gameId, gameState, rematchRequestedBy = n
         },
         getDefaultStorage('session'),
     );
+}
+
+export function clearOnlineGameSnapshot(gameId) {
+    if (gameId) removeStorageItem(`${STATE_KEY_PREFIX}${gameId}`, getDefaultStorage('session'));
 }
 
 export function loadSoloGameSnapshot() {

@@ -26,6 +26,7 @@ export interface RunnerOptions {
   joinPolicy?: BotJoinPolicy | 'random';
   onError?: (difficulty: Difficulty, diagnostic: ReturnType<CentrifugoAdapter['retryDiagnostic']>) => void;
   durationRanges?: Partial<Record<Difficulty, readonly [number, number]>>;
+  nextCoopGuestCount?: () => number;
 }
 
 export class BotRunner {
@@ -47,6 +48,8 @@ export class BotRunner {
   private failures = 0;
   private targetDurationMs = 0;
   private totalMoves = 0;
+  private playedMoves = 0;
+  private coopGuests = 0;
   private flowStreak = 0;
   private pendingFluentMove = false;
   private pendingMove: ReturnType<GameSession['advance']> = null;
@@ -94,11 +97,15 @@ export class BotRunner {
       this.adapter = new CentrifugoAdapter(this.options.wsUrl, this.profile.joinPolicy, previousName);
       this.nextPlayerAt = null;
     }
-    if (!this.current) this.current = new GameSession(this.profile.difficulty, this.profile.variant, random);
+    if (!this.current) {
+      this.current = new GameSession(this.profile.difficulty, this.profile.variant, random);
+      this.coopGuests = this.options.nextCoopGuestCount?.() ?? 0;
+      this.playedMoves = 0;
+    }
     const session = this.current;
     if (!this.started) {
       if (this.profile.notesPolicy === 'always') session.fillCandidates();
-      await this.adapter.open(session);
+      await this.adapter.open(session, this.coopGuests);
       this.flowStreak = 0;
       this.targetDurationMs = pickTargetDuration(session.difficulty, session.variant, random,
         this.options.durationRanges?.[session.difficulty]);
@@ -177,15 +184,17 @@ export class BotRunner {
       const next = session.preview();
       this.pendingFluentMove = Boolean(next && next.nearFocus
         && ['full_house', 'note_single', 'naked_single'].includes(next.hint?.technique ?? ''));
-      this.pendingMove = session.advance();
+      this.pendingMove = session.advance(this.adapter.playerAt(this.playedMoves));
     }
     if (this.pendingMove) {
-      await this.adapter.cursor(this.pendingMove.index, this.pendingMove.value);
+      const actor = this.pendingMove.authorId;
+      await this.adapter.cursor(this.pendingMove.index, this.pendingMove.value, actor);
       await this.adapter.move(this.pendingMove);
       this.pendingMove = null;
+      this.playedMoves++;
       this.flowStreak = this.pendingFluentMove ? Math.min(3, this.flowStreak + 1) : 0;
       if (this.pendingHintStep?.shown) {
-        await this.adapter.hintHighlight(this.pendingHintStep.hint, 'solve');
+        await this.adapter.hintHighlight(this.pendingHintStep.hint, 'solve', undefined, actor);
       }
       this.pendingHintStep = null;
     }
@@ -297,7 +306,8 @@ export class BotRunner {
     }
     if (this.pendingHintStep && !this.pendingHintStep.shown && now >= this.pendingHintStep.at) {
       this.pendingHintStep.shown = true;
-      await this.adapter.hintHighlight(this.pendingHintStep.hint, 'preview');
+      const player = this.adapter.playerAt(this.playedMoves);
+      await this.adapter.hintHighlight(this.pendingHintStep.hint, 'preview', this.current?.useHint(player), player.senderId);
     }
   }
 

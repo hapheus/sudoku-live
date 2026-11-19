@@ -1,4 +1,5 @@
 import { isValidChallenge } from '../domain/tic-tac-toe.js';
+import { isContributionName, isContributionPlayerId, isHintCount, MAX_CONTRIBUTION_PLAYERS } from '../domain/game-contributions.js';
 
 export const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 export const isBoundedString = (value, max = 256) => typeof value === 'string' && value.length > 0 && value.length <= max;
@@ -76,6 +77,11 @@ function validateBoardState(state) {
         && optional(state.notes, (v) => arrayOf(v, cells, (notes) => Array.isArray(notes)
             && notes.length <= digit && notes.every((n) => isIntegerIn(n, 1, digit))))
         && optional(state.cellOwners, (v) => arrayOf(v, cells, nullable(isRole)))
+        && optional(state.cellAuthors, (v) => arrayOf(v, cells, nullable(isContributionPlayerId)))
+        && optional(state.playerContributions, (v) => Array.isArray(v) && v.length <= MAX_CONTRIBUTION_PLAYERS
+            && v.every((player) => isObject(player) && isContributionPlayerId(player.id)
+                && nullable(isContributionName)(player.name) && isHintCount(player.hintsUsed)))
+        && optional(state.wasMultiplayer, (v) => typeof v === 'boolean')
         && optional(state.solution, (v) => arrayOf(v, cells, (n) => isIntegerIn(n, 0, digit)));
 }
 

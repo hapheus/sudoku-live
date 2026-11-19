@@ -1,3 +1,4 @@
+import { cloneCellAuthors } from './game-contributions.js';
 import {
     cloneNotes,
     cloneOwners,
@@ -26,6 +27,7 @@ function applyCellPermutation(state, indexMap, { recordHistory = true } = {}) {
                 solution: Array.isArray(state.solution) ? [...state.solution] : state.solution,
                 notes: cloneNotes(state.notes),
                 cellOwners: cloneOwners(state.cellOwners, spec.totalCells),
+                cellAuthors: cloneCellAuthors(state.cellAuthors, spec.totalCells),
             },
         ]
         : state.history;
@@ -37,6 +39,7 @@ function applyCellPermutation(state, indexMap, { recordHistory = true } = {}) {
         solution: nextSolution,
         notes: nextNotes,
         cellOwners: nextOwners,
+        cellAuthors: indexMap.map((oldIndex) => state.cellAuthors?.[oldIndex] ?? null),
         conflicts: findConflicts(nextBoard, spec.id),
         filledCount: countFilledCells(nextBoard, spec.id),
         status: state.status,
