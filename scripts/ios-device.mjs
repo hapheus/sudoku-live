@@ -31,7 +31,7 @@ const NIX_POLLUTED_VARS = new Set([
  * @param {NodeJS.ProcessEnv} baseEnv
  * @returns {NodeJS.ProcessEnv}
  */
-function buildCleanXcodeEnv(baseEnv) {
+export function buildCleanXcodeEnv(baseEnv) {
     const env = { ...baseEnv };
     const isNix = Boolean(env.IN_NIX_SHELL) || (env.DEVELOPER_DIR || '').startsWith('/nix/store/');
     if (!isNix) {
@@ -150,4 +150,6 @@ function main() {
     });
 }
 
-main();
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+    main();
+}
