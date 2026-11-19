@@ -74,7 +74,11 @@ for (const variant of ['3x3', '2x3']) {
             await page.setViewportSize({ width: height, height: width });
             const toolbar = page.locator('.gameplay-stage__toolbar');
             await expect(toolbar.getByRole('button', { name: 'Open Guide' })).toBeInViewport();
-            await expect.poll(async () => (await toolbar.boundingBox())!.y).toBeGreaterThan(width - 80);
+            await expect.poll(() => toolbar.evaluate(element => {
+                const controls = element.closest('.gameplay-stage__controls');
+                if (!controls) return Infinity;
+                return Math.abs(element.getBoundingClientRect().bottom - controls.getBoundingClientRect().bottom);
+            })).toBeLessThanOrEqual(1);
             await page.setViewportSize({ width, height });
             await assertTopToolbar(page);
             await assertRegions(page, '.gameplay-stage__board', '.gameplay-stage__controls');
