@@ -50,24 +50,32 @@ async function play(page: Page) {
     await expect(page.getByRole('grid')).toBeVisible();
 }
 
-test('watch the full ghost animation in real time', async ({ page }) => {
-    test.skip(process.env.GHOST_PREVIEW !== '1', 'Opt-in visual preview');
-    await page.setViewportSize({ width: 844, height: 390 });
-    await page.emulateMedia({ reducedMotion: 'no-preference' });
-    await page.clock.install();
-    await seedSolo(page);
-    await page.routeWebSocket(/.*/, socket => socket.close());
-    await page.goto('/');
+for (const orientation of ['landscape', 'portrait']) {
+    test(`watch the full ghost animation in real time (${orientation})`, async ({ page }) => {
+        test.skip(process.env.GHOST_PREVIEW !== '1', 'Opt-in visual preview');
+        const landscape = orientation === 'landscape';
+        await page.setViewportSize(landscape ? { width: 844, height: 390 } : { width: 390, height: 844 });
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await page.clock.install();
+        await seedSolo(page);
+        await page.routeWebSocket(/.*/, socket => socket.close());
+        await page.goto('/');
 
-    // Start just before midnight and leave the clock running at normal speed.
-    await page.clock.setSystemTime(new Date(minuteBefore(0).getTime() - 4000));
-    await play(page);
-    await expect(artwork(page)).toBeVisible({ timeout: 10_000 });
-    await expect(ghost(page)).toHaveCount(0, { timeout: 10_000 });
-    await expect(artwork(page)).toBeHidden();
-    // Keep the final board visible briefly before the preview browser closes.
-    await page.waitForTimeout(1250);
-});
+        // Start just before midnight and leave the clock running at normal speed.
+        await page.clock.setSystemTime(new Date(minuteBefore(0).getTime() - 4000));
+        await play(page);
+        await expect(ghost(page)).toBeVisible({ timeout: 10_000 });
+        if (landscape) {
+            await expect(artwork(page)).toBeVisible();
+        } else {
+            await expect(artwork(page)).toBeHidden();
+        }
+        await expect(ghost(page)).toHaveCount(0, { timeout: 10_000 });
+        await expect(artwork(page)).toBeHidden();
+        // Keep the final board visible briefly before the preview browser closes.
+        await page.waitForTimeout(1250);
+    });
+}
 
 for (const hour of [0, 1, 2, 3]) {
     test(`night ghost at 0${hour}:00`, async ({ page }, testInfo) => {
