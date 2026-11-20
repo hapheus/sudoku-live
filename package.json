@@ -27,6 +27,7 @@
         "ios:device": "node scripts/ios-device.mjs",
         "ios:screenshots": "node scripts/ios-screenshots.mjs",
         "browser:screenshots": "node scripts/browser-screenshots.mjs",
+        "promo:clips": "node scripts/promo-clips.mjs",
         "ios:archive": "cd ios && fastlane archive",
         "ios:testflight": "cd ios && fastlane beta",
         "docker:up": "docker compose up -d --build",

@@ -30,6 +30,7 @@ Thumbs.db
 /test-results/
 /playwright-report/
 /artifacts/browser-screenshots/
+/artifacts/promo-clips/
 /coverage/
 
 /tools/local-bot/node_modules/
