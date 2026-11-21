@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/hapheus/sudoku-shift/actions/workflows/ci.yml/badge.svg)](https://github.com/hapheus/sudoku-shift/actions/workflows/ci.yml)
 [![Play on itch.io](https://img.shields.io/badge/Play%20on-itch.io-FA5C5C.svg)](https://hapheus.itch.io/sudoku-shift)
+[![Docker Hub](https://img.shields.io/badge/Docker%20Hub-sudoku--shift-2496ED.svg)](https://hub.docker.com/r/hapheus/sudoku-shift)
 [![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/License-PolyForm--Noncommercial--1.0.0-blue.svg)](LICENSE)
 
 Zero-backend 9×9 and 6×6 Sudoku app built with **React 19**, **Vite 8**, **Capacitor 8**, and **Centrifugo v6** WebSockets — structured as a reference showcase for shipping one web codebase to **Docker**, **itch.io HTML5**, and **iPhone and iPad**.

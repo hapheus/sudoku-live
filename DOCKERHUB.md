@@ -4,6 +4,8 @@ Runnable Docker container for **Sudoku Shift** — a zero-backend 9×9 and 6×6 
 
 Created for **[GitHub Game Off 2026](https://itch.io/jam/game-off-2026)**.
 
+Play in your browser on **[itch.io](https://hapheus.itch.io/sudoku-shift)** or download the iPhone and iPad app from the **[App Store](https://apps.apple.com/app/sudoku-shift/id6834748729)**.
+
 ## Quick Start
 
 Solo mode works out of the box. For live **Co-op** and **Watch/Spectator** mode, a **Centrifugo v6** WebSocket server is required and can be passed directly via Docker environment variables.
