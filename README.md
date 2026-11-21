@@ -4,7 +4,9 @@
 [![Play on itch.io](https://img.shields.io/badge/Play%20on-itch.io-FA5C5C.svg)](https://hapheus.itch.io/sudoku-shift)
 [![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/License-PolyForm--Noncommercial--1.0.0-blue.svg)](LICENSE)
 
-Zero-backend 9×9 and 6×6 Sudoku app built with **React 19**, **Vite 8**, **Capacitor 8**, and **Centrifugo v6** WebSockets — structured as a reference showcase for shipping one web codebase to **Docker**, **itch.io HTML5**, and **iOS (TestFlight)**.
+Zero-backend 9×9 and 6×6 Sudoku app built with **React 19**, **Vite 8**, **Capacitor 8**, and **Centrifugo v6** WebSockets — structured as a reference showcase for shipping one web codebase to **Docker**, **itch.io HTML5**, and **iPhone and iPad**.
+
+**[Download Sudoku Shift on the App Store for iPhone and iPad](https://apps.apple.com/app/sudoku-shift/id6834748729)**.
 
 Play online on **[itch.io](https://hapheus.itch.io/sudoku-shift)** · Created for **[GitHub Game Off 2026](https://itch.io/jam/game-off-2026)**.
 
