@@ -1,7 +1,6 @@
 import { isValidGameId } from '../services/ws-config.js';
 
-export const APP_STORE_URL = 'https://apps.apple.com/app/id6834748729';
-export const APP_STORE_COMING_SOON = true;
+export const APP_STORE_URL = 'https://apps.apple.com/app/sudoku-shift/id6834748729';
 
 export function isNativeCapacitorApp() {
     return typeof window !== 'undefined' && Boolean(window.Capacitor?.isNativePlatform?.());

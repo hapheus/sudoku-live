@@ -228,11 +228,11 @@ test('setup selects and restores a 6 by 6 easy puzzle', async ({ page }, testInf
     expect(await page.getByRole('gridcell').allTextContents()).toEqual(board);
 });
 
-test('web start screen exposes App Store Coming Soon badge, Privacy Policy, and Impressum cleanly', async ({ page }, testInfo) => {
+test('web start screen exposes App Store download link, Privacy Policy, and Impressum cleanly', async ({ page }, testInfo) => {
     await openFixture(page);
-    await expect(page.locator('#app-store-link')).toContainText('App Store');
-    await expect(page.locator('#app-store-link')).toContainText('Coming Soon');
-    await expect(page.locator('#app-store-link')).not.toHaveAttribute('href', /.+/);
+    const appStoreLink = page.getByRole('link', { name: 'App Store for iPhone and iPad' });
+    await expect(appStoreLink).toBeVisible();
+    await expect(appStoreLink).toHaveAttribute('href', 'https://apps.apple.com/app/sudoku-shift/id6834748729');
     await expect(page.locator('#privacy-link')).toBeVisible();
     await expect(page.locator('#impressum-link')).toBeVisible();
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { APP_STORE_COMING_SOON, APP_STORE_URL } from '../utils/app-routing.js';
+import { APP_STORE_URL } from '../utils/app-routing.js';
 import { DifficultySelector } from './DifficultySelector.jsx';
 import { VariantSelector } from './VariantSelector.jsx';
 
@@ -62,31 +62,18 @@ export function SetupView({
 
                 {!isNativeApp && (
                     <footer id="web-start-footer" className="play-setup__web-footer" aria-label={messages.webFooterLabel}>
-                        {APP_STORE_COMING_SOON ? (
-                            <div
-                                id="app-store-link"
-                                className="app-store-link app-store-link--coming-soon"
-                            >
-                                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                                    <path d={APPLE_LOGO_PATH} />
-                                </svg>
-                                <span>{messages.appStoreComingSoonLabel || 'App Store'}</span>
-                                <span className="app-store-link__badge">{messages.appStoreComingSoonBadge || 'Coming Soon'}</span>
-                            </div>
-                        ) : (
-                            <a
-                                id="app-store-link"
-                                className="app-store-link"
-                                href={APP_STORE_URL}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                            >
-                                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                                    <path d={APPLE_LOGO_PATH} />
-                                </svg>
-                                <span>{messages.appStoreLinkLabel}</span>
-                            </a>
-                        )}
+                        <a
+                            id="app-store-link"
+                            className="app-store-link"
+                            href={APP_STORE_URL}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                <path d={APPLE_LOGO_PATH} />
+                            </svg>
+                            <span>{messages.appStoreLinkLabel}</span>
+                        </a>
                         <nav className="web-legal-links" aria-label={messages.legalLinksLabel}>
                             <a
                                 id="privacy-link"
